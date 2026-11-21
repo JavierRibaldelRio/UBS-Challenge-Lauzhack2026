@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AnswerResult, ExplainResult, Origin, PromptInfo, ScenarioSpec } from '../lib/types'
+import type { AnswerResult, ExplainResult, Origin, PromptInfo, ScenarioSpec, TwinEvent } from '../lib/types'
 
 export type HowMadeContent =
-  | { what: 'path'; name: string; origin: Origin; spec: ScenarioSpec }
+  | { what: 'path'; name: string; origin: Origin; spec: ScenarioSpec; edits?: { instruction: string; changes: string[]; model?: string; ms?: number; prompt?: PromptInfo }[] }
   | { what: 'explanation' | 'answer'; prompt?: PromptInfo; answer: ExplainResult | AnswerResult; model?: string; ms?: number; offline: boolean; verify?: { total: number; unmatched: string[] } }
 
-/** A simple window that shows exactly how a path (or the explanation) was produced: question, prompt, raw answer. */
+/** "How did the twin get this?" — plain story first, the exact prompts and raw JSON folded under "technical details". */
 export function HowMade({ content, onClose }: { content: HowMadeContent | null; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
@@ -24,102 +24,141 @@ export function HowMade({ content, onClose }: { content: HowMadeContent | null; 
               ✕
             </button>
           </div>
-          {content.what === 'path' ? <PathStory c={content} /> : <ExplainStory c={content} />}
+          {content.what === 'path' ? <PathStory c={content} /> : <TextStory c={content} />}
         </div>
       )}
     </dialog>
   )
 }
 
+const DESCRIBE: Record<TwinEvent['type'], string> = {
+  start_job: 'start a job',
+  study: 'study, then a job',
+  relocate: 'move',
+  income_change: 'income changes',
+  household_change: 'household changes',
+  recurring_expense: 'a new monthly cost',
+  one_off: 'a one-time amount',
+  invest: 'invest',
+  market_shock: 'markets fall',
+  take_loan: 'borrow money',
+  buy_home: 'buy a home',
+}
+const AMOUNTS: [keyof TwinEvent, string][] = [
+  ['monthly_net_income_chf', 'net income CHF {}/mo'],
+  ['income_change_pct', 'income {}%'],
+  ['monthly_amount_chf', 'CHF {}/mo'],
+  ['amount_chf', 'CHF {}'],
+  ['annual_tuition_chf', 'tuition CHF {}/yr'],
+  ['down_payment_pct', 'down payment {}%'],
+  ['annual_rate_pct', 'rate {}%'],
+  ['drop_pct', 'drop {}%'],
+  ['duration_months', 'for {} months'],
+]
+
+/** One readable line per event: what, when, and only the numbers the user actually gave. */
+function EventList({ spec }: { spec: ScenarioSpec }) {
+  return (
+    <ul className="events">
+      {spec.events.map((e, i) => {
+        const given = AMOUNTS.filter(([k]) => e[k] != null).map(([k, t]) => t.replace('{}', Number(e[k]).toLocaleString('de-CH')))
+        return (
+          <li key={i}>
+            <b>{e.label}</b> <span className="muted">· {DESCRIBE[e.type]}{e.city ? ` (${e.city})` : ''}{e.household_type ? ` (${e.household_type.replace('_', ' ')})` : ''} · month {e.start_month ?? 0}</span>
+            {given.length > 0 && <span className="given"> · you said: {given.join(', ')}</span>}
+          </li>
+        )
+      })}
+      {!spec.events.length && <li className="muted">no events: today’s numbers</li>}
+    </ul>
+  )
+}
+
 function PathStory({ c }: { c: Extract<HowMadeContent, { what: 'path' }> }) {
   const o = c.origin
   return (
-    <ol className="steps">
-      {o.kind === 'today' && (
-        <li>
-          <b>No AI, no button.</b> This path is the person exactly as the data describes them today, with nothing changed. Every other path is compared with something.
-        </li>
-      )}
+    <div className="story-steps">
+      {(o.kind === 'ai' || o.kind === 'offline') && <div className="bubble-q">“{o.question}”</div>}
+      {o.kind === 'today' && <p>This path is the person exactly as the data describes them today, nothing changed. No AI involved.</p>}
       {o.kind === 'preset' && (
-        <li>
-          <b>Made by the “+ {o.button}” button. No AI was used.</b> The button always adds the same recipe: <i>{o.desc}</i>
-        </li>
+        <p>
+          Made by the <b>“+ {o.button}”</b> button, no AI. It always adds the same recipe: <i>{o.desc}</i>
+        </p>
       )}
-      {o.kind === 'offline' && (
-        <>
-          <li>
-            Your question: <Quote>{o.question}</Quote>
-          </li>
-          <li>
-            <b>The AI could not be reached</b> ({o.reason}), so simple keyword rules turned your question into the recipe below.
-          </li>
-        </>
-      )}
+      {o.kind === 'offline' && <p>The AI could not be reached ({o.reason}), so simple keyword rules understood it as:</p>}
       {o.kind === 'ai' && (
-        <>
-          <li>
-            Your question: <Quote>{o.question}</Quote>
-          </li>
-          <li>
-            <b>We sent it to the AI</b> ({o.model}
-            {o.ms != null ? `, answered in ${(o.ms / 1000).toFixed(1)} s` : ''}
-            {o.cached ? ', replayed from cache' : ''}) with fixed instructions. The AI may only <b>describe</b> the decision. It must leave every amount you did not say empty.
-            {o.prompt ? <PromptBlock p={o.prompt} /> : <p className="muted small">(The prompt was not stored for this answer. Ask again to see it.)</p>}
-          </li>
-          <li>
-            <b>The AI answered with this JSON</b>
-            {o.answer.scenarios.length > 1 && ` (${o.answer.scenarios.length} paths from one question; this is one of them)`}:
+        <p>
+          The AI turned your words into life events{o.answer.scenarios.length > 1 ? ` (${o.answer.scenarios.length} paths from one message; this is one)` : ''}. It only <b>describes</b> them; every amount you didn’t say is filled in by the app from the data.
+        </p>
+      )}
+      <EventList spec={c.spec} />
+      {(c.edits ?? []).map((e, i) => (
+        <div key={i} className="followup">
+          <div className="bubble-q">✏️ “{e.instruction}”</div>
+          <ul className="events">
+            {e.changes.map((x) => (
+              <li key={x}>✓ {x}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <p className="muted small">Then the app filled every empty number from the data (see “The numbers behind”, each with its source) and simulated 500 futures. The AI never calculates money.</p>
+      <details className="tech">
+        <summary>Technical details: the exact instructions and the AI’s raw answer</summary>
+        {o.kind === 'ai' && (
+          <>
+            {o.prompt ? <PromptBlock p={o.prompt} /> : <p className="muted small">The prompt was not stored for this answer.</p>}
+            <h4>Raw answer ({o.model}{o.ms != null ? `, ${(o.ms / 1000).toFixed(1)} s` : ''}{o.cached ? ', from cache' : ''})</h4>
             <Code text={JSON.stringify(o.answer, null, 2)} />
-          </li>
-        </>
-      )}
-      <li>
-        <b>The recipe for this path</b> (the list of life events):
+          </>
+        )}
+        {(c.edits ?? []).map((e, i) =>
+          e.prompt ? (
+            <div key={i}>
+              <h4>Follow-up {i + 1}</h4>
+              <PromptBlock p={e.prompt} />
+            </div>
+          ) : null,
+        )}
+        <h4>The path as data</h4>
         <Code text={JSON.stringify(c.spec.events.map(({ _source, ...e }) => Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))), null, 2)} />
-      </li>
-      <li>
-        <b>The app filled every empty number from the data</b> and labelled where it came from. See <i>The numbers behind this path</i>. Then it simulated 500 possible futures. <b>The AI never calculates money.</b>
-      </li>
-    </ol>
+      </details>
+    </div>
   )
 }
 
-function ExplainStory({ c }: { c: Exclude<HowMadeContent, { what: 'path' }> }) {
-  if (c.offline)
-    return (
-      <ol className="steps">
-        <li>
-          <b>No AI was used.</b> The AI was not reachable, so a fixed template turned the computed results into sentences.
-        </li>
-      </ol>
-    )
+function TextStory({ c }: { c: Exclude<HowMadeContent, { what: 'path' }> }) {
+  const text = 'short_answer' in c.answer ? `${c.answer.short_answer} ${c.answer.reasoning}` : `${c.answer.headline}. ${c.answer.explanation}`
+  if (c.offline) return <p>No AI was used: the AI was not reachable, so a fixed template turned the computed results into sentences.</p>
   return (
-    <ol className="steps">
-      <li>
-        <b>The app computed the results first</b> (500 simulated futures per path).{' '}
-        {c.what === 'answer' && 'It also computed which path ends higher and how confident that is (paired futures, peer ranges from the data, unknown inputs). '}
-        It packed only the final numbers into a small “facts” list.
-      </li>
-      <li>
-        <b>We sent the facts to the AI</b> ({c.model}
-        {c.ms != null ? `, ${(c.ms / 1000).toFixed(1)} s` : ''}) with fixed instructions: plain English, use only these numbers, no advice.
-        {c.prompt ? <PromptBlock p={c.prompt} userLabel="the facts it received" /> : <p className="muted small">(Prompt not stored for this answer.)</p>}
-      </li>
-      <li>
-        <b>The AI answered:</b>
-        <Code text={JSON.stringify(c.answer, null, 2)} />
-      </li>
+    <div className="story-steps">
+      <p>
+        <b>1.</b> The app computed everything first: 500 simulated futures per path{c.what === 'answer' ? ', which path ends higher, and how confident that is' : ''}.
+      </p>
+      <p>
+        <b>2.</b> Only the final numbers (a small “facts” list) went to the AI, with fixed rules: plain words, use only these numbers, no advice.
+      </p>
+      <p>
+        <b>3.</b> The AI wrote:
+      </p>
+      <div className="bubble-a">{text}</div>
       {c.verify && (
-        <li>
-          <b>The app checked every number in the answer against the facts:</b>{' '}
+        <p>
+          <b>4.</b> The app checked every number in that text against the facts:{' '}
           {c.verify.unmatched.length ? <span className="neg">{c.verify.unmatched.length} not found ({c.verify.unmatched.join(', ')})</span> : <span className="ok">all {c.verify.total} found ✓</span>}
-        </li>
+        </p>
       )}
-    </ol>
+      <details className="tech">
+        <summary>Technical details: the exact instructions, the facts and the raw answer</summary>
+        {c.prompt ? <PromptBlock p={c.prompt} userLabel="the facts it received" /> : <p className="muted small">Prompt not stored for this answer.</p>}
+        <h4>Raw answer ({c.model}{c.ms != null ? `, ${(c.ms / 1000).toFixed(1)} s` : ''})</h4>
+        <Code text={JSON.stringify(c.answer, null, 2)} />
+      </details>
+    </div>
   )
 }
 
-function PromptBlock({ p, userLabel = 'your question, as sent' }: { p: PromptInfo; userLabel?: string }) {
+function PromptBlock({ p, userLabel = 'the message, as sent' }: { p: PromptInfo; userLabel?: string }) {
   return (
     <div className="prompt">
       <details>
@@ -154,5 +193,3 @@ function Code({ text }: { text: string }) {
     </div>
   )
 }
-
-const Quote = ({ children }: { children: string }) => <span className="quote">“{children}”</span>

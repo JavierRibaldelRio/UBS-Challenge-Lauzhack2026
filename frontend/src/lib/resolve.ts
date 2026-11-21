@@ -91,10 +91,11 @@ export function resolve(
   const H = horizonMonths
   const assumptions: Assumption[] = []
   const warnings: string[] = []
+  let curMonth = 0 // month the current event starts (stored on its assumptions)
   const A = (key: string, label: string, value: number, unit: string, source: Source, note: string, range?: Assumption['range']) => {
     const o = overrides[key]
     const v = o ?? value
-    assumptions.push({ key, label, value: v, unit, source: o != null ? 'you' : source, note, ...(o == null && source === 'data' && range ? { range } : {}) })
+    assumptions.push({ key, label, value: v, unit, source: o != null ? 'you' : source, note, ...(o == null && source === 'data' && range ? { range } : {}), ...(key.startsWith('g.') ? {} : { month: curMonth }) })
     return v
   }
   const fill = <T>(v: T) => Array.from({ length: H }, () => v)
@@ -132,6 +133,7 @@ export function resolve(
   // ---- events, in time order
   const events = [...spec.events].map((e, i) => ({ e, i })).sort((a, b) => (a.e.start_month ?? 0) - (b.e.start_month ?? 0))
   for (const { e, i } of events) {
+    curMonth = clampM(e.start_month)
     applyEvent(e, `e${i}`, clampM(e.start_month))
   }
 
@@ -165,6 +167,7 @@ export function resolve(
         }
         for (let t = s; t < end; t += 6) oneOff[t] += tuition / 2
         if (end < H) {
+          curMonth = end // the salary after studying (and its unknown premium) only matters from here
           const anc = incomeAnchor(params, 'employed', ageAt(end))
           const after = A(`${k}.after`, `${e.label}: salary after (no premium)`, anc.value, 'CHF/mo', 'data', anc.note, anc.range)
           const premium = A(`${k}.premium`, `${e.label}: salary premium from degree`, e.income_change_pct ?? 0, '%', e.income_change_pct != null ? tag : 'missing', e.income_change_pct != null ? tagNote : 'The data has no education field, so the degree premium is unknown. 0% = same pay. See the break-even line.')
@@ -180,9 +183,10 @@ export function resolve(
         const target = (e.city ?? '').trim()
         const known = params.anchors.rent_by_city[target] ? target : null
         const label = known ?? (target || 'abroad')
+        const where = known ? `in ${known}` : /^abroad$/i.test(label) ? 'abroad' : `in ${label.replace(/^abroad:\s*/i, '')}`
         const ra = known ? rentAnchor(params, known, household[s]) : null
-        const rentV = A(`${k}.rent`, `${e.label}: rent in ${label}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra ? ra.note : `No data for ${label}. Default keeps your current rent - please set it.`, ra?.range)
-        const incV = A(`${k}.income`, `${e.label}: net income in ${label}`, e.monthly_net_income_chf ?? income[s], 'CHF/mo', e.monthly_net_income_chf != null ? tag : known ? 'data' : 'missing', e.monthly_net_income_chf != null ? tagNote : known ? 'income kept: the synthetic data shows no reliable city effect on income' : `No data for ${label}. Default keeps your current income - please set it.`)
+        const rentV = A(`${k}.rent`, `${e.label}: rent ${where}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra ? ra.note : `No data for ${label}. Default keeps your current rent - please set it.`, ra?.range)
+        const incV = A(`${k}.income`, `${e.label}: net income ${where}`, e.monthly_net_income_chf ?? income[s], 'CHF/mo', e.monthly_net_income_chf != null ? tag : known ? 'data' : 'missing', e.monthly_net_income_chf != null ? tagNote : known ? 'income kept: the synthetic data shows no reliable city effect on income' : `No data for ${label}. Default keeps your current income - please set it.`)
         const move = A(`${k}.move`, `${e.label}: moving cost`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Moving costs are not in the data. 0 by default.')
         // income only changes if someone actually set it (else later phases, e.g. post-study salary, are kept)
         const setIncome = e.monthly_net_income_chf != null || overrides[`${k}.income`] != null
@@ -341,16 +345,17 @@ export function presets(profile: Profile, params: Params): Preset[] {
 export function describeSpec(spec: ScenarioSpec, age0: number): string {
   if (!spec.events.length) return 'today’s numbers, nothing changes'
   const at = (m: number | null) => (m ? `at ${Math.floor(age0 + m / 12)}` : 'now')
-  const k = (n: number) => (Math.abs(n) >= 1000 ? `${Math.round(n / 1000)}k` : `${Math.round(n)}`)
+  const k = (n: number) => (Math.abs(n) >= 1e6 ? `${Math.round(n / 1e5) / 10}M` : Math.abs(n) >= 1000 ? `${Math.round(n / 1000)}k` : `${Math.round(n)}`)
+  const until = (e: TwinEvent) => (e.duration_months ? ` (until ${Math.floor(age0 + ((e.start_month ?? 0) + e.duration_months) / 12)})` : '')
   const one = (e: TwinEvent) => {
     const d = e.duration_months
     switch (e.type) {
       case 'start_job': return `job ${at(e.start_month)}${e.monthly_net_income_chf ? ` (${k(e.monthly_net_income_chf)}/mo)` : ''}`
       case 'study': return `study ${d ? `${d} months` : ''} ${at(e.start_month)}, then a job`.replace('  ', ' ')
       case 'relocate': return `${!e.city || /^abroad$/i.test(e.city.trim()) ? 'move abroad' : `move to ${e.city.replace(/^abroad:\s*/i, '')}`} ${at(e.start_month)}`
-      case 'income_change': return e.income_change_pct === -100 ? `no income ${d ? `for ${d} months ` : ''}${at(e.start_month)}` : `income ${e.income_change_pct != null ? `${e.income_change_pct > 0 ? '+' : ''}${e.income_change_pct}%` : 'changes'} ${at(e.start_month)}`
+      case 'income_change': return e.income_change_pct === -100 ? `no income ${d ? `for ${d} months ` : ''}${at(e.start_month)}` : e.monthly_net_income_chf != null ? `income ${k(e.monthly_net_income_chf)}/mo ${at(e.start_month)}${until(e)}` : `income ${e.income_change_pct != null ? `${e.income_change_pct > 0 ? '+' : ''}${e.income_change_pct}%` : 'changes'} ${at(e.start_month)}${until(e)}`
       case 'household_change': return `${e.household_type === 'family' ? 'a child' : e.household_type === 'couple' ? 'move in together' : (e.household_type ?? 'new household').replace('_', ' ')} ${at(e.start_month)}`
-      case 'recurring_expense': return `${e.label.toLowerCase()}${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''} ${at(e.start_month)}`
+      case 'recurring_expense': return `${e.label.toLowerCase().replace(/\s*\d[\d'’,.]*\s*k?\s*(chf)?\s*(a|per|\/)\s*mo(nth)?/i, '')}${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''} ${at(e.start_month)}${until(e)}`
       case 'one_off': return `${e.amount_chf != null && e.amount_chf < 0 ? 'receive' : 'pay'} ${e.amount_chf ? k(Math.abs(e.amount_chf)) : ''} (${e.label.toLowerCase()}) ${at(e.start_month)}`
       case 'invest': return `invest${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''}${e.amount_chf ? ` ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
       case 'market_shock': return `markets −${e.drop_pct ?? 30}% ${at(e.start_month)}`

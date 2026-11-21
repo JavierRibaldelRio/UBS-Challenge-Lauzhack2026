@@ -37,7 +37,25 @@ export type TwinEvent = {
 }
 
 export type ScenarioSpec = { name: string; catalog_id: string | null; events: TwinEvent[] }
-export type ParseResult = { scenarios: ScenarioSpec[]; horizon_years: number | null; unsupported: string[]; note: string | null }
+export type ProfileUpdate = {
+  monthly_net_income_chf: number | null
+  monthly_rent_chf: number | null
+  cash_chf: number | null
+  investments_chf: number | null
+  monthly_spending_chf: number | null
+  summary: string
+}
+export type ParseResult = { profile_update?: ProfileUpdate | null; scenarios: ScenarioSpec[]; horizon_years: number | null; unsupported: string[]; note: string | null }
+export type TurnResult = {
+  reply: string
+  profile_update: ProfileUpdate | null
+  new_paths: ScenarioSpec[]
+  edit: { path_id: string; path: ScenarioSpec; changes: string[] } | null
+  remove_path_ids: string[]
+  horizon_years: number | null
+  unsupported: string[]
+}
+export type EditResult = { path: ScenarioSpec; changes: string[]; unsupported: string[]; note: string | null }
 export type ExplainResult = { headline: string; explanation: string; caveat: string }
 export type AnswerResult = { short_answer: string; reasoning: string; confidence_level: 'high' | 'medium' | 'low'; confidence_sentence: string }
 /** exactly what was sent to the LLM (returned by the backend so the UI can show it) */
@@ -129,4 +147,6 @@ export type Assumption = {
   note: string
   /** peer range from the data (10th-90th percentile) and which direction is good for the person */
   range?: { lo: number; hi: number; good: 'higher' | 'lower' }
+  /** month from which this number starts to matter (events only) */
+  month?: number
 }

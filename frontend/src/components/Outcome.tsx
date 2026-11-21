@@ -5,6 +5,8 @@ import type { SimResult } from '../lib/sim'
 export function OutcomeCard(p: {
   name: string
   summary: string
+  timeline: { icon: string; age: number; text: string }[]
+  unknownFromAge: number | null
   warnings: string[]
   color: string
   result: SimResult
@@ -33,7 +35,18 @@ export function OutcomeCard(p: {
           </span>
         )}
       </div>
-      <div className="outcome-summary">{p.summary}</div>
+      <div className="timeline" title={p.summary}>
+        {p.timeline.length ? (
+          p.timeline.map((e, i) => (
+            <span key={i} className="tl-item" title={e.text}>
+              {e.icon}
+              <small>{e.age}</small>
+            </span>
+          ))
+        ) : (
+          <span className="muted small">today’s numbers</span>
+        )}
+      </div>
       <div className="outcome-big">{chfk(r.endNW.p50)}</div>
       <div className="outcome-sub">net worth at {p.endAge}</div>
       <div className={`outcome-diff ${p.isBaseline ? '' : diff >= 0 ? 'pos' : 'neg'}`}>
@@ -56,6 +69,7 @@ export function OutcomeCard(p: {
             <span key={h.month} className="flag good">🏠 down payment OK</span>
           ),
         )}
+        {p.unknownFromAge != null && <span className="flag fogflag">? unknowns from {p.unknownFromAge}</span>}
         {p.warnings.map((w) => (
           <span key={w} className="flag warn">⚠ {w}</span>
         ))}

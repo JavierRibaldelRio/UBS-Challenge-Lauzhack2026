@@ -48,10 +48,21 @@ export function offlineParse(text: string, profile: Profile, cities: string[]): 
     if (inv != null) ev.push(makeEvent({ type: 'invest', label: 'Invest', start_month: start, monthly_amount_chf: inv }))
     if (ev.length) scenarios.push({ name: ev.map((e) => e.label).join(' + ').slice(0, 40), catalog_id: null, events: ev })
   }
+  // facts about TODAY ("I now earn 1,500", "I have 15k saved", "my rent is 1,100") -> the twin updates itself
+  const income = /\b(i (now )?(earn|make)|my (salary|income) is( now)?)\b/.test(t) ? money(/(?:earn|make|salary is|income is)(?: now)? (?:chf )?(\d[\d',]*)(k?)/) : null
+  const cash = /\b(i have|i've (got|saved)|my savings (are|is))\b/.test(t) ? money(/(?:have|got|saved|savings are|savings is) (?:chf )?(\d[\d',]*)(k?)/) : null
+  const rentNow = /\bmy rent (is|went up to|is now)\b/.test(t) ? money(/rent (?:is|went up to|is now) (?:chf )?(\d[\d',]*)(k?)/) : null
+  const profile_update =
+    income != null || cash != null || rentNow != null
+      ? { monthly_net_income_chf: income, monthly_rent_chf: rentNow, cash_chf: cash, investments_chf: null, monthly_spending_chf: null, summary: 'updated from your message (offline rules)' }
+      : null
+  if (profile_update && scenarios.length === 1 && scenarios[0].events.every((e) => e.type === 'start_job')) scenarios.length = 0 // "I now earn…" is a fact, not a new job
+
   return {
+    profile_update,
     scenarios: scenarios.slice(0, 3),
     horizon_years: null,
     unsupported: [],
-    note: scenarios.length ? 'Offline mode: understood with simple keyword rules.' : 'Offline mode could not understand this. Try the quick buttons or words like "master", "work", "move to Zurich", "abroad", "child", "lose my job".',
+    note: scenarios.length || profile_update ? 'Offline mode: understood with simple keyword rules.' : 'Offline mode could not understand this. Try the quick buttons or words like "master", "work", "move to Zurich", "abroad", "child", "lose my job".',
   }
 }

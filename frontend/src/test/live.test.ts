@@ -6,7 +6,7 @@ import { breakEven, buildFacts, drivers, verifyNumbers } from '../lib/analysis'
 import { answerFacts, verdict } from '../lib/answer'
 import { cities, medianLoanRate, presets, resolve } from '../lib/resolve'
 import { simulate } from '../lib/sim'
-import type { AnswerResult, ExplainResult, Params, ParseResult, Profile } from '../lib/types'
+import type { AnswerResult, EditResult, ExplainResult, Params, ParseResult, Profile, TurnResult, TwinEvent } from '../lib/types'
 
 const API = process.env.API ?? 'http://localhost:8000'
 const params: Params = JSON.parse(readFileSync('src/model/params.json', 'utf8'))
@@ -174,6 +174,122 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
       expect(a.data.confidence_level).toBe(v.confidence) // the AI must not change the computed confidence
     }, 60000)
   }
+
+  // ---------------- the twin updates itself + follow-up edits
+  it('twin update: "I now earn 1,500 a month and have 10k saved" -> profile_update, no new path', async () => {
+    const r = await post<ParseResult>('/api/parse', ctx('I now earn 1,500 a month and have 10k saved'))
+    expect(r.ok, r.error).toBe(true)
+    console.log('update ->', JSON.stringify(r.data.profile_update), r.data.scenarios.length)
+    expect(r.data.profile_update?.monthly_net_income_chf).toBe(1500)
+    expect(r.data.profile_update?.cash_chf).toBe(10000)
+    expect(r.data.scenarios.length).toBe(0)
+  }, 40000)
+  it('small talk ("hey"): no paths, no update, a friendly reply in note', async () => {
+    const r = await post<ParseResult>('/api/parse', ctx('hey'))
+    expect(r.ok, r.error).toBe(true)
+    console.log('hey ->', r.data.note)
+    expect(r.data.scenarios.length).toBe(0)
+    expect(r.data.profile_update ?? null).toBeNull()
+    expect((r.data.note ?? '').length).toBeGreaterThan(10)
+  }, 40000)
+  it('mixed: a fact about today AND a what-if in one message', async () => {
+    const r = await post<ParseResult>('/api/parse', ctx("My rent went up to 1,100. What if I do a master's?"))
+    expect(r.ok, r.error).toBe(true)
+    expect(r.data.profile_update?.monthly_rent_chf).toBe(1100)
+    expect(ev(r.data).some((e) => e.type === 'study')).toBe(true)
+  }, 40000)
+  const editCtx = (text: string, path: unknown, fixed: unknown[] = []) => ({ ...ctx(text), path, fixed })
+  const ED = (e: Partial<TwinEvent> & { type: TwinEvent['type']; label: string }) => ({ start_month: 0, duration_months: null, monthly_net_income_chf: null, income_change_pct: null, monthly_amount_chf: null, amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, down_payment_pct: null, ...e })
+  it('edit: "make it 3 years and the degree raises my salary by 20%"', async () => {
+    const r = await post<EditResult>('/api/edit', editCtx('make it 3 years and the degree raises my salary by 20%', { name: "Master's degree", events: [ED({ type: 'study', label: "Master's" })] }))
+    expect(r.ok, r.error).toBe(true)
+    console.log('edit1 ->', JSON.stringify(r.data.path.events.map((e) => Object.fromEntries(Object.entries(e).filter(([, v]) => v != null)))), r.data.changes)
+    const st = r.data.path.events.find((e) => e.type === 'study')!
+    expect([st.duration_months, st.income_change_pct]).toEqual([36, 20])
+  }, 40000)
+  it('edit: change one amount, keep everything else exactly', async () => {
+    const path = { name: 'Work, job loss, flat', events: [ED({ type: 'start_job', label: 'Start working' }), ED({ type: 'income_change', label: 'Job loss', start_month: 60, duration_months: 6, income_change_pct: -100 }), ED({ type: 'buy_home', label: 'Buy flat', start_month: 96, amount_chf: 600000 })] }
+    const r = await post<EditResult>('/api/edit', editCtx('make the flat 500k', path))
+    expect(r.ok, r.error).toBe(true)
+    console.log('edit2 ->', r.data.changes)
+    expect(r.data.path.events.length).toBe(3)
+    expect(r.data.path.events.find((e) => e.type === 'buy_home')!.amount_chf).toBe(500000)
+    expect(r.data.path.events.find((e) => e.type === 'income_change')!.duration_months).toBe(6)
+  }, 40000)
+  it('edit: remove an event; hand-set values are kept', async () => {
+    const path = { name: 'Work, job loss, flat', events: [ED({ type: 'start_job', label: 'Start working' }), ED({ type: 'income_change', label: 'Job loss', start_month: 60, duration_months: 6, income_change_pct: -100 }), ED({ type: 'buy_home', label: 'Buy flat', start_month: 96, amount_chf: 600000 })] }
+    const r = await post<EditResult>('/api/edit', editCtx('remove the job loss', path, [{ what: 'Buy flat: mortgage interest', value: 1.5, unit: '%/yr' }]))
+    expect(r.ok, r.error).toBe(true)
+    console.log('edit3 ->', JSON.stringify(r.data.path.events.map((e) => [e.type, e.amount_chf, e.annual_rate_pct])), r.data.changes)
+    expect(r.data.path.events.some((e) => e.type === 'income_change')).toBe(false)
+    expect(r.data.path.events.find((e) => e.type === 'buy_home')!.annual_rate_pct).toBe(1.5)
+  }, 40000)
+
+  // ---------------- the conversation endpoint: context makes the twin understand (cases from a real chat transcript)
+  const STATE = {
+    name: 'Alexia', age: 20, city: 'Lausanne', job_status: 'student', household: 'single', net_income_chf_per_month: 1200, rent_chf_per_month: 900, cash_chf: 8000, investments_chf: 0,
+    usual_spending_without_rent_chf_per_month: 1336, spending_ups_and_downs_chf: 426, loans: [], goals: [{ goal: 'Emergency savings', target_chf: 12800, by: '2029-12' }, { goal: 'Career transition', target_chf: 39366, by: '2032-12' }],
+    told_the_twin: [], if_nothing_changes: { years_simulated: 10, age_at_end: 30, net_worth_at_end_median_chf: -116100, chance_cash_below_zero_pct: 100, cash_runs_out_at_age: 20, goals: [] },
+  }
+  const chat = (text: string, o: { history?: { role: string; text: string }[]; paths?: unknown[]; target?: string | null } = {}) =>
+    post<TurnResult>('/api/chat', { ...ctx(text), history: o.history ?? [], state: STATE, paths: o.paths ?? [], focus_path_id: null, target_path_id: o.target ?? null })
+  const show = (l: string, r: { ms: number; data: TurnResult }) =>
+    console.log(`${l} (${r.ms}ms)\n   reply: ${r.data.reply}\n   new ${r.data.new_paths.length} · edit ${r.data.edit ? r.data.edit.path_id + ' ' + JSON.stringify(r.data.edit.changes) : '-'} · remove ${JSON.stringify(r.data.remove_path_ids)} · update ${JSON.stringify(r.data.profile_update)}`)
+  const mansion = { id: 'p1', name: '1M job, mansion, kid', events: [{ type: 'income_change', label: '1M a year', start_month: 0, duration_months: 240, monthly_net_income_chf: 83333 }, { type: 'buy_home', label: 'Mansion', start_month: 240, amount_chf: 10000000 }, { type: 'household_change', label: 'Kid', start_month: 0, household_type: 'family' }, { type: 'recurring_expense', label: 'Kid costs', start_month: 0, monthly_amount_chf: 100000 }], net_worth_at_end_median_chf: -19520000 }
+
+  it('chat: "just say hi and nothing else" -> just hi, no actions', async () => {
+    const r = await chat('just say hi and nothing else', { history: [{ role: 'user', text: 'hey' }, { role: 'twin', text: "Hi! Ask me a what-if, like 'What if I do a master's?'" }] })
+    show('hi', r)
+    expect(r.data.new_paths.length + (r.data.edit ? 1 : 0) + r.data.remove_path_ids.length).toBe(0)
+    expect(r.data.reply.length).toBeLessThan(40)
+  }, 40000)
+  it('chat: "what are my financials?" -> answers with her real numbers', async () => {
+    const r = await chat('i mean what are my financials?', { history: [{ role: 'user', text: 'explain me my life now' }] })
+    show('financials', r)
+    const t = r.data.reply.replace(/[’',]/g, '')
+    expect(t).toMatch(/1200/)
+    expect(t).toMatch(/900/)
+    expect(t).toMatch(/8000|8k/i)
+    expect(r.data.new_paths.length).toBe(0)
+  }, 40000)
+  it('chat: "have the kid at 35 instead" -> EDITS the existing path, keeps the rest', async () => {
+    const r = await chat('but i wanna have the kid at 35 instead', { history: [{ role: 'user', text: 'i wanna make 1M a year for life until 40 then buy a 10m chf mansion and have a kid who loses me 100k a month' }, { role: 'twin', text: '＋ 1M job, mansion, kid' }], paths: [mansion] })
+    show('kid at 35', r)
+    expect(r.data.new_paths.length).toBe(0)
+    expect(r.data.edit?.path_id).toBe('p1')
+    const ev = r.data.edit!.path.events
+    expect(ev.find((e) => e.type === 'household_change')!.start_month).toBe(180)
+    expect(ev.find((e) => e.type === 'recurring_expense')!.start_month).toBe(180)
+    expect(ev.find((e) => e.type === 'buy_home')!.amount_chf).toBe(10000000)
+    expect(ev.some((e) => (e.monthly_net_income_chf ?? 0) > 80000)).toBe(true)
+  }, 40000)
+  it('chat: "where\'s the 1M a year income" -> adds it to that path', async () => {
+    const noIncome = { ...mansion, events: mansion.events.slice(1) }
+    const r = await chat("wheres the fucking 1M a year income", { history: [{ role: 'user', text: 'i wanna make 1M a year until 40 then buy a 10m mansion and have a kid at 35' }, { role: 'twin', text: '＋ 1M job, mansion, kid' }], paths: [noIncome] })
+    show('1M income', r)
+    expect(r.data.edit?.path_id).toBe('p1')
+    expect(r.data.edit!.path.events.some((e) => Math.round(e.monthly_net_income_chf ?? 0) === 83333)).toBe(true)
+  }, 40000)
+  it('chat: "until I buy the house it should be 2K a month" (after asking about rent) -> rent update, not saving', async () => {
+    const r = await chat('until i buy the house it should be 2K a month', { history: [{ role: 'user', text: 'whats my rent' }, { role: 'twin', text: 'Your rent is 900 CHF a month.' }] })
+    show('rent 2K', r)
+    expect(r.data.profile_update?.monthly_rent_chf).toBe(2000)
+    expect(r.data.new_paths.some((p) => p.events.some((e) => e.type === 'invest'))).toBe(false)
+  }, 40000)
+  it('chat: correction "I meant rent, not saving" -> removes the wrong path and fixes the rent', async () => {
+    const wrong = { id: 'p2', name: 'Save 2K a month', events: [{ type: 'invest', label: 'Save 2K', start_month: 0, monthly_amount_chf: 2000 }] }
+    const r = await chat('dude. i want my rent to be 2000 a month not save that much', { history: [{ role: 'user', text: 'until i buy the house it should be 2K a month' }, { role: 'twin', text: '＋ Save 2K a month: invest 2k/mo now' }], paths: [wrong] })
+    show('correction', r)
+    expect(r.data.remove_path_ids).toContain('p2')
+    expect(r.data.profile_update?.monthly_rent_chf).toBe(2000)
+  }, 40000)
+  it('chat: explicit target -> edits exactly that path', async () => {
+    const master = { id: 'p3', name: "Master's degree", events: [{ type: 'study', label: "Master's", start_month: 0 }] }
+    const r = await chat('make it start a year later', { paths: [master, mansion], target: 'p3' })
+    show('target', r)
+    expect(r.data.edit?.path_id).toBe('p3')
+    expect(r.data.edit!.path.events.find((e) => e.type === 'study')!.start_month).toBe(12)
+  }, 40000)
 
   it('explain: Alexia demo, all numbers traced to the engine', async () => {
     const ps = presets(alexia, params)
