@@ -44,7 +44,7 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
 | UBS asks | Status | Where |
 |---|---|---|
 | MUST · Fictional client profile | ✅ 1,200 fictional people from UBS's data; Alexia by default | person line, profile picker |
-| MUST · One working scenario | ✅ 11 event types, any combination, in plain words; 7 ready-made paths | chat, `+` buttons |
+| MUST · One working scenario | ✅ 12 event types, any combination, in plain words; 7 ready-made paths | chat, `+` buttons |
 | MUST · Before / after comparison | ✅ baseline vs every path: cards, chart, "vs baseline", answer card | outcome cards, chart |
 | MUST · Transparent assumptions | ✅ every number has a source tag and a note, editable; unknowns marked and dotted; prompt visible | "The numbers behind", "how did the twin get this?" |
 | BONUS · Conversational AI | ✅ a chat that answers, acts, remembers context, updates itself, edits paths, checks its own numbers | chat |
@@ -213,7 +213,7 @@ These run on the selected path every time anything changes. You can see them und
 
 Input: the person + a list of **events** (from the LLM, a preset button, or the offline parser). Output: a `Plan` (arrays of income, rent, spending etc. for every month) plus a list of **assumptions**. Each assumption has a source label and a short note saying where the number comes from.
 
-### The 11 event types
+### The 12 event types
 
 | type | what it does | default when a number is missing |
 |---|---|---|
@@ -229,7 +229,11 @@ Input: the person + a list of **events** (from the LLM, a preset button, or the 
 | `take_loan` | cash now, monthly repayments | median rate of the 283 loans (**data**); 5-year term (**assumption**) |
 | `buy_home` | own money (down payment) leaves cash, a mortgage is paid to the seller, the home is added to net worth, rent stops, upkeep starts. Interest-only mortgage | price: **unknown** (must be set; without a price nothing happens and the card warns "needs a price"); down payment 20%, mortgage 2%, upkeep 1%/yr (**assumption**) |
 
-**Buying a home: why cash drops but net worth doesn't.** On the purchase month, cash falls by the down payment (e.g. 120k for a 600k flat). Net worth stays flat, because that money became part of a home worth 600k and the mortgage covers the other 480k. In the net worth view the selected path's **cash is drawn as a dotted line**, a 🏠 marker shows the month, and a note under the chart says it in words.
+| `buy_asset` | buy something you keep that is not a home (car, motorbike, boat, equipment): own money leaves cash, the item becomes an **asset** that **loses value every year**, optional loan, monthly running costs | price: **unknown** until set; paid in full (100% own money), loses 15%/yr, loan over 4 years at the data's median rate (**assumption**); running costs **unknown** |
+
+**What events are based on:** the 12 types are fixed (they cover UBS's scenario categories). Their default numbers come from the data where it has them (salary, rent, tuition, loan-rate medians), otherwise they are labelled assumptions or "unknown". **Assets** = everything you own besides cash and investments (homes and `buy_asset` items). Value changes without money moving (a car losing value, a house-price drop) are recorded separately (`revalue`), so the live "net worth = assets − debts" check stays exact.
+
+**Buying a home: why cash drops but net worth doesn't.** On the purchase month, cash falls by the down payment (e.g. 120k for a 600k flat). Net worth stays flat, because that money became part of a home worth 600k and the mortgage covers the other 480k. In the **Net worth** view the selected path also shows its **cash (dotted)**, its **assets (green: home, car…)** and its **debt (red, below zero: mortgage and loans)**, a 🏠/🚗 marker shows the month, and a note says it in words: "cash −200,000, debt +800,000 (mortgage), assets +1,000,000".
 **Down-payment check:** a down payment must come from money you *have* (banks require own funds). In every one of the 500 futures the engine checks cash just before the purchase (`SimResult.homeBuys`). The card shows "🏠 down payment OK", "⚠ down payment short in X%" or "⚠ can't pay the 60k down payment at 25". "Can I afford a flat…?" questions answer **no** if the own money is missing (tested: a student with no job, flat 300k at 25 → 0%, "No").
 
 **One path can hold many events.** "Do a master's now, lose my job at 25 and buy a flat at 28" becomes **one path with 3 events** (one line on the chart). "Master's **or** work?" becomes **two paths** (two lines). One question can create 1–3 paths.
@@ -328,7 +332,7 @@ A ~170-line Node server (`server.ts`) with no framework. It holds the API key an
 |---|---|---|
 | `GET /api/health` | – | which model, JSON mode, reasoning |
 | `GET /api/schema` | – | the exact JSON Schemas we demand |
-| **`POST /api/chat`** (used by the app) | the new message + **the last 12 chat messages + the twin's current STATE (income, rent, cash, spending, goals, "if nothing changes" results) + every PATH on screen (id, events, results) + selected/target path** | `{ reply, profile_update, new_paths[], edit {path_id, path, changes}, remove_path_ids[], horizon_years, unsupported[] }`: the twin talks **and** acts in one turn |
+| **`POST /api/chat`** (used by the app) | the new message + **the last 12 chat messages + the twin's current STATE (income, rent, cash, spending, goals, "if nothing changes" results) + every PATH on screen (id, events, results) + selected/target path** | `{ reply, profile_update, new_paths[], edits[] {path_id, path, changes} (several paths at once, e.g. "add to all"), remove_path_ids[], macro_update, horizon_years, unsupported[] }`: the twin talks **and** acts in one turn |
 | `POST /api/parse` | question + person summary + city list + scenario catalog | `{ scenarios[], horizon_years, unsupported[], note }` (older single-purpose endpoint, kept for tests and tools) |
 | `POST /api/explain` | `{ facts }` | `{ headline, explanation, caveat }` |
 | `POST /api/answer` | `{ facts }` from `answerFacts()` | `{ short_answer, reasoning, confidence_level, confidence_sentence }` |
@@ -387,7 +391,9 @@ Now every message goes to **`/api/chat`** with:
 - **PATHS**: every path on screen with its id, events and results, so it can **edit** or **remove** the right one;
 - the **selected** path and the **target** path (when you click "Change this path").
 
-One turn can do several things: `reply` (always: natural, short, answers questions with STATE/PATHS numbers, no canned slogans), `profile_update`, `new_paths`, `edit`, `remove_path_ids` (when you say it misunderstood), `horizon_years` (e.g. "until 40" at 20 → 25 years). The reply's numbers are checked: numbers from the data or from your message (also ÷12 / ×12) pass; anything else is shown as "ℹ calculated by the twin". Distress messages get care and Swiss help lines (143, 147, 144) first.
+One turn can do several things: `reply` (always: natural, short, answers questions with STATE/PATHS numbers, no canned slogans), `profile_update`, `new_paths`, `edit`, `remove_path_ids` (when you say it misunderstood), `horizon_years` (e.g. "until 40" at 20 → 25 years). **Truthful history:** the chat history sent to the AI records what was *actually applied* in each turn ("[actions applied: …]" or "[no path, fact or economy was changed in this turn]"), and the prompt says PATHS is the truth. This stops the twin from believing its own earlier claim ("I've added it to all three") when nothing was changed. Edits are matched by path id or by name, and an edit that can't be matched is reported in the chat instead of vanishing.
+
+The reply's numbers are checked: numbers from the data or from your message (also ÷12 / ×12) pass; anything else is shown as "ℹ calculated by the twin". Distress messages get care and Swiss help lines (143, 147, 144) first.
 
 **Tested** with the exact transcript (`pnpm test:live`, "chat:"): "just say hi and nothing else" → "Hi!"; "what are my financials?" → her income, rent, spending, cash and monthly gap; "kid at 35 instead" → edits that path, keeps the 1M and the mansion; "where's the 1M income" → adds it to that path; "rent should be 2K" → rent update, not saving; "I meant rent, not saving" → removes the wrong path and fixes the rent; explicit target edit → that path only.
 

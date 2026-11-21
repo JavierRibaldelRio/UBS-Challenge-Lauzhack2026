@@ -1,6 +1,6 @@
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { chf, chfk, monthIndex } from '../lib/fmt'
-import type { SimResult } from '../lib/sim'
+import type { PathOut, SimResult } from '../lib/sim'
 import type { UnknownImpact } from '../lib/unknowns'
 import type { Profile } from '../lib/types'
 
@@ -9,7 +9,7 @@ export type ChartPath = { id: string; name: string; color: string; result: SimRe
 /** Median line per path; the shaded 80% range only for the selected path (keeps the chart calm). */
 export type Marker = { month: number; icon: string; text: string }
 
-export function ProjectionChart({ paths, focusId, profile, metric, months, markers = [] }: { paths: ChartPath[]; focusId: string; profile: Profile; metric: 'nw' | 'cash'; months: number; markers?: Marker[] }) {
+export function ProjectionChart({ paths, focusId, profile, metric, months, markers = [], focusParts }: { paths: ChartPath[]; focusId: string; profile: Profile; metric: 'nw' | 'cash'; months: number; markers?: Marker[]; focusParts?: PathOut }) {
   const rows = Array.from({ length: months }, (_, t) => {
     const row: Record<string, number | [number, number] | null> = { t: t + 1 }
     for (const p of paths) {
@@ -21,8 +21,16 @@ export function ProjectionChart({ paths, focusId, profile, metric, months, marke
       if (u && p.id === focusId && t >= u.from) row.fog = [s.p50 + u[metric][t].lo, s.p50 + u[metric][t].hi]
       if (p.id === focusId) {
         row.band = [s.p10, s.p90]
+        p.result.samples.forEach((sm, i) => (row[`s${i}`] = sm[metric][t])) // single futures: the real bumpy months
         // in the net worth view, also show the selected path's CASH (dotted): a home purchase drops cash, not net worth
-        if (metric === 'nw') row.focusCash = p.result.cash[t].p50
+        if (metric === 'nw') {
+          row.focusCash = p.result.cash[t].p50
+          // what the selected path's net worth is made of: home value (+) and debt (−, e.g. the mortgage)
+          if (focusParts) {
+            row.focusHome = focusParts.home[t] || null
+            row.focusDebt = focusParts.debt[t] ? -focusParts.debt[t] : null
+          }
+        }
       }
     }
     row.observed = metric === 'cash' && t < profile.ledger_closing_cash.length ? profile.ledger_closing_cash[t] : null
@@ -52,7 +60,10 @@ export function ProjectionChart({ paths, focusId, profile, metric, months, marke
           formatter={(v, key) => {
             if (key === 'band') return [`${chfk((v as number[])[0])} to ${chfk((v as number[])[1])}`, `${focus?.name}: 8 in 10 runs`]
             if (key === 'observed') return [chf(Number(v)), 'Real ledger (data)']
+            if (typeof key === 'string' && /^s\d$/.test(key)) return [null, null] as unknown as [string, string]
             if (key === 'focusCash') return [chf(Number(v)), `${focus?.name}: cash only`]
+            if (key === 'focusHome') return [chf(Number(v)), `${focus?.name}: assets (home, car…)`]
+            if (key === 'focusDebt') return [chf(Number(v)), `${focus?.name}: debt (mortgage + loans)`]
             if (key === 'fog') return [`${chfk((v as number[])[0])} to ${chfk((v as number[])[1])}`, `${focus?.name}: if the unknown numbers were different`]
             if (typeof key === 'string' && key.endsWith('__u')) return [chf(Number(v)), `${paths.find((p) => p.id === key.slice(0, -3))?.name} (depends on unknowns)`]
             return [chf(Number(v)), paths.find((p) => p.id === key)?.name ?? key]
@@ -60,6 +71,7 @@ export function ProjectionChart({ paths, focusId, profile, metric, months, marke
         />
         <ReferenceLine y={0} stroke="var(--danger)" strokeDasharray="4 4" strokeOpacity={0.6} />
         {focus && <Area dataKey="band" stroke="none" fill={focus.color} fillOpacity={0.15} isAnimationActive={false} />}
+        {focus && focus.result.samples.map((_, i) => <Line key={`s${i}`} dataKey={`s${i}`} stroke={focus.color} strokeWidth={0.8} strokeOpacity={0.28} dot={false} activeDot={false} legendType="none" isAnimationActive={false} />)}
         {focus?.unknown && <Area dataKey="fog" stroke={focus.color} strokeOpacity={0.35} strokeDasharray="2 3" fill="url(#fog)" isAnimationActive={false} />}
         {focus?.unknown && <ReferenceLine x={focus.unknown.from + 1} stroke={focus.color} strokeOpacity={0.5} label={{ value: '?', position: 'insideTopRight', fontSize: 15, fontWeight: 700, fill: focus.color }} />}
         {paths.map((p) => (
@@ -73,6 +85,8 @@ export function ProjectionChart({ paths, focusId, profile, metric, months, marke
         {metric === 'nw' && focus && focus.result.nw.some((b, i) => Math.abs(b.p50 - focus.result.cash[i].p50) > 1) && (
           <Line dataKey="focusCash" stroke={focus.color} strokeWidth={1.5} strokeDasharray="2 3" dot={false} isAnimationActive={false} />
         )}
+        {metric === 'nw' && focus && focusParts?.home.some((x) => x > 0) && <Area dataKey="focusHome" stroke="#059669" strokeWidth={1.5} fill="#059669" fillOpacity={0.08} isAnimationActive={false} />}
+        {metric === 'nw' && focus && focusParts?.debt.some((x) => x > 0) && <Area dataKey="focusDebt" stroke="var(--danger)" strokeWidth={1.5} fill="var(--danger)" fillOpacity={0.07} isAnimationActive={false} />}
         {markers
           .filter((m) => m.month >= 0 && m.month < months)
           .map((m, i) => (
@@ -87,3 +101,4 @@ export function ProjectionChart({ paths, focusId, profile, metric, months, marke
     </div>
   )
 }
+

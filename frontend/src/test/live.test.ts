@@ -36,7 +36,7 @@ const CASES: Case[] = [
   { q: 'What if I have a baby at 28?', expect: (r) => { const h = ev(r).find((e) => e.type === 'household_change'); expect(h?.household_type).toBe('family'); expect(h?.start_month).toBe(96) } },
   { q: 'What if I lose my job for 6 months at 25?', expect: (r) => { const c = ev(r).find((e) => e.type === 'income_change'); expect(c?.income_change_pct).toBe(-100); expect(c?.duration_months).toBe(6) } },
   { q: 'What if I work part-time at 60%?', expect: (r) => expect(ev(r).find((e) => e.type === 'income_change')?.income_change_pct).toBe(-40) },
-  { q: 'What if I buy a car for 25k and pay 300 a month for insurance?', expect: (r) => { expect(ev(r).some((e) => e.type === 'one_off' && e.amount_chf === 25000)).toBe(true); expect(ev(r).some((e) => e.type === 'recurring_expense' && e.monthly_amount_chf === 300)).toBe(true) } },
+  { q: 'What if I buy a car for 25k and pay 300 a month for insurance?', expect: (r) => { const car = ev(r).find((e) => e.type === 'buy_asset')!; expect(car.amount_chf).toBe(25000); expect(car.monthly_amount_chf === 300 || ev(r).some((e) => e.type === 'recurring_expense' && e.monthly_amount_chf === 300)).toBe(true) } },
   {
     q: "Do a 2-year master's now, lose my job for 6 months at 25, and buy a flat for 750k at 28",
     expect: (r) => {
@@ -234,13 +234,13 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
   const chat = (text: string, o: { history?: { role: string; text: string }[]; paths?: unknown[]; target?: string | null } = {}) =>
     post<TurnResult>('/api/chat', { ...ctx(text), history: o.history ?? [], state: STATE, paths: o.paths ?? [], focus_path_id: null, target_path_id: o.target ?? null })
   const show = (l: string, r: { ms: number; data: TurnResult }) =>
-    console.log(`${l} (${r.ms}ms)\n   reply: ${r.data.reply}\n   new ${r.data.new_paths.length} · edit ${r.data.edit ? r.data.edit.path_id + ' ' + JSON.stringify(r.data.edit.changes) : '-'} · remove ${JSON.stringify(r.data.remove_path_ids)} · update ${JSON.stringify(r.data.profile_update)}`)
+    console.log(`${l} (${r.ms}ms)\n   reply: ${r.data.reply}\n   new ${r.data.new_paths.length} · edits ${JSON.stringify(r.data.edits.map((e) => [e.path_id, e.changes]))} · remove ${JSON.stringify(r.data.remove_path_ids)} · update ${JSON.stringify(r.data.profile_update)}`)
   const mansion = { id: 'p1', name: '1M job, mansion, kid', events: [{ type: 'income_change', label: '1M a year', start_month: 0, duration_months: 240, monthly_net_income_chf: 83333 }, { type: 'buy_home', label: 'Mansion', start_month: 240, amount_chf: 10000000 }, { type: 'household_change', label: 'Kid', start_month: 0, household_type: 'family' }, { type: 'recurring_expense', label: 'Kid costs', start_month: 0, monthly_amount_chf: 100000 }], net_worth_at_end_median_chf: -19520000 }
 
   it('chat: "just say hi and nothing else" -> just hi, no actions', async () => {
     const r = await chat('just say hi and nothing else', { history: [{ role: 'user', text: 'hey' }, { role: 'twin', text: "Hi! Ask me a what-if, like 'What if I do a master's?'" }] })
     show('hi', r)
-    expect(r.data.new_paths.length + (r.data.edit ? 1 : 0) + r.data.remove_path_ids.length).toBe(0)
+    expect(r.data.new_paths.length + r.data.edits.length + r.data.remove_path_ids.length).toBe(0)
     expect(r.data.reply.length).toBeLessThan(40)
   }, 40000)
   it('chat: "what are my financials?" -> answers with her real numbers', async () => {
@@ -256,8 +256,8 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     const r = await chat('but i wanna have the kid at 35 instead', { history: [{ role: 'user', text: 'i wanna make 1M a year for life until 40 then buy a 10m chf mansion and have a kid who loses me 100k a month' }, { role: 'twin', text: '＋ 1M job, mansion, kid' }], paths: [mansion] })
     show('kid at 35', r)
     expect(r.data.new_paths.length).toBe(0)
-    expect(r.data.edit?.path_id).toBe('p1')
-    const ev = r.data.edit!.path.events
+    expect(r.data.edits[0]?.path_id).toBe('p1')
+    const ev = r.data.edits[0].path.events
     expect(ev.find((e) => e.type === 'household_change')!.start_month).toBe(180)
     expect(ev.find((e) => e.type === 'recurring_expense')!.start_month).toBe(180)
     expect(ev.find((e) => e.type === 'buy_home')!.amount_chf).toBe(10000000)
@@ -267,8 +267,8 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     const noIncome = { ...mansion, events: mansion.events.slice(1) }
     const r = await chat("wheres the fucking 1M a year income", { history: [{ role: 'user', text: 'i wanna make 1M a year until 40 then buy a 10m mansion and have a kid at 35' }, { role: 'twin', text: '＋ 1M job, mansion, kid' }], paths: [noIncome] })
     show('1M income', r)
-    expect(r.data.edit?.path_id).toBe('p1')
-    expect(r.data.edit!.path.events.some((e) => Math.round(e.monthly_net_income_chf ?? 0) === 83333)).toBe(true)
+    expect(r.data.edits[0]?.path_id).toBe('p1')
+    expect(r.data.edits[0].path.events.some((e) => Math.round(e.monthly_net_income_chf ?? 0) === 83333)).toBe(true)
   }, 40000)
   it('chat: "until I buy the house it should be 2K a month" (after asking about rent) -> rent update, not saving', async () => {
     const r = await chat('until i buy the house it should be 2K a month', { history: [{ role: 'user', text: 'whats my rent' }, { role: 'twin', text: 'Your rent is 900 CHF a month.' }] })
@@ -287,10 +287,26 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     const master = { id: 'p3', name: "Master's degree", events: [{ type: 'study', label: "Master's", start_month: 0 }] }
     const r = await chat('make it start a year later', { paths: [master, mansion], target: 'p3' })
     show('target', r)
-    expect(r.data.edit?.path_id).toBe('p3')
-    expect(r.data.edit!.path.events.find((e) => e.type === 'study')!.start_month).toBe(12)
+    expect(r.data.edits[0]?.path_id).toBe('p3')
+    expect(r.data.edits[0].path.events.find((e) => e.type === 'study')!.start_month).toBe(12)
   }, 40000)
 
+  const three = [
+    { id: 'd1', name: 'Start working', events: [{ type: 'start_job', label: 'Start working', start_month: 0 }] },
+    { id: 'd2', name: "Master's degree", events: [{ type: 'study', label: "Master's", start_month: 0 }] },
+    { id: 'd3', name: 'Move abroad', events: [{ type: 'relocate', label: 'Move abroad', start_month: 0, city: 'abroad', monthly_net_income_chf: 3700 }] },
+  ]
+  it('chat: "add a house at 40 for 400k to all" -> edits EVERY path', async () => {
+    const r = await chat('i wanna buy a house at 40 for 400K. add to all', { paths: three })
+    show('add to all', r)
+    expect(r.data.edits.map((e) => e.path_id).sort()).toEqual(['d1', 'd2', 'd3'])
+    for (const e of r.data.edits) expect(e.path.events.some((x) => x.type === 'buy_home' && x.amount_chf === 400000 && x.start_month === 240)).toBe(true)
+  }, 40000)
+  it('chat: history claims a change that PATHS does not show -> applies it instead of saying "already done"', async () => {
+    const r = await chat('[about path “Move abroad”] house for 400K at 40', { paths: three, target: 'd3', history: [{ role: 'user', text: 'i wanna buy a house at 40 for 400K. add to all' }, { role: 'twin', text: "I've added a 400K home purchase at 40 to all three paths. [no path, fact or economy was changed in this turn]" }] })
+    show('claimed but not applied', r)
+    expect(r.data.edits.some((e) => e.path_id === 'd3' && e.path.events.some((x) => x.type === 'buy_home'))).toBe(true)
+  }, 40000)
   it('chat: splits a personal decision (path) from an economy condition (macro)', async () => {
     const r = await chat("what if I do a master's and there's a recession in 2 years?")
     show('macro split', r)

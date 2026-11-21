@@ -15,6 +15,7 @@ export const EVENT_TYPES = [
   'market_shock', // investments drop by X%
   'take_loan', // borrow money (cash in now, repayments later)
   'buy_home', // buy a home: own money + mortgage, rent stops
+  'buy_asset', // buy something you keep that is not a home (car, motorbike, boat, equipment): an asset that loses value
 ] as const
 
 export const HOUSEHOLDS = ['single', 'couple', 'family', 'shared_housing'] as const
@@ -36,7 +37,8 @@ export const EventSchema = z.object({
   household_type: z.enum(HOUSEHOLDS).nullable(),
   annual_rate_pct: num.describe('take_loan or buy_home (mortgage): yearly interest rate in %, ONLY if the user said it'),
   drop_pct: num.describe('market_shock only: % fall of investment value, e.g. 30'),
-  down_payment_pct: num.describe('buy_home only: % of the price paid with own money, ONLY if the user said it'),
+  down_payment_pct: num.describe('buy_home / buy_asset: % of the price paid with own money (rest = loan), ONLY if the user said it'),
+  depreciation_pct: num.describe('buy_asset: % of value lost per year, ONLY if the user said it'),
 })
 
 export const ScenarioSchema = z.object({
@@ -84,14 +86,15 @@ export const TurnSchema = z.object({
   reply: z.string().describe("What the twin says back, in the user's language. Natural, short (1-4 sentences). Answers questions directly using STATE / PATHS numbers."),
   profile_update: ProfileUpdateSchema.nullable().describe('Facts about TODAY the user stated or corrected. null if none.'),
   new_paths: z.array(ScenarioSchema).describe('New paths to add (0-3). Empty if the user is editing, asking or chatting.'),
-  edit: z
-    .object({
-      path_id: z.string().describe('id of the existing path to change (from PATHS)'),
-      path: ScenarioSchema.describe('The COMPLETE updated path: all events, changed and unchanged'),
-      changes: z.array(z.string()).describe('Plain-English list of what changed, e.g. "child: from now -> at 35"'),
-    })
-    .nullable()
-    .describe('Change ONE existing path (the user refers to it: "instead", "that path", "the kid", "make it…"). null if not editing.'),
+  edits: z
+    .array(
+      z.object({
+        path_id: z.string().describe('id of the existing path to change (from PATHS)'),
+        path: ScenarioSchema.describe('The COMPLETE updated path: all events, changed and unchanged'),
+        changes: z.array(z.string()).describe('Plain-English list of what changed, e.g. "child: from now -> at 35"'),
+      }),
+    )
+    .describe('Changes to EXISTING paths, one entry per path ("instead", "that path", "add X to all paths" -> one entry for EVERY path id). Empty if not editing.'),
   remove_path_ids: z.array(z.string()).describe('ids of paths to delete (user says delete / that was wrong / I did not mean that)'),
   macro_update: MacroUpdateSchema.nullable().describe('ECONOMY-WIDE conditions (inflation, interest rates, recession, market crash, house prices). Applies to EVERY path. null if not mentioned.'),
   horizon_years: int.describe('Only if the user asks for a specific horizon, or needs one to see their ages (e.g. "until 40")'),

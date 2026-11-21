@@ -43,6 +43,8 @@ export function offlineParse(text: string, profile: Profile, cities: string[]): 
       const price = money(/(?:for|price|costing|worth) (?:chf )?(\d[\d',]*)(k?)/)
       ev.push(makeEvent({ type: 'buy_home', label: 'Buy a home', start_month: start, amount_chf: price }))
     }
+    const thing = part.match(/\bbuy (?:a |an |my )?(car|motorbike|motorcycle|boat|bike|van|e-bike)\b/)
+    if (thing) ev.push(makeEvent({ type: 'buy_asset', label: thing[1][0].toUpperCase() + thing[1].slice(1), start_month: start, amount_chf: money(/(?:for|costing|worth) (?:chf )?(\d[\d',]*)(k?)/) }))
     if (/crash|recession|market drop/.test(part)) ev.push(makeEvent({ type: 'market_shock', label: 'Market crash', start_month: start, drop_pct: 30 }))
     const inv = money(/invest (?:chf )?(\d[\d',]*)(k?)/)
     if (inv != null) ev.push(makeEvent({ type: 'invest', label: 'Invest', start_month: start, monthly_amount_chf: inv }))

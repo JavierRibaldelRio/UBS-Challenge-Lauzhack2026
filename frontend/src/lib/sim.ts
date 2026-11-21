@@ -39,11 +39,13 @@ export type SimResult = {
   meanPath: { cash: number[]; nw: number[] }
   /** end net worth of every simulated future (same seed for every path -> futures can be compared one by one) */
   endNWPaths: Float64Array
+  /** a few single futures (bumpy), drawn behind the smooth median line */
+  samples: { nw: Float64Array; cash: Float64Array }[]
   /** home purchases: can the down payment actually be paid from cash in each future? */
-  homeBuys: { month: number; down: number; cashBeforeP50: number; shortShare: number }[]
+  homeBuys: { month: number; down: number; cashBeforeP50: number; shortShare: number; label: string; kind: 'home' | 'asset'; price: number; loan: number }[]
 }
 
-type PathOut = { cash: Float64Array; nw: Float64Array; liquid: Float64Array }
+export type PathOut = { cash: Float64Array; nw: Float64Array; liquid: Float64Array; invest: Float64Array; home: Float64Array; debt: Float64Array }
 
 /** One path. deterministic=true -> expected values, no noise (used for drivers, break-even, checks). */
 export function runPath(plan: Plan, params: Params, rand: (() => number) | null, knobs: Knobs = NO_KNOBS, ledger?: LedgerRow[]): PathOut {
@@ -51,6 +53,9 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
   const cash = new Float64Array(H)
   const nw = new Float64Array(H)
   const liquid = new Float64Array(H)
+  const investA = new Float64Array(H)
+  const homeA = new Float64Array(H)
+  const debtA = new Float64Array(H)
   let c = plan.startCash
   let v = plan.startInvest
   const debt = plan.loans.map((l) => (l.isNew ? 0 : l.principal))
@@ -101,7 +106,9 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
       }
       if (t < l.start || debt[i] <= 0) return
       const it = (debt[i] * l.annualRate) / 12
-      const p = Math.min(l.payment, debt[i] + it)
+      // amortizing mortgages: interest + a fixed slice of principal while the amortization runs
+      const due = l.amort ? it + (t - l.start < l.amort.months ? l.amort.perMonth : 0) : l.payment
+      const p = Math.min(due, debt[i] + it)
       debt[i] += it - p
       interest += it
       pay += p
@@ -121,12 +128,15 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
     cash[t] = c
     nw[t] = c + v + plan.homeValue[t] - d
     liquid[t] = c + v
-    ledger?.push({ t, cashBefore, cashAfter: c, inflow: inc + bonus + loanIn, outflow: spend + plan.extra[t] + oneOff + contrib + pay + down, contrib, interest, investGain: v - vBefore - contrib, debt: d, nw: nw[t], spend })
+    investA[t] = v
+    homeA[t] = plan.homeValue[t]
+    debtA[t] = d
+    ledger?.push({ t, cashBefore, cashAfter: c, inflow: inc + bonus + loanIn, outflow: spend + plan.extra[t] + oneOff + contrib + pay + down, contrib, interest, investGain: v - vBefore - contrib, debt: d, nw: nw[t], spend, revalue: plan.revalue[t] })
   }
-  return { cash, nw, liquid }
+  return { cash, nw, liquid, invest: investA, home: homeA, debt: debtA }
 }
 
-export type LedgerRow = { t: number; cashBefore: number; cashAfter: number; inflow: number; outflow: number; contrib: number; interest: number; investGain: number; debt: number; nw: number; spend: number }
+export type LedgerRow = { t: number; cashBefore: number; cashAfter: number; inflow: number; outflow: number; contrib: number; interest: number; investGain: number; debt: number; nw: number; spend: number; revalue: number }
 
 const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length
 
@@ -134,6 +144,7 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
   const H = plan.months
   const rand = mulberry32(seed)
   const nwAll = Array.from({ length: H }, () => new Float64Array(paths))
+  const samples: SimResult['samples'] = []
   const cashAll = Array.from({ length: H }, () => new Float64Array(paths))
   const endNW = new Float64Array(paths)
   const endCash = new Float64Array(paths)
@@ -146,6 +157,7 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
 
   for (let p = 0; p < paths; p++) {
     const o = runPath(plan, params, rand, knobs)
+    if (p < 6) samples.push({ nw: o.nw, cash: o.cash })
     let mn = Infinity
     let fn = -1
     for (let t = 0; t < H; t++) {
@@ -175,7 +187,9 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
   firstNeg.sort((a, b) => a - b)
   // a down payment must come from money you HAVE (banks require own funds): check cash just before the purchase
   const homeBuys: SimResult['homeBuys'] = []
-  plan.homeDown.forEach((down, m) => {
+  plan.purchases.forEach((pu) => {
+    const m = pu.month
+    const down = pu.down
     if (down <= 0) return
     let short = 0
     const before = new Float64Array(paths)
@@ -183,7 +197,7 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
       before[p] = m === 0 ? plan.startCash : cashAll[m - 1][p]
       if (before[p] < down) short++
     }
-    homeBuys.push({ month: m, down, cashBeforeP50: quantile(before.sort(), 0.5), shortShare: short / paths })
+    homeBuys.push({ month: m, down, cashBeforeP50: quantile(before.sort(), 0.5), shortShare: short / paths, label: pu.label, kind: pu.kind, price: pu.price, loan: pu.loan })
   })
   const det = runPath(plan, params, null, knobs)
   return {
@@ -202,6 +216,7 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
     }),
     meanPath: { cash: Array.from(det.cash), nw: Array.from(det.nw) },
     endNWPaths: endNW,
+    samples,
     homeBuys,
   }
 }
@@ -224,11 +239,11 @@ export function checks(plan: Plan, params: Params, profile: Profile): Check[] {
   let prevNw = plan.startCash + plan.startInvest - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
   for (const r of rows) {
     const loanIn = plan.loans.filter((l) => l.isNew && !l.toSeller && l.start === r.t).reduce((a, l) => a + l.principal, 0)
-    const expected = prevNw + (r.inflow - loanIn) - r.spend - plan.extra[r.t] - plan.oneOff[r.t] - r.interest + r.investGain
+    const expected = prevNw + (r.inflow - loanIn) - r.spend - plan.extra[r.t] - plan.oneOff[r.t] - r.interest + r.investGain + r.revalue
     maxNwErr = Math.max(maxNwErr, Math.abs(expected - r.nw))
     prevNw = r.nw
   }
-  out.push({ name: 'Net worth = assets − debts', ok: maxNwErr < 1e-6, detail: `moving cash into investments or repaying principal does not change net worth (max error CHF ${maxNwErr.toExponential(1)})` })
+  out.push({ name: 'Net worth = assets − debts', ok: maxNwErr < 1e-6, detail: `buying something or moving cash into investments only moves money between pockets; only income, spending, interest and value changes move net worth (max error CHF ${maxNwErr.toExponential(1)})` })
 
   const minDebt = Math.min(...rows.map((r) => r.debt))
   out.push({ name: 'Debt never negative', ok: minDebt >= -1e-9, detail: `lowest debt balance CHF ${Math.round(minDebt)}` })

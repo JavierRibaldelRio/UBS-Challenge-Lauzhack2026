@@ -18,13 +18,15 @@ export type Plan = {
   oneOff: Float64Array // single costs (>0) / money in (<0), incl. tuition
   contrib: Float64Array // cash -> investments transfers
   homeDown: Float64Array // own money paid into a home (down payment)
-  homeValue: Float64Array // value of an owned home (counted in net worth, not in cash)
+  homeValue: Float64Array // value of everything owned besides cash & investments: home, car… (counted in net worth, not in cash)
+  revalue: Float64Array // value changes with no money moving (depreciation, house-price drops): part of the net-worth check
+  purchases: { month: number; price: number; down: number; loan: number; label: string; kind: 'home' | 'asset' }[]
   macroRisk: number // yearly chance of a random recession (economy), drawn per simulated future
   status: Status[]
   household: Household[]
   city: string[]
   shocks: { month: number; drop: number }[]
-  loans: { start: number; principal: number; annualRate: number; payment: number; isNew: boolean; toSeller?: boolean }[]
+  loans: { start: number; principal: number; annualRate: number; payment: number; isNew: boolean; toSeller?: boolean; amort?: { perMonth: number; months: number } }[]
   startCash: number
   startInvest: number
   muSe: number // standard error of the personal spending level (parameter uncertainty)
@@ -114,6 +116,8 @@ export function resolve(
   const contrib = new Float64Array(H)
   const homeDown = new Float64Array(H)
   const homeValue = new Float64Array(H)
+  const revalue = new Float64Array(H)
+  const purchases: Plan['purchases'] = []
   const shocks: Plan['shocks'] = []
   const loans: Plan['loans'] = []
   let changeMonth: number | null = null
@@ -270,9 +274,42 @@ export function resolve(
           rent[t] = 0 // owners stop paying rent
           extra[t] += (price * upkeep) / 100 / 12
         }
-        // interest-only mortgage (common in Switzerland); principal stays as debt
-        loans.push({ start: s, principal: mortgage, annualRate: rate, payment: (mortgage * rate) / 12, isNew: true, toSeller: true })
-        assumptions.push({ key: `${k}.info`, label: `${e.label}: mortgage`, value: Math.round(mortgage), unit: 'CHF', source: 'assumption', note: 'price − own money; interest only, rent stops, home value kept constant in 2025 francs' })
+        // Swiss practice: the part of the mortgage above 2/3 of the price ("second mortgage") is paid off within 15 years;
+        // the rest is interest-only. So the debt slopes down for 15 years, then stays.
+        const second = Math.max(0, mortgage - (2 / 3) * price)
+        const amortYears = A(`${k}.amort`, `${e.label}: pay off the part above 2/3 of the price within`, 15, 'years', 'assumption', 'Swiss bank practice for the “second mortgage” (assumed; not in the data).')
+        loans.push({ start: s, principal: mortgage, annualRate: rate, payment: (mortgage * rate) / 12, isNew: true, toSeller: true, amort: second > 0 ? { perMonth: second / (amortYears * 12), months: amortYears * 12 } : undefined })
+        purchases.push({ month: s, price, down: price - mortgage, loan: mortgage, label: e.label, kind: 'home' })
+        assumptions.push({ key: `${k}.info`, label: `${e.label}: mortgage`, value: Math.round(mortgage), unit: 'CHF', source: 'assumption', note: `price − own money; ${second > 0 ? `${Math.round(second).toLocaleString('de-CH')} of it paid off over the years, the rest interest-only` : 'interest-only'}; rent stops; home value kept constant in 2025 francs` })
+        break
+      }
+      case 'buy_asset': {
+        // anything you own that is not a home: car, motorbike, boat, equipment… counted as an asset that loses value
+        const price = A(`${k}.price`, `${e.label}: price`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Price not given.')
+        if (price <= 0) {
+          warnings.push(`“${e.label}” has no effect until you set a price.`)
+          break
+        }
+        const ownPct = A(`${k}.own`, `${e.label}: paid with own money`, e.down_payment_pct ?? 100, '%', e.down_payment_pct != null ? tag : 'assumption', e.down_payment_pct != null ? tagNote : 'Paid in full unless you say it is financed.')
+        const dep = A(`${k}.dep`, `${e.label}: loses value per year`, e.depreciation_pct ?? 15, '%', e.depreciation_pct != null ? tag : 'assumption', e.depreciation_pct != null ? tagNote : 'Typical for a car; not in the data. Edit for other things.')
+        const running = A(`${k}.run`, `${e.label}: running costs`, e.monthly_amount_chf ?? 0, 'CHF/mo', e.monthly_amount_chf != null ? tag : 'missing', e.monthly_amount_chf != null ? tagNote : 'Insurance, fuel, upkeep: not given.')
+        const own = (price * ownPct) / 100
+        const loan = price - own
+        homeDown[s] += own
+        let prev = 0
+        for (let t = s; t < H; t++) {
+          const val = price * Math.pow(1 - dep / 100, (t - s) / 12)
+          homeValue[t] += val
+          if (t > s) revalue[t] += val - prev
+          prev = val
+          extra[t] += running
+        }
+        if (loan > 0) {
+          const r = (loanRateMedian + shift) / 12
+          const term = A(`${k}.term`, `${e.label}: loan repaid over`, e.duration_months ?? 48, 'months', e.duration_months != null ? tag : 'assumption', e.duration_months != null ? tagNote : '4 years assumed; rate = median of the 283 loans in the data.')
+          loans.push({ start: s, principal: loan, annualRate: r * 12, payment: r === 0 ? loan / term : (loan * r) / (1 - Math.pow(1 + r, -term)), isNew: true, toSeller: true })
+        }
+        purchases.push({ month: s, price, down: own, loan, label: e.label, kind: 'asset' })
         break
       }
       case 'take_loan': {
@@ -334,13 +371,18 @@ export function resolve(
   if (macro.housing_drop && macro.housing_drop.month < H) {
     const m0 = macro.housing_drop.month
     const loss = homeValue[m0] * (macro.housing_drop.drop_pct / 100) // homes owned at that moment lose value; you still owe the mortgage
-    if (loss > 0) for (let t = m0; t < H; t++) homeValue[t] -= loss
+    if (loss > 0) {
+      for (let t = m0; t < H; t++) homeValue[t] -= loss
+      revalue[m0] -= loss
+    }
     assumptions.push({ key: 'm.house', label: `Economy: home values fall at ${Math.floor(ageAt(m0))}`, value: -macro.housing_drop.drop_pct, unit: '%', source: 'macro', note: `${loss > 0 ? 'hits net worth, not cash' : 'no home owned at that time on this path'} · ${macroNote}`, month: m0 })
   }
   if (macro.recession_risk_per_year_pct) assumptions.push({ key: 'm.risk', label: 'Economy: chance of a recession each year', value: macro.recession_risk_per_year_pct, unit: '%', source: 'macro', note: `in each simulated future a recession can start (pay −10% for 12 months, markets −20%), the same for every path · ${macroNote}` })
 
   return {
     macroRisk: macro.recession_risk_per_year_pct / 100,
+    revalue,
+    purchases,
     months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, homeDown, homeValue, status, household, city, shocks, loans,
     startCash, startInvest, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
   }
@@ -349,7 +391,7 @@ export function resolve(
 // ---------------------------------------------------------------- presets (no LLM needed)
 const ev = (p: Partial<TwinEvent> & Pick<TwinEvent, 'type' | 'label'>): TwinEvent => ({
   start_month: 0, duration_months: null, monthly_net_income_chf: null, income_change_pct: null, monthly_amount_chf: null,
-  amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, down_payment_pct: null, ...p,
+  amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, down_payment_pct: null, depreciation_pct: null, ...p,
 })
 
 export type Preset = { id: string; label: string; desc: string; spec: ScenarioSpec }
@@ -404,6 +446,7 @@ export function describeSpec(spec: ScenarioSpec, age0: number): string {
       case 'market_shock': return `markets −${e.drop_pct ?? 30}% ${at(e.start_month)}`
       case 'take_loan': return `borrow ${e.amount_chf ? k(e.amount_chf) : ''} ${at(e.start_month)}`
       case 'buy_home': return `buy a home${e.amount_chf ? ` for ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
+      case 'buy_asset': return `buy ${e.label.toLowerCase()}${e.amount_chf ? ` for ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
     }
   }
   return [...spec.events].sort((a, b) => (a.start_month ?? 0) - (b.start_month ?? 0)).map(one).join(' · ')

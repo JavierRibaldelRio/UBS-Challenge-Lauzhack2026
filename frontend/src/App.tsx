@@ -15,7 +15,7 @@ import { apiAnswer, apiChat, apiExplain, apiHealth } from './lib/api'
 import { offlineParse } from './lib/fallback'
 import { chf, chfk, monthIndex } from './lib/fmt'
 import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Preset } from './lib/resolve'
-import { checks, simulate } from './lib/sim'
+import { checks, runPath, simulate } from './lib/sim'
 import { suggestQuestions } from './lib/suggest'
 import { downloadJson, scenarioReport } from './lib/report'
 import type { AnswerResult, ExplainResult, Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
@@ -32,7 +32,7 @@ const colorOf = (id: string) => COLORS[((Number(id.replace(/\D/g, '')) - 1) % (C
 const fromPreset = (p: Preset): Origin => ({ kind: 'preset', button: p.label, desc: p.desc })
 
 // icons for life events (chart markers + card timelines)
-const ICON: Record<string, string> = { start_job: '💼', study: '🎓', relocate: '🚚', income_change: '📉', household_change: '👶', recurring_expense: '🔁', one_off: '💸', invest: '📈', market_shock: '📉', take_loan: '🏦', buy_home: '🏠' }
+const ICON: Record<string, string> = { start_job: '💼', study: '🎓', relocate: '🚚', income_change: '📉', household_change: '👶', recurring_expense: '🔁', one_off: '💸', invest: '📈', market_shock: '📉', take_loan: '🏦', buy_home: '🏠', buy_asset: '🚗' }
 const iconOf = (e: TwinEvent) => (e.type === 'household_change' && e.household_type === 'couple' ? '💑' : e.type === 'income_change' && (e.income_change_pct ?? 0) > 0 ? '📈' : e.type === 'one_off' && (e.amount_chf ?? 0) < 0 ? '🎁' : ICON[e.type])
 const sortedEvents = (spec: ScenarioSpec) => [...spec.events].sort((a, b) => (a.start_month ?? 0) - (b.start_month ?? 0))
 function markersFor(spec: ScenarioSpec, H: number): Marker[] {
@@ -269,7 +269,11 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       home_down_payment_missing_pct: c.result.homeBuys.map((h) => Math.round(h.shortShare * 100)),
     }))
   const historyFor = () =>
-    messages.slice(-12).map((m) => (m.role === 'user' ? { role: 'user', text: m.text } : { role: 'twin', text: [m.reply, ...m.lines.map((l) => l.text), m.answer?.text].filter(Boolean).join(' ') }))
+    messages.slice(-12).map((m) =>
+      m.role === 'user'
+        ? { role: 'user', text: m.target ? `[about path “${m.target.name}”] ${m.text}` : m.text }
+        : { role: 'twin', text: [m.reply, m.lines.length ? `[actions applied: ${m.lines.map((l) => l.text).join(' ')}]` : '[no path, fact or economy was changed in this turn]', m.answer?.text].filter(Boolean).join(' ') },
+    )
 
   /** One chat turn: the twin answers AND acts (update today's facts, add / edit / remove paths). */
   const talk = async (text: string, targetId: string | null = target) => {
@@ -321,18 +325,28 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       lines.push({ text: `🗑 Removed “${computed.find((c) => c.id === id)!.name}”` })
       remove(id)
     }
-    // 3) edit an existing path (kept for undo)
-    let editedId: string | null = null
-    if (d.edit && computed.some((c) => c.id === d.edit!.path_id) && !removable.includes(d.edit.path_id)) {
-      const p = computed.find((c) => c.id === d.edit!.path_id)!
-      const spec = keepSources(p.spec, d.edit.path)
+    // 3) edit existing paths (one or several, e.g. "add a house to all paths"); old versions kept for undo
+    const editedIds: string[] = []
+    const editRecords: Record<string, PathEdit[]> = {}
+    const norm = (x: string) => x.trim().toLowerCase()
+    for (const ed of d.edits ?? []) {
+      // match by id, or by name if the AI used the name
+      const p = computed.find((c) => c.id === ed.path_id) ?? computed.find((c) => c.id !== 'today' && norm(c.name) === norm(ed.path_id))
+      if (!p) {
+        lines.push({ text: `⚠ I tried to change a path I couldn't find (“${ed.path_id}”), so nothing was changed there.` })
+        continue
+      }
+      if (removable.includes(p.id) || editedIds.includes(p.id)) continue
+      const spec = keepSources(p.spec, ed.path)
       const keepGlobal = Object.fromEntries(Object.entries(p.overrides).filter(([k]) => k.startsWith('g.')))
-      const edits = [...p.edits, { instruction: text, changes: d.edit.changes, model: r.model, ms: r.ms, prompt: r.prompt }]
+      const edits = [...p.edits, { instruction: text, changes: ed.changes, model: r.model, ms: r.ms, prompt: r.prompt }]
+      editRecords[p.id] = edits
       setPaths((ps) => ps.map((x) => (x.id === p.id ? { ...x, spec, overrides: keepGlobal, history: [...x.history, { spec: x.spec, overrides: x.overrides }], edits } : x)))
-      setFocusId(p.id)
-      editedId = p.id
-      lines.push({ text: `✏️ Changed ${spec.name}:`, pathId: p.id, color: p.color }, ...d.edit.changes.map((c) => ({ text: `✓ ${c}` })))
+      editedIds.push(p.id)
+      lines.push({ text: `✏️ Changed ${spec.name}:`, pathId: p.id, color: p.color }, ...ed.changes.map((c) => ({ text: `✓ ${c}` })))
     }
+    if (editedIds.length) setFocusId(editedIds[editedIds.length - 1])
+    const editedId = editedIds[0] ?? null
     // 4) new paths (they get a computed answer)
     const res: ParseResult = { profile_update: u, scenarios: d.new_paths, horizon_years: d.horizon_years, unsupported: d.unsupported, note: d.reply }
     const origin: Origin = { kind: 'ai', question: text, model: r.model, ms: r.ms, cached: r.cached, prompt: r.prompt, answer: res }
@@ -354,7 +368,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       details: ids.length
         ? () => setHowMade({ what: 'path', name: d.new_paths[0].name, origin, spec: d.new_paths[0] })
         : editedNow
-          ? () => { const p = paths.find((x) => x.id === editedNow); if (p) setHowMade({ what: 'path', name: d.edit!.path.name, origin: p.origin, spec: d.edit!.path, edits: [...p.edits, { instruction: text, changes: d.edit!.changes, model: r.model, ms: r.ms, prompt: r.prompt }] }) }
+          ? () => { const p = paths.find((x) => x.id === editedNow); const ed = d.edits.find((x) => x.path_id === editedNow); if (p && ed) setHowMade({ what: 'path', name: ed.path.name, origin: p.origin, spec: ed.path, edits: editRecords[editedNow] }) }
           : lines.length
             ? () => setHowMade({ what: 'answer', prompt: r.prompt, answer: { short_answer: d.reply, reasoning: '', confidence_level: 'medium', confidence_sentence: '' }, model: r.model, ms: r.ms, offline: false, verify: v })
             : undefined, // a plain chat reply: nothing to explain
@@ -382,6 +396,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const ageAt = (m: number) => Math.floor(profile.age + m / 12)
   const sameAsCash = computed.every((c) => c.result.nw.every((b, i) => Math.abs(b.p50 - c.result.cash[i].p50) < 1))
   const view = sameAsCash ? 'cash' : metric
+  const focusParts = useMemo(() => runPath(focus.plan, params, null), [focus, params])
   const runsOut = today.result.probNegCash >= 0.5 && today.result.firstNegMonth != null
   const memory = updates.length ? describeMemory(dataProfile, updates) : []
 
@@ -565,14 +580,24 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               </div>
             )}
             <select className="mini" value={years} onChange={(e) => setYears(Number(e.target.value))}>
-              {[3, 5, 10, 20, 30].map((y) => (
+              {[...new Set([3, 5, 10, 20, 30, years])].sort((a, b) => a - b).map((y) => (
                 <option key={y} value={y}>
                   {y} years
                 </option>
               ))}
             </select>
           </div>
-          <ProjectionChart paths={computed} focusId={focus.id} profile={updates.length ? { ...profile, ledger_closing_cash: [] } : profile} metric={view} months={H} markers={markersFor(focus.spec, focus.plan.months)} />
+          <ProjectionChart paths={computed} focusId={focus.id} profile={updates.length ? { ...profile, ledger_closing_cash: [] } : profile} metric={view} months={H} markers={markersFor(focus.spec, focus.plan.months)} focusParts={focusParts} />
+          {view === 'nw' && (focusParts.home.some((x) => x > 0) || focusParts.debt.some((x) => x > 0)) && (
+            <div className="parts-legend small">
+              <span>For <b style={{ color: focus.color }}>{focus.name}</b>:</span>
+              <span><i style={{ background: focus.color }} /> net worth</span>
+              <span><i style={{ background: focus.color, opacity: 0.5 }} /> cash (dotted)</span>
+              {focusParts.home.some((x) => x > 0) && <span><i style={{ background: '#059669' }} /> assets (home, car…)</span>}
+              {focusParts.debt.some((x) => x > 0) && <span><i style={{ background: 'var(--danger)' }} /> debt, below zero (mortgage + loans)</span>}
+              <span className="muted">net worth = cash + investments + assets − debt</span>
+            </div>
+          )}
           {focus.unknown && (
             <p className="fog-note small">
               <b style={{ color: focus.color }}>?</b> From age {ageAt(focus.unknown.from)}, <b>{focus.name}</b> depends on {focus.unknown.items.length === 1 ? 'a number' : 'numbers'} nobody knows yet:{' '}
@@ -580,8 +605,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             </p>
           )}
           {focus.result.homeBuys.map((h) => (
-            <p key={h.month} className={`home-note small ${h.shortShare >= 0.5 ? 'neg' : ''}`}>
-              🏠 <b>{focus.name}</b>, age {ageAt(h.month)}: {chf(h.down)} of own money goes into the home, so <b>cash drops by that amount</b>, but <b>net worth does not</b> (the money becomes part of the home; the mortgage covers the rest).
+            <p key={`${h.month}-${h.label}`} className={`home-note small ${h.shortShare >= 0.5 ? 'neg' : ''}`}>
+              {h.kind === 'home' ? '🏠' : '🚗'} <b>{h.label}</b>, age {ageAt(h.month)}, price {chf(h.price)}: <b>cash −{chf(h.down)}</b> (own money){h.loan > 0 ? <>, <b>debt +{chf(h.loan)}</b> ({h.kind === 'home' ? 'mortgage' : 'loan'})</> : ''}, <b>assets +{chf(h.price)}</b>. Net worth doesn’t jump: money just changes form{h.kind === 'asset' ? ', then the item loses value every year (net worth falls slowly)' : ''}. In the Net worth view: green = assets, red below zero = debt, dotted = cash.
               {h.shortShare >= 0.5
                 ? ` But just before buying, cash is only about ${chf(h.cashBeforeP50)} (typical future): in ${Math.round(h.shortShare * 100)}% of futures there is NOT enough own money. A bank would not lend; the chart shows cash going below zero instead.`
                 : h.shortShare > 0.05
@@ -612,7 +637,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             </div>
           )}
           <p className="caption">
-            Lines = the typical outcome of 500 simulated futures; shaded = where 8 in 10 land for <b style={{ color: focus.color }}>{focus.name}</b>. 🎯 = goals from the data (amount and date): a path reaches one if its cash + investments are above it at that date; the % is the share of futures that do.
+            Bold lines = the typical (median) outcome of 500 simulated futures, so month-to-month bumps average out; thin wiggly lines = 6 single futures of the selected path, with real ups and downs; shaded = where 8 in 10 land for <b style={{ color: focus.color }}>{focus.name}</b>. 🎯 = goals from the data (amount and date): a path reaches one if its cash + investments are above it at that date; the % is the share of futures that do.
             {view === 'cash' && !updates.length ? ' Black dots = the real bank balance in the data (first 2 years).' : ''}
           </p>
         </section>

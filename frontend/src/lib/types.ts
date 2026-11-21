@@ -16,6 +16,7 @@ export type EventType =
   | 'market_shock'
   | 'take_loan'
   | 'buy_home'
+  | 'buy_asset'
 
 export type TwinEvent = {
   type: EventType
@@ -32,6 +33,7 @@ export type TwinEvent = {
   annual_rate_pct: number | null
   drop_pct: number | null
   down_payment_pct: number | null
+  depreciation_pct: number | null
   /** set by presets only: where the preset's numbers come from */
   _source?: string
 }
@@ -50,7 +52,7 @@ export type TurnResult = {
   reply: string
   profile_update: ProfileUpdate | null
   new_paths: ScenarioSpec[]
-  edit: { path_id: string; path: ScenarioSpec; changes: string[] } | null
+  edits: { path_id: string; path: ScenarioSpec; changes: string[] }[]
   remove_path_ids: string[]
   macro_update: import('./macro').MacroUpdate | null
   horizon_years: number | null

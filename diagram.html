@@ -289,10 +289,10 @@
     <b>cash</b> = cash <span class="chip c-in">+ income</span> <span class="chip c-in">+ new loans</span> <span class="chip c-out">− spending − extra costs − one-off costs − loan payments</span> <span class="chip c-tr">− money moved to investments − down payment</span><br />
     <b>investments</b> = (investments + money moved in) × (1 + return) × (1 − market shock)<br />
     <b>debt</b> = debt + interest − payment <span class="muted">(never below 0)</span><br />
-    <b>net worth</b> = cash + investments + home − debt
+    <b>net worth</b> = cash + investments + assets (home, car…) − debt
   </div>
   <div class="legend"><span><span class="chip c-in">green</span> money in</span><span><span class="chip c-out">red</span> money out</span><span><span class="chip c-tr">blue</span> moves between your own pockets: changes cash, <b>not</b> net worth</span><span><span class="chip c-luck">purple</span> learned luck</span></div>
-  <p class="small muted">Example: buying a 600k flat with 20% own money. Cash drops by 120k that month, net worth stays flat, because the money became part of the home and the mortgage covers the rest. The engine also checks, in every future, that the 120k is actually there.</p>
+  <p class="small muted">Example: buying a 600k flat with 20% own money. Cash −120k, debt +480k (mortgage), assets +600k: net worth stays flat, the money just changed form. A car works the same way, then loses value every year. The engine also checks, in every future, that the 120k is actually there.</p>
 </section>
 
 <!-- =============================================================== 6 futures -->
@@ -324,7 +324,7 @@
         <div class="b me">but buy the flat at 30 instead</div>
         <div class="b tw">✏️ Changed it: ✓ flat: at 28 → at 30 (everything else kept)</div>
       </div>
-      <p class="small muted">It sees the last 12 messages, your current numbers and every path, so “instead”, “that path”, “the kid” make sense, and corrections (“no, I meant rent”) fix the right thing. 11 event types; “A or B” → separate paths; other currencies are never converted silently. 36 live tests, including a real messy conversation, French and very long sentences.</p>
+      <p class="small muted">It sees the last 12 messages, your current numbers and every path, so “instead”, “that path”, “the kid” make sense, and corrections (“no, I meant rent”) fix the right thing. 12 event types (including buying a car or other assets); “A or B” → separate paths; other currencies are never converted silently. 36 live tests, including a real messy conversation, French and very long sentences.</p>
     </div>
     <div class="tile">
       <h3>✦ AI #2: explaining back</h3>
@@ -440,7 +440,7 @@
   <div class="scroll"><table style="min-width:600px">
     <tr><th>UBS asks</th><th></th><th>How</th></tr>
     <tr><td><b>MUST</b> · Fictional client profile</td><td>✅</td><td>1,200 fictional people from UBS’s data; their own learned spending habit</td></tr>
-    <tr><td><b>MUST</b> · One working scenario</td><td>✅</td><td>11 event types, combined freely, in plain words or one click</td></tr>
+    <tr><td><b>MUST</b> · One working scenario</td><td>✅</td><td>12 event types (home, car, job, study…), combined freely, in plain words or one click</td></tr>
     <tr><td><b>MUST</b> · Before / after comparison</td><td>✅</td><td>baseline vs every path: cards, chart, answer card</td></tr>
     <tr><td><b>MUST</b> · Transparent assumptions</td><td>✅</td><td>every number tagged and editable; unknowns dotted; the AI’s prompt visible; scenario report in UBS’s template</td></tr>
     <tr><td><b>BONUS</b> · Conversational AI</td><td>✅</td><td>a chat that answers, acts, remembers, edits, and checks its numbers</td></tr>

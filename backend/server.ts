@@ -62,12 +62,13 @@ ${JSON.stringify(ANSWER_JSON_SCHEMA)}`
 // ------------------------------------------------------------------ prompts
 // Rules shared by "new question" and "change this path": how words become events.
 function eventRules(ctx: ParseContext) {
-  return `- Use only these event types: start_job, study, relocate, income_change, household_change, recurring_expense, one_off, invest, market_shock, take_loan, buy_home.
+  return `- Use only these event types: start_job, study, relocate, income_change, household_change, recurring_expense, one_off, invest, market_shock, take_loan, buy_home, buy_asset.
 - Any number the user did not state -> null. The simulator fills it from data and shows the source. Do not guess salaries, rents, tuition or costs.
 - Timing: months after the start (month 0 = ${ctx.start_date}, when ${ctx.name} is ${ctx.age}). "at 25" -> (25-${ctx.age})*12. "next year" -> 12. "now" -> 0.
 - study: after it ends the person starts a job automatically. A salary premium the degree brings ("salary 15% higher afterwards") goes in the study event's income_change_pct. NEVER add a separate income_change for it.
 - income_change: part-time 60% -> -40. Job loss -> -100 with duration_months. Job loss WITH benefits or partial pay ("70% unemployment benefits", "keep 80% of my salary") -> the remaining share: 70% -> -30, 80% -> -20.
 - one_off: positive amount_chf = a cost, negative = money received.
+- buy_asset: buying something you KEEP that is not a home (car, motorbike, boat, equipment): amount_chf = price; monthly_amount_chf = running costs (insurance, fuel…) if stated; down_payment_pct only if financed ("with a loan", "leasing 20% down"); depreciation_pct only if stated. Not a one_off (a one_off is money that is gone, e.g. a holiday or a wedding).
 - buy_home: amount_chf = the home price; down_payment_pct and annual_rate_pct (mortgage) only if stated. A stated down payment in CHF -> down_payment_pct = 100 * amount / price. Do NOT also add a one_off or take_loan for the same purchase.
 - "k" means thousand (25k = 25000), "m"/"million" = 1000000.
 - Amounts in another currency (EUR, GBP, USD...): do NOT convert. Leave the CHF field null and list it in "unsupported".
@@ -136,7 +137,7 @@ WHAT YOU CAN DO IN ONE TURN (combine as needed):
 1. reply: always. Talk like a helpful, natural person. Answer questions directly ("what's my rent?", "explain my situation", "which path is best?") using the numbers in STATE / PATHS. Short: 1-4 sentences. No canned slogans; do not repeat the same suggestions you already gave in HISTORY. If the user asks for something specific ("just say hi"), do exactly that.
 2. profile_update: facts about TODAY the user states or corrects ("I now earn 1,500", "my rent is 2,000", "I have 10k saved"). Rent/income/savings "until X happens" are still facts about today (a later home purchase or job already changes them).
 3. new_paths: NEW what-ifs / decisions about the future. "A or B" = one path per option. Several things in one life = ONE path with several events.
-4. edit: when the user refers to an EXISTING path ("instead", "change it", "make the flat cheaper", "where is the 1M income?", "have the kid at 35", "assume I got a job" right after a path that lacks it). Return that path COMPLETE: keep everything not mentioned, fix what was missing or wrong. If target_path_id is set, the user is explicitly editing that path.
+4. edits: when the user refers to EXISTING paths. One entry PER path to change: "add X to all / every path" = one entry for EVERY id in PATHS. When the user refers to an EXISTING path ("instead", "change it", "make the flat cheaper", "where is the 1M income?", "have the kid at 35", "assume I got a job" right after a path that lacks it). Return that path COMPLETE: keep everything not mentioned, fix what was missing or wrong. If target_path_id is set, the user is explicitly editing that path.
 5. remove_path_ids: when the user says a path was wrong / a misunderstanding / not what they meant ("I meant X, not Y", "not save", "that's wrong", "delete it"): REMOVE that path right away (do not ask), and do the right thing instead.
 6. macro_update: the ECONOMY. Every message can contain two kinds of variables:
    - IDIOSYNCRATIC = about this person (their job, studies, moves, home, kids, income, spending, personal luck) -> paths / profile_update.
@@ -144,7 +145,8 @@ WHAT YOU CAN DO IN ONE TURN (combine as needed):
    Use a preset when it fits (inflation, rates, recession, housing, crisis, uncertain, base = back to normal), or set numbers the user gave. Timing in months from now ("in 2027" -> months from the start date). Example: "what if I do a master's and there's a recession in 2 years?" -> new_paths: master's; macro_update: recession_start_month 24.
 7. horizon_years: if the user mentions ages beyond the current horizon (e.g. "until 40" at age 20 needs >= 20 years; use the furthest age mentioned + 5, max 40).
 
-USE THE CONTEXT. Resolve "it", "that", "instead", "the kid", "the house" from HISTORY and PATHS. If you misunderstood before (the user corrects you), fix it: remove or edit the wrong path; do not argue.
+USE THE CONTEXT. Resolve "it", "that", "instead", "the kid", "the house" from HISTORY and PATHS.
+PATHS IS THE TRUTH: it shows exactly what each path contains right now. HISTORY only shows what was said. If HISTORY says something was added or changed but PATHS does not contain it, it was NOT applied: apply it now. Never claim a change you did not put in this turn's edits / new_paths / profile_update / macro_update. If you misunderstood before (the user corrects you), fix it: remove or edit the wrong path; do not argue.
 NEVER INVENT MONEY: in events, any amount the user did not state stays null (the simulator fills it from data and labels it). You may convert units the user gave (1M a year -> 83,333 a month; "2K" -> 2000). Treat stated incomes as net and say so in reply if relevant.
 In reply, only use numbers from STATE, PATHS, HISTORY or the user's message. Never make up results for new or edited paths (they are simulated after your turn; the app shows them).
 The person is fictional; you are not a financial adviser: no "you should". If the user expresses distress or self-harm, respond with care and give Swiss help lines (143 Die Dargebotene Hand / La Main Tendue, 147 for young people, 144 emergency) before anything else.
@@ -278,7 +280,7 @@ const server = createServer(async (req, res) => {
       const system = chatSystemPrompt(ctx)
       const messages = [...(ctx.history ?? []).slice(-12).map((m) => `${m.role === 'user' ? 'USER' : 'TWIN'}: ${m.text}`), `USER: ${ctx.text}`].join('\n')
       const data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `HISTORY (oldest first; the last line is the new message):\n${messages}`)
-      console.log(`[chat] ${Date.now() - t0}ms "${ctx.text.slice(0, 50)}" -> new ${data.new_paths.length}, edit ${data.edit ? 1 : 0}, remove ${data.remove_path_ids.length}, update ${data.profile_update ? 1 : 0}`)
+      console.log(`[chat] ${Date.now() - t0}ms "${ctx.text.slice(0, 50)}" -> new ${data.new_paths.length}, edits ${data.edits.length}, remove ${data.remove_path_ids.length}, update ${data.profile_update ? 1 : 0}`)
       return send(res, 200, { ok: true, model: MODEL, data, prompt: { system, user: messages, settings: callSettings('turn') }, ms: Date.now() - t0 })
     }
     if (url === '/api/edit' && req.method === 'POST') {

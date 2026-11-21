@@ -43,6 +43,7 @@ const DESCRIBE: Record<TwinEvent['type'], string> = {
   market_shock: 'markets fall',
   take_loan: 'borrow money',
   buy_home: 'buy a home',
+  buy_asset: 'buy something you keep (car, equipment…)',
 }
 const AMOUNTS: [keyof TwinEvent, string][] = [
   ['monthly_net_income_chf', 'net income CHF {}/mo'],
@@ -53,6 +54,7 @@ const AMOUNTS: [keyof TwinEvent, string][] = [
   ['down_payment_pct', 'down payment {}%'],
   ['annual_rate_pct', 'rate {}%'],
   ['drop_pct', 'drop {}%'],
+  ['depreciation_pct', 'loses {}%/yr'],
   ['duration_months', 'for {} months'],
 ]
 

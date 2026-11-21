@@ -330,3 +330,6 @@ footer { text-align: center; margin-top: 10px; }
 .eco-chip.on { background: #0e7490; color: #fff; border-color: #0e7490; }
 .eco-chip small { opacity: 0.7; font-size: 0.7rem; }
 .economy-desc { line-height: 1.5; }
+
+.parts-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); margin-top: 6px; }
+.parts-legend i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }

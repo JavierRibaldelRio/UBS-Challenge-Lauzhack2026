@@ -82,6 +82,33 @@ describe('scenario logic', () => {
     expect(v.kind).toBe('afford')
     expect(v.probability!.p).toBe(0)
   })
+  it('buying a car: cash −price, assets +price, then the car loses value; checks pass in every economy', () => {
+    const car = { name: 'c', catalog_id: null, events: [makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_asset', label: 'Car', start_month: 12, amount_chf: 30000, monthly_amount_chf: 300 })] }
+    const pl = plan(alexia, car)
+    const a = runPath(pl, params, null), b = runPath(plan(alexia, presets(alexia, params).find((p) => p.id === 'work')!.spec), params, null)
+    expect(Math.round((b.cash[12] - a.cash[12]) / 1000)).toBe(30) // ~30k cash out (+ one month of running costs)
+    expect(a.home[12]).toBe(30000)
+    expect(a.home[24]).toBeCloseTo(30000 * 0.85, 0) // −15%/yr
+    for (const m of MACRO_PRESETS) for (const c of checks(resolve(alexia, params, car, {}, 120, rate, m), params, alexia)) expect(c.ok, `${m.id}: ${c.name}`).toBe(true)
+  })
+  it('a financed car: the loan is debt, paid back over time', () => {
+    const car = { name: 'c', catalog_id: null, events: [makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_asset', label: 'Car', start_month: 0, amount_chf: 40000, down_payment_pct: 25 })] }
+    const o = runPath(plan(alexia, car), params, null)
+    expect(Math.round(o.debt[0])).toBeGreaterThan(29000)
+    expect(o.debt[60]).toBe(0)
+  })
+  it('home + housing downturn: net worth check still exact (value change without cash)', () => {
+    const flat = { name: 'f', catalog_id: null, events: [makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_home', label: 'h', start_month: 12, amount_chf: 500000 })] }
+    for (const c of checks(resolve(alexia, params, flat, {}, 120, rate, MACRO_PRESETS.find((m) => m.id === 'housing')!), params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+  it('mortgage: the part above 2/3 of the price is paid off over 15 years (debt slopes down, then stays)', () => {
+    const flat = { name: 'f', catalog_id: null, events: [makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_home', label: 'h', start_month: 12, amount_chf: 1000000 })] }
+    const o = runPath(plan(alexia, flat, {}, 240), params, null)
+    expect(Math.round(o.debt[12])).toBeLessThan(800000)
+    expect(Math.round(o.debt[12])).toBeGreaterThan(799000)
+    expect(o.debt[100]).toBeLessThan(o.debt[50])
+    expect(Math.round(o.debt[200])).toBe(666667) // 2/3 of the price left, interest-only from then on
+  })
   it('buying a home without a price does nothing and warns', () => {
     const h = plan(alexia, { name: 'h', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'h' })] })
     expect(h.warnings.length).toBe(1)
