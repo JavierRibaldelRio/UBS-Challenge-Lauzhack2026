@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BranchCard } from './components/BranchCard'
 import { ProjectionChart } from './components/Chart'
-import { DriversPanel, ExplanationPanel, ProfileCard, ResultsTable, TrustPanel, type ExplainState } from './components/Panels'
+import { AssumptionList, Drivers } from './components/Details'
+import { OutcomeCard } from './components/Outcome'
+import { TrustDetails, TrustSummary } from './components/Trust'
 import { breakEven, buildFacts, drivers, templateExplanation, verifyNumbers } from './lib/analysis'
 import { apiExplain, apiHealth, apiParse } from './lib/api'
 import { offlineParse } from './lib/fallback'
+import { chf, chfk } from './lib/fmt'
 import { cities, medianLoanRate, presets, resolve, type Overrides } from './lib/resolve'
 import { checks, simulate } from './lib/sim'
-import type { Params, Profile, ScenarioSpec } from './lib/types'
+import type { ExplainResult, Params, Profile, ScenarioSpec } from './lib/types'
 import paramsJson from './model/params.json'
 import profilesJson from './model/profiles.json'
 
-const COLORS = ['#64748b', '#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2']
-type BranchState = { id: string; spec: ScenarioSpec; overrides: Overrides; visible: boolean; origin: string; color: string }
-const STATUS_QUO = (): BranchState => ({ id: 'quo', spec: { name: 'Status quo', catalog_id: null, events: [] }, overrides: {}, visible: true, origin: 'nothing changes', color: COLORS[0] })
+const COLORS = ['#64748b', '#2563eb', '#e11d48', '#059669', '#7c3aed', '#d97706', '#0891b2']
+type PathState = { id: string; spec: ScenarioSpec; overrides: Overrides; color: string }
+const TODAY = (): PathState => ({ id: 'today', spec: { name: 'If nothing changes', catalog_id: null, events: [] }, overrides: {}, color: COLORS[0] })
+const EXAMPLES = ["Master's in Zurich, or start working at 22 for 6,000 a month?", 'What if I have a baby at 28?', 'What if I lose my job for 6 months at 25?']
+
+type Explain = { status: 'loading' | 'ai' | 'offline'; data: ExplainResult; model?: string; cached?: boolean; error?: string; verify?: { total: number; unmatched: string[] } }
 
 // Model artifacts are bundled (built by ml/train.py) -> no runtime fetch that could fail during a demo.
 export default function App() {
@@ -23,78 +28,91 @@ export default function App() {
 function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const [profileId, setProfileId] = useState('P00001')
   const profile = profiles.find((p) => p.id === profileId) ?? profiles[0]
-  const [horizonYears, setHorizonYears] = useState(10)
-  const H = horizonYears * 12
-  const [branches, setBranches] = useState<BranchState[]>([STATUS_QUO()])
-  const [baselineId, setBaselineId] = useState('quo')
-  const [focusId, setFocusId] = useState('quo')
+  const [years, setYears] = useState(10)
+  const H = years * 12
+  const [paths, setPaths] = useState<PathState[]>([TODAY()])
+  const [baselineId, setBaselineId] = useState('today')
+  const [focusId, setFocusId] = useState('today')
   const [metric, setMetric] = useState<'nw' | 'cash'>('nw')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
-  const [parseNote, setParseNote] = useState<{ text: string; unsupported: string[]; source: string } | null>(null)
+  const [note, setNote] = useState<{ text: string; unsupported: string[]; by: string } | null>(null)
   const [llm, setLlm] = useState<{ model: string } | null | undefined>(undefined)
-  const [explain, setExplain] = useState<ExplainState>({ status: 'idle', data: null })
+  const [explain, setExplain] = useState<Explain | null>(null)
   const nextId = useRef(1)
   const loanRate = useMemo(() => medianLoanRate(profiles), [profiles])
   const cityList = useMemo(() => cities(params), [params])
-  const presetList = useMemo(() => presets(profile, params), [profile, params])
+  const quick = useMemo(() => presets(profile, params), [profile, params])
 
   useEffect(() => {
     apiHealth().then((h) => setLlm(h.ok ? h.llm : null))
   }, [])
 
-  // reset branches when the person changes
-  useEffect(() => {
-    setBranches([STATUS_QUO()])
-    setBaselineId('quo')
-    setFocusId('quo')
-    setParseNote(null)
-  }, [profileId])
-
-  const addBranches = useCallback((specs: ScenarioSpec[], origin: string) => {
-    const added: BranchState[] = specs.map((spec) => {
-      const id = `b${nextId.current++}`
-      return { id, spec, overrides: {}, visible: true, origin, color: COLORS[(nextId.current - 1) % (COLORS.length - 1) + 1] }
+  const reset = (id: string, next: PathState[] = [TODAY()], base = 'today', focus = 'today') => {
+    setProfileId(id)
+    setPaths(next)
+    setBaselineId(base)
+    setFocusId(focus)
+    setNote(null)
+    setExplain(null)
+  }
+  const addPaths = useCallback((specs: ScenarioSpec[]) => {
+    const added = specs.map((spec) => {
+      const n = nextId.current++
+      return { id: `p${n}`, spec, overrides: {}, color: COLORS[((n - 1) % (COLORS.length - 1)) + 1] }
     })
-    setBranches((bs) => [...bs, ...added])
-    if (added[0]) setFocusId(added[0].id)
+    setPaths((ps) => [...ps, ...added])
+    if (added.length) setFocusId(added[added.length - 1].id)
   }, [])
+
+  // The challenge's own example: Alexia — start working (baseline) vs master's vs move abroad
+  const loadDemo = useCallback(() => {
+    const alexia = profiles.find((p) => p.id === 'P00001')!
+    const ps = presets(alexia, params)
+    const pick = (id: string, i: number): PathState => ({ id: `d${i}`, spec: ps.find((p) => p.id === id)!.spec, overrides: {}, color: COLORS[i] })
+    setYears(10)
+    reset('P00001', [TODAY(), pick('work', 1), pick('master', 2), pick('abroad', 3)], 'd1', 'd2')
+  }, [profiles, params])
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('demo')) loadDemo()
+  }, [loadDemo])
 
   // ------------------------------------------------------------ compute (pure, fast, deterministic)
   const computed = useMemo(
     () =>
-      branches.map((b) => {
-        const plan = resolve(profile, params, b.spec, b.overrides, H, loanRate)
-        return { ...b, name: b.spec.name, plan, result: simulate(plan, params, profile), isBaseline: b.id === baselineId }
+      paths.map((p) => {
+        const plan = resolve(profile, params, p.spec, p.overrides, H, loanRate)
+        return { ...p, name: p.spec.name, plan, result: simulate(plan, params, profile), isBaseline: p.id === baselineId }
       }),
-    [branches, profile, params, H, loanRate, baselineId],
+    [paths, profile, params, H, loanRate, baselineId],
   )
   const baseline = computed.find((c) => c.isBaseline) ?? computed[0]
   const focus = computed.find((c) => c.id === focusId) ?? baseline
+  const today = computed.find((c) => c.id === 'today') ?? computed[0]
   const drv = useMemo(() => drivers(focus.plan, params), [focus, params])
   const be = useMemo(() => (focus.id !== baseline.id ? breakEven(focus.plan, baseline.plan, params) : null), [focus, baseline, params])
   const liveChecks = useMemo(() => checks(focus.plan, params, profile), [focus, params, profile])
-  const facts = useMemo(() => buildFacts(profile, params, computed.filter((c) => c.visible || c.isBaseline), drv, be, focus.id), [profile, params, computed, drv, be, focus.id])
+  const facts = useMemo(() => buildFacts(profile, params, computed, drv, be, focus.id), [profile, params, computed, drv, be, focus.id])
   const factsKey = JSON.stringify(facts)
 
-  // ------------------------------------------------------------ LLM explanation (debounced, verified, with fallback)
+  // ------------------------------------------------------------ explanation: instant template, then the LLM (verified)
   const runExplain = useCallback(async (f: typeof facts) => {
-    setExplain((s) => ({ ...s, status: 'loading' }))
     const r = await apiExplain(f)
-    if (r.ok) setExplain({ status: r.cached ? 'cached' : 'ai', data: r.data, model: r.model, verify: verifyNumbers(`${r.data.headline} ${r.data.explanation} ${r.data.caveat}`, f) })
+    if (r.ok) setExplain({ status: 'ai', data: r.data, model: r.model, cached: r.cached, verify: verifyNumbers(`${r.data.headline} ${r.data.explanation} ${r.data.caveat}`, f) })
     else setExplain({ status: 'offline', data: templateExplanation(f), error: r.error })
   }, [])
   useEffect(() => {
-    // instant template text while the LLM is thinking, so the panel is never empty
-    setExplain((s) => (s.data ? { ...s, status: 'loading' } : { status: 'loading', data: templateExplanation(JSON.parse(factsKey)) }))
-    const t = setTimeout(() => runExplain(JSON.parse(factsKey)), 900)
+    const f = JSON.parse(factsKey)
+    setExplain((s) => (s ? { ...s, status: 'loading' } : { status: 'loading', data: templateExplanation(f) }))
+    const t = setTimeout(() => runExplain(f), 700)
     return () => clearTimeout(t)
   }, [factsKey, runExplain])
 
   // ------------------------------------------------------------ ask
   const ask = async (text: string) => {
-    if (!text.trim()) return
+    if (!text.trim() || asking) return
     setAsking(true)
+    setQuestion(text)
     const ctx = {
       text,
       name: profile.name,
@@ -106,175 +124,218 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     }
     const r = await apiParse(ctx)
     let res = r.ok ? r.data : offlineParse(text, profile, cityList)
-    const source = r.ok ? `${r.model}${r.cached ? ' (cached)' : ''}` : `offline rules (${r.error})`
     if (r.ok && !res.scenarios.length) res = offlineParse(text, profile, cityList)
-    if (res.horizon_years) setHorizonYears(Math.max(1, Math.min(40, res.horizon_years)))
-    if (res.scenarios.length) addBranches(res.scenarios, r.ok ? 'AI' : 'offline')
-    setParseNote({ text: res.note ?? (res.scenarios.length ? `Added ${res.scenarios.length} path(s).` : 'Nothing to add.'), unsupported: res.unsupported, source })
+    if (res.horizon_years) setYears(Math.max(1, Math.min(40, res.horizon_years)))
+    addPaths(res.scenarios)
+    setNote({ text: res.note ?? (res.scenarios.length ? '' : 'Nothing to add.'), unsupported: res.unsupported, by: r.ok ? 'AI' : 'offline rules' })
     setAsking(false)
     setQuestion('')
   }
 
-  // The challenge's own example: Alexia, start working (baseline) vs master's vs move abroad
-  const loadDemo = useCallback(() => {
-    const alexia = profiles.find((p) => p.id === 'P00001')!
-    const ps = presets(alexia, params)
-    const pick = (id: string) => ps.find((p) => p.id === id)!.spec
-    setProfileId('P00001')
-    setHorizonYears(10)
-    setTimeout(() => {
-      setBranches([
-        STATUS_QUO(),
-        { id: 'd1', spec: pick('work'), overrides: {}, visible: true, origin: 'demo', color: COLORS[1] },
-        { id: 'd2', spec: pick('master'), overrides: {}, visible: true, origin: 'demo', color: COLORS[2] },
-        { id: 'd3', spec: pick('abroad'), overrides: {}, visible: true, origin: 'demo', color: COLORS[3] },
-      ])
-      setBaselineId('d1')
-      setFocusId('d2')
-    }, 0)
-  }, [profiles, params])
-  useEffect(() => {
-    if (new URLSearchParams(location.search).has('demo')) loadDemo()
-  }, [loadDemo])
+  const update = (id: string, f: (p: PathState) => PathState) => setPaths((ps) => ps.map((p) => (p.id === id ? f(p) : p)))
+  const remove = (id: string) => {
+    setPaths((ps) => ps.filter((p) => p.id !== id))
+    if (id === baselineId) setBaselineId('today')
+    if (id === focusId) setFocusId('today')
+  }
 
-  const update = (id: string, f: (b: BranchState) => BranchState) => setBranches((bs) => bs.map((b) => (b.id === id ? f(b) : b)))
-  const visible = computed.filter((c) => c.visible)
+  const endAge = profile.age + years
+  const runsOut = today.result.probNegCash >= 0.5 && today.result.firstNegMonth != null
+  const hook = runsOut ? (
+    <>
+      If nothing changes, {profile.name}’s cash <span className="neg">runs out at age {Math.floor(profile.age + today.result.firstNegMonth! / 12)}</span>.
+    </>
+  ) : (
+    <>
+      If nothing changes, {profile.name} has about <b>{chfk(today.result.endNW.p50)}</b> at {endAge}.
+    </>
+  )
 
   return (
-    <main className="app">
-      <header className="top">
-        <div>
-          <h1>Financial Twin</h1>
-          <p className="muted">One choice, many possible futures. Don't predict the future, make it explorable.</p>
-        </div>
-        <div className="top-right">
-          <button className="ghost" onClick={loadDemo}>
-            ▶ Alexia demo
-          </button>
-          <span className={`badge ${llm ? 'ok' : 'muted'}`}>{llm === undefined ? 'checking AI…' : llm ? `AI: ${llm.model.split('/').pop()}` : 'AI offline → rule-based fallback'}</span>
-          <span className="badge">Fictional data · not advice</span>
-        </div>
-      </header>
+    <div className="page">
+      <nav className="nav">
+        <span className="brand">
+          <span className="logo" /> Financial Twin
+        </span>
+        <span className="spacer" />
+        <span className={`status ${llm ? 'on' : ''}`} title={llm ? llm.model : 'No LLM: questions use simple offline rules'}>
+          {llm === undefined ? '…' : llm ? 'AI on' : 'AI offline'}
+        </span>
+        <button className="btn-ghost" onClick={loadDemo}>
+          ▶ Demo
+        </button>
+      </nav>
 
-      <div className="layout">
-        <aside className="side">
-          <section className="card">
-            <div className="row">
-              <select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} · {p.age} · {p.city} · {p.status} ({p.id})
-                  </option>
-                ))}
-              </select>
-              <button className="ghost" title="random profile" onClick={() => setProfileId(profiles[Math.floor(Math.random() * profiles.length)].id)}>
-                🎲
+      <main className="col">
+        {/* ---------------- who + the question ---------------- */}
+        <section className="hero">
+          <div className="person">
+            <div className="avatar">{profile.name[0]}</div>
+            <div>
+              <div className="person-name">
+                {profile.name}, {profile.age} <span className="muted">· {profile.city} · {profile.status.replace('_', ' ')}</span>
+              </div>
+              <div className="muted small">
+                {chf(profile.cash)} saved · earns {chf(profile.income)}/mo · rent {chf(profile.rent)}/mo
+                {profile.investments > 0 && ` · invested ${chfk(profile.investments)}`}
+                {profile.goals.length > 0 && ` · goals: ${profile.goals.map((g) => g.name.toLowerCase()).join(', ')}`}
+              </div>
+            </div>
+            <span className="spacer" />
+            <select className="person-pick" value={profileId} onChange={(e) => reset(e.target.value)} title="pick another fictional person">
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}, {p.age}, {p.city}, {p.status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <h1 className="hook">{hook}</h1>
+
+          <form className="ask" onSubmit={(e) => (e.preventDefault(), ask(question))}>
+            <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="What if… (e.g. I do a master’s, or move to Zurich?)" disabled={asking} />
+            <button type="submit" disabled={asking || !question.trim()}>
+              {asking ? <span className="spinner" /> : 'Explore'}
+            </button>
+          </form>
+          <div className="chips">
+            {quick.map((p) => (
+              <button key={p.id} className="chip" onClick={() => addPaths([p.spec])}>
+                + {p.label}
+              </button>
+            ))}
+            {EXAMPLES.map((q) => (
+              <button key={q} className="chip chip-ask" onClick={() => ask(q)} disabled={asking}>
+                “{q}”
+              </button>
+            ))}
+          </div>
+          {note && (note.text || note.unsupported.length > 0) && (
+            <p className="note small">
+              {note.text} {note.unsupported.length > 0 && <span className="muted">Not modelled: {note.unsupported.join('; ')}.</span>}
+            </p>
+          )}
+        </section>
+
+        {/* ---------------- the futures ---------------- */}
+        <section className="outcomes">
+          {computed.map((c) => (
+            <OutcomeCard
+              key={c.id}
+              name={c.name}
+              color={c.color}
+              result={c.result}
+              baseline={baseline}
+              isBaseline={c.isBaseline}
+              isFocus={c.id === focus.id}
+              age={profile.age}
+              endAge={endAge}
+              onFocus={() => setFocusId(c.id)}
+              onBaseline={() => setBaselineId(c.id)}
+              onRemove={c.id === 'today' ? undefined : () => remove(c.id)}
+            />
+          ))}
+        </section>
+
+        <section className="card">
+          <div className="card-head">
+            <h2>{metric === 'nw' ? 'Net worth' : 'Cash in the bank'}, year by year</h2>
+            <span className="spacer" />
+            <div className="seg">
+              <button className={metric === 'nw' ? 'on' : ''} onClick={() => setMetric('nw')}>
+                Net worth
+              </button>
+              <button className={metric === 'cash' ? 'on' : ''} onClick={() => setMetric('cash')}>
+                Cash
               </button>
             </div>
-            <ProfileCard p={profile} />
-          </section>
+            <select className="mini" value={years} onChange={(e) => setYears(Number(e.target.value))}>
+              {[3, 5, 10, 20, 30].map((y) => (
+                <option key={y} value={y}>
+                  {y} years
+                </option>
+              ))}
+            </select>
+          </div>
+          <ProjectionChart paths={computed} focusId={focus.id} profile={profile} metric={metric} months={H} />
+          <p className="caption">
+            Lines = the typical outcome of 500 simulated futures. Shaded = where 8 in 10 of them land for <b style={{ color: focus.color }}>{focus.name}</b>.
+            {metric === 'cash' ? ' Dots = the real ledger from the data.' : ' Switch to Cash to compare with the real data.'}
+          </p>
+        </section>
 
-          <section className="card">
-            <h2>Ask "what if…"</h2>
-            <form onSubmit={(e) => (e.preventDefault(), ask(question))}>
-              <textarea value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={`e.g. "What if I do a master's in Zurich, or start working at 22 for 6000 a month?"`} rows={3} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), ask(question))} />
-              <button type="submit" disabled={asking || !question.trim()}>
-                {asking ? 'Thinking…' : 'Explore'}
-              </button>
-            </form>
-            {parseNote && (
-              <div className="parse-note small">
-                <div>{parseNote.text}</div>
-                {parseNote.unsupported.length > 0 && <div className="muted">Not modelled: {parseNote.unsupported.join('; ')}</div>}
-                <div className="muted">understood by: {parseNote.source}</div>
+        {/* ---------------- the story ---------------- */}
+        {explain && (
+          <section className="card story">
+            <h2 className="story-head">{explain.data.headline}</h2>
+            <p className="story-text">{explain.data.explanation}</p>
+            {be && (
+              <div className="insight">
+                <span className="insight-icon">⚖</span>
+                <div>
+                  <b>{focus.name}</b> ends level with <b>{baseline.name}</b> only if income from age {Math.floor(profile.age + be.month / 12)} is{' '}
+                  <b>
+                    {be.pct >= 0 ? '+' : ''}
+                    {be.pct.toFixed(0)}%
+                  </b>{' '}
+                  compared to what we assumed (about {chf(be.incomeNeeded)} a month).
+                </div>
               </div>
             )}
-            <div className="chips">
-              {presetList.map((p) => (
-                <button key={p.id} className="chip" onClick={() => addBranches([p.spec], 'preset')}>
-                  + {p.label}
-                </button>
-              ))}
+            <p className="caveat small">⚠ {explain.data.caveat}</p>
+            <div className="story-meta">
+              {explain.status === 'loading' && <span className="muted">updating…</span>}
+              {explain.status === 'ai' && <span className="muted">written by AI ({explain.model?.split('/').pop()}){explain.cached ? ', cached' : ''}</span>}
+              {explain.status === 'offline' && <span className="muted">written by a template (AI offline)</span>}
+              {explain.status === 'ai' && explain.verify && (explain.verify.unmatched.length ? <span className="neg">⚠ {explain.verify.unmatched.length} number(s) not found in the model: {explain.verify.unmatched.join(', ')}</span> : <span className="ok">✓ all {explain.verify.total} numbers checked against the model</span>)}
+              <button className="link-btn" onClick={() => runExplain(facts)}>
+                rewrite
+              </button>
             </div>
           </section>
+        )}
 
-          <section className="card">
-            <h2>Paths</h2>
-            <p className="hint">Click a path to see and edit every number it uses.</p>
-            {computed.map((b) => (
-              <BranchCard
-                key={b.id}
-                name={b.name}
-                color={b.color}
-                origin={b.origin}
-                plan={b.plan}
-                result={b.result}
-                baselineResult={baseline.result}
-                isBaseline={b.isBaseline}
-                isFocus={b.id === focus.id}
-                visible={b.visible}
-                overrides={b.overrides}
-                onFocus={() => setFocusId(b.id)}
-                onBaseline={() => setBaselineId(b.id)}
-                onToggle={() => update(b.id, (x) => ({ ...x, visible: !x.visible }))}
-                onRemove={b.id === 'quo' ? undefined : () => (setBranches((bs) => bs.filter((x) => x.id !== b.id)), b.isBaseline && setBaselineId('quo'), b.id === focusId && setFocusId('quo'))}
-                onOverride={(key, v) =>
-                  update(b.id, (x) => {
-                    const o = { ...x.overrides }
-                    if (v == null) delete o[key]
-                    else o[key] = v
-                    return { ...x, overrides: o }
-                  })
-                }
-              />
-            ))}
-          </section>
-        </aside>
+        {/* ---------------- the numbers behind it (collapsed) ---------------- */}
+        <details className="card fold" open={focus.id !== 'today'}>
+          <summary>
+            <h2>
+              The numbers behind <span style={{ color: focus.color }}>{focus.name}</span>
+            </h2>
+            <span className="muted small">every number has a source · click any value to change it</span>
+          </summary>
+          {focus.plan.warnings.map((w) => (
+            <p key={w} className="warn small">
+              ⚠ {w}
+            </p>
+          ))}
+          <AssumptionList items={focus.plan.assumptions} overrides={focus.overrides} onChange={(key, v) => update(focus.id, (p) => {
+            const o = { ...p.overrides }
+            if (v == null) delete o[key]
+            else o[key] = v
+            return { ...p, overrides: o }
+          })} />
+          {drv.length > 0 && (
+            <>
+              <h3>What matters most</h3>
+              <p className="muted small">Change each input by 10% and see how much the end result moves.</p>
+              <Drivers drivers={drv} />
+            </>
+          )}
+        </details>
 
-        <div className="mainc">
-          <section className="card">
-            <div className="row">
-              <h2>{metric === 'nw' ? 'Net worth' : 'Cash'} over {horizonYears} years</h2>
-              <span className="spacer" />
-              <div className="seg">
-                <button className={metric === 'nw' ? 'on' : ''} onClick={() => setMetric('nw')}>
-                  Net worth
-                </button>
-                <button className={metric === 'cash' ? 'on' : ''} onClick={() => setMetric('cash')}>
-                  Cash
-                </button>
-              </div>
-              <select value={horizonYears} onChange={(e) => setHorizonYears(Number(e.target.value))}>
-                {[3, 5, 10, 15, 20, 30].map((y) => (
-                  <option key={y} value={y}>
-                    {y} years
-                  </option>
-                ))}
-              </select>
-            </div>
-            <ProjectionChart branches={visible} profile={profile} metric={metric} months={H} />
-            <ResultsTable rows={visible} months={H} age={profile.age} />
-          </section>
+        <details className="card fold">
+          <summary>
+            <h2>Can you trust this?</h2>
+            <TrustSummary checks={liveChecks} params={params} verify={explain?.status === 'ai' ? explain.verify : undefined} />
+          </summary>
+          <TrustDetails params={params} checks={liveChecks} focusName={focus.name} />
+        </details>
 
-          <section className="card">
-            <h2>What does this mean?</h2>
-            <ExplanationPanel s={explain} onRetry={() => runExplain(facts)} />
-          </section>
-
-          <section className="card">
-            <h2>Why: what matters most for "{focus.name}"</h2>
-            {drv.length ? <DriversPanel drivers={drv} name={focus.name} breakEven={be} baselineName={baseline.name} age={profile.age} /> : <p className="muted">No inputs to vary.</p>}
-          </section>
-
-          <section className="card">
-            <h2>Can you trust it?</h2>
-            <TrustPanel params={params} checks={liveChecks} focusName={focus.name} />
-          </section>
-        </div>
-      </div>
-      <footer className="muted small">
-        Educational prototype for the UBS × LauzHack 2026 AI Financial Twin challenge. All profiles are fictional; results are conditional on the shown assumptions and are not forecasts or financial advice.
-      </footer>
-    </main>
+        <footer className="muted small">
+          Fictional people and synthetic data (UBS × LauzHack 2026 challenge). Results depend on the assumptions shown. Not a forecast, not financial advice.
+        </footer>
+      </main>
+    </div>
   )
 }
