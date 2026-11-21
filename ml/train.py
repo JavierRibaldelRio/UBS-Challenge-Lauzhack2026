@@ -233,6 +233,11 @@ def band(age: int) -> str:
     return f"{lo}-{lo + 4}"
 
 
+def stat(x: pd.Series) -> dict:
+    """median + the peer range (10th-90th percentile) -> lets the app test 'what if this person is at the low/high end of their peers'"""
+    return {"median": r(x.median(), 2), "p10": r(x.quantile(0.1), 2), "p90": r(x.quantile(0.9), 2), "n": int(len(x))}
+
+
 def anchors(prof: pd.DataFrame, assum: pd.DataFrame) -> dict:
     inc = {}
     for s in STATUSES:
@@ -240,16 +245,16 @@ def anchors(prof: pd.DataFrame, assum: pd.DataFrame) -> dict:
         by_band = {}
         for b, g in d.groupby(d.age_at_start.map(band)):
             if len(g) >= MIN_GROUP:
-                by_band[b] = {"median": r(g.reference_monthly_net_income_chf.median(), 2), "n": int(len(g))}
-        inc[s] = {"all": {"median": r(d.reference_monthly_net_income_chf.median(), 2), "n": int(len(d))}, "by_age_band": by_band}
+                by_band[b] = stat(g.reference_monthly_net_income_chf)
+        inc[s] = {"all": stat(d.reference_monthly_net_income_chf), "by_age_band": by_band}
 
     rent = {}
     for c, g in prof.groupby("city"):
         by_h = {}
         for h, gh in g.groupby("household_type"):
             if len(gh) >= MIN_GROUP:
-                by_h[h] = {"median": r(gh.reference_monthly_rent_chf.median(), 2), "n": int(len(gh))}
-        rent[c] = {"all": {"median": r(g.reference_monthly_rent_chf.median(), 2), "n": int(len(g))}, "by_household": by_h}
+                by_h[h] = stat(gh.reference_monthly_rent_chf)
+        rent[c] = {"all": stat(g.reference_monthly_rent_chf), "by_household": by_h}
 
     canton = prof.groupby("city").canton.first().to_dict()
     tuition = assum[assum.parameter == "annual_tuition_chf"].value.astype(float)
@@ -288,6 +293,10 @@ def backtest(prof: pd.DataFrame, panel: pd.DataFrame, n_paths=1000) -> dict:
     start_cash = panel[panel.t == 11].set_index("profile_id").closing_cash_chf
 
     inside80 = inside50 = 0
+    gains = {}  # simulated 2026 cash change per profile (for the "A ends higher than B" check)
+    real_gain = {}
+    pit = []  # where the real result fell inside our predicted distribution (0..1); uniform = perfectly calibrated
+    neg_pred, neg_real = [], []
     month_inside80 = month_total = 0
     abs_err_model, abs_err_naive = [], []
     brier_model, brier_naive = [], []
@@ -314,6 +323,9 @@ def backtest(prof: pd.DataFrame, panel: pd.DataFrame, n_paths=1000) -> dict:
         lo80, hi80 = np.quantile(paths, [0.1, 0.9], axis=0)
         lo50, hi50 = np.quantile(paths, [0.25, 0.75], axis=0)
         med = np.median(paths[:, -1])
+        pit.append(float((paths[:, -1] <= actual[-1]).mean()))
+        gains[pid] = paths[:, -1] - start_cash[pid]
+        real_gain[pid] = actual[-1] - start_cash[pid]
         inside80 += lo80[-1] <= actual[-1] <= hi80[-1]
         inside50 += lo50[-1] <= actual[-1] <= hi50[-1]
         month_inside80 += int(((lo80 <= actual) & (actual <= hi80)).sum())
@@ -323,15 +335,48 @@ def backtest(prof: pd.DataFrame, panel: pd.DataFrame, n_paths=1000) -> dict:
         abs_err_naive.append(abs(naive - actual[-1]))
         went_neg = float((actual < 0).any())
         brier_model.append(((paths < 0).any(axis=1).mean() - went_neg) ** 2)
+        neg_pred.append(float((paths < 0).any(axis=1).mean()))
+        neg_real.append(went_neg)
         naive_path = start_cash[pid] + np.arange(1, 13) * (naive - start_cash[pid]) / 12
         brier_naive.append((float((naive_path < 0).any()) - went_neg) ** 2)
 
+    # "A ends higher than B" statements: random pairs of people, model probability vs what really happened in 2026
+    prng = np.random.default_rng(SEED + 1)
+    pairs = prng.choice(len(pids), size=(20000, 2))
+    said, real = [], []
+    for i, j in pairs:
+        if i == j:
+            continue
+        a, b = pids[i], pids[j]
+        said.append(float((gains[a] > prng.permutation(gains[b])).mean()))
+        real.append(float(real_gain[a] > real_gain[b]))
+    said, real = np.array(said), np.array(real)
+    bins = [(0, 0.05), (0.05, 0.2), (0.2, 0.5), (0.5, 0.8), (0.8, 0.95), (0.95, 1.01)]
+    ends_higher = [
+        {"said": f"{int(lo*100)}-{min(100, int(hi*100))}%", "pairs": int(m.sum()), "avg_said": r(said[m].mean(), 3), "real": r(real[m].mean(), 3)}
+        for lo, hi in bins
+        for m in [(said >= lo) & (said < hi)]
+        if m.sum() > 0
+    ]
+
     n = len(pids)
     return {
+        "calibration_ends_higher": ends_higher,
         "method": "fit on 2025 (12 months), Monte Carlo 2026 from real Dec-2025 cash, compare with real 2026 ledger",
         "profiles": n,
         "paths_per_profile": n_paths,
         "coverage_80_year_end": r(inside80 / n),
+        # calibration curve: "we said X% of results fall in this range" vs what really happened
+        "calibration_central": [{"said": lv, "real": r(np.mean([abs(u - 0.5) <= lv / 200 for u in pit]), 3)} for lv in (10, 20, 30, 40, 50, 60, 70, 80, 90)],
+        # probability check: grouped by how likely we said "cash goes below zero in 2026" was
+        "calibration_negative_cash": [
+            {"said": lab, "profiles": int(m.sum()), "avg_said": r(np.mean(np.array(neg_pred)[m]), 3), "real": r(np.mean(np.array(neg_real)[m]), 3)}
+            for lab, m in (
+                (lab, (np.array(neg_pred) >= lo) & (np.array(neg_pred) < hi))
+                for lab, lo, hi in (("under 5%", 0, 0.05), ("5-50%", 0.05, 0.5), ("50-95%", 0.5, 0.95), ("over 95%", 0.95, 1.01))
+            )
+            if m.sum() > 0
+        ],
         "coverage_50_year_end": r(inside50 / n),
         "coverage_80_all_months": r(month_inside80 / month_total),
         "median_abs_error_year_end_chf": r(np.median(abs_err_model), 2),

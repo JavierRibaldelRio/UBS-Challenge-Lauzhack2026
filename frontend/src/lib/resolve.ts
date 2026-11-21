@@ -57,16 +57,20 @@ export function regPredict(reg: Regression, x: { income: number; rent: number; a
 export function incomeAnchor(params: Params, status: Status, age: number) {
   const s = params.anchors.income_by_status[status]
   const b = s.by_age_band[BAND(Math.floor(age))]
-  if (b) return { value: b.median, note: `median of ${b.n} ${status} profiles aged ${BAND(Math.floor(age))} (synthetic-profiles.csv)` }
-  return { value: s.all.median, note: `median of all ${s.all.n} ${status} profiles (synthetic-profiles.csv)` }
+  const m = b ?? s.all
+  const range = m.p10 != null && m.p90 != null ? { lo: m.p10, hi: m.p90, good: 'higher' as const } : undefined
+  if (b) return { value: b.median, range, note: `median of ${b.n} ${status} profiles aged ${BAND(Math.floor(age))} (synthetic-profiles.csv)` }
+  return { value: s.all.median, range, note: `median of all ${s.all.n} ${status} profiles (synthetic-profiles.csv)` }
 }
 
 export function rentAnchor(params: Params, city: string, household: Household) {
   const c = params.anchors.rent_by_city[city]
   if (!c) return null
   const h = c.by_household[household]
-  if (h) return { value: h.median, note: `median rent of ${h.n} ${household} households in ${city} (synthetic-profiles.csv)` }
-  return { value: c.all.median, note: `median rent of ${c.all.n} households in ${city} (synthetic-profiles.csv)` }
+  const m = h ?? c.all
+  const range = m.p10 != null && m.p90 != null ? { lo: m.p10, hi: m.p90, good: 'lower' as const } : undefined
+  if (h) return { value: h.median, range, note: `median rent of ${h.n} ${household} households in ${city} (synthetic-profiles.csv)` }
+  return { value: c.all.median, range, note: `median rent of ${c.all.n} households in ${city} (synthetic-profiles.csv)` }
 }
 
 export const cities = (params: Params) => Object.keys(params.anchors.rent_by_city).sort()
@@ -87,10 +91,10 @@ export function resolve(
   const H = horizonMonths
   const assumptions: Assumption[] = []
   const warnings: string[] = []
-  const A = (key: string, label: string, value: number, unit: string, source: Source, note: string) => {
+  const A = (key: string, label: string, value: number, unit: string, source: Source, note: string, range?: Assumption['range']) => {
     const o = overrides[key]
     const v = o ?? value
-    assumptions.push({ key, label, value: v, unit, source: o != null ? 'you' : source, note })
+    assumptions.push({ key, label, value: v, unit, source: o != null ? 'you' : source, note, ...(o == null && source === 'data' && range ? { range } : {}) })
     return v
   }
   const fill = <T>(v: T) => Array.from({ length: H }, () => v)
@@ -137,7 +141,7 @@ export function resolve(
     switch (e.type) {
       case 'start_job': {
         const anc = incomeAnchor(params, 'employed', ageAt(s))
-        const inc = A(`${k}.income`, `${e.label}: net salary`, e.monthly_net_income_chf ?? anc.value, 'CHF/mo', e.monthly_net_income_chf != null ? tag : 'data', e.monthly_net_income_chf != null ? tagNote : anc.note)
+        const inc = A(`${k}.income`, `${e.label}: net salary`, e.monthly_net_income_chf ?? anc.value, 'CHF/mo', e.monthly_net_income_chf != null ? tag : 'data', e.monthly_net_income_chf != null ? tagNote : anc.note, anc.range)
         for (let t = s; t < H; t++) {
           status[t] = 'employed'
           income[t] = inc
@@ -162,7 +166,7 @@ export function resolve(
         for (let t = s; t < end; t += 6) oneOff[t] += tuition / 2
         if (end < H) {
           const anc = incomeAnchor(params, 'employed', ageAt(end))
-          const after = A(`${k}.after`, `${e.label}: salary after (no premium)`, anc.value, 'CHF/mo', 'data', anc.note)
+          const after = A(`${k}.after`, `${e.label}: salary after (no premium)`, anc.value, 'CHF/mo', 'data', anc.note, anc.range)
           const premium = A(`${k}.premium`, `${e.label}: salary premium from degree`, e.income_change_pct ?? 0, '%', e.income_change_pct != null ? tag : 'missing', e.income_change_pct != null ? tagNote : 'The data has no education field, so the degree premium is unknown. 0% = same pay. See the break-even line.')
           for (let t = end; t < H; t++) {
             status[t] = 'employed'
@@ -177,7 +181,7 @@ export function resolve(
         const known = params.anchors.rent_by_city[target] ? target : null
         const label = known ?? (target || 'abroad')
         const ra = known ? rentAnchor(params, known, household[s]) : null
-        const rentV = A(`${k}.rent`, `${e.label}: rent in ${label}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra ? ra.note : `No data for ${label}. Default keeps your current rent - please set it.`)
+        const rentV = A(`${k}.rent`, `${e.label}: rent in ${label}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra ? ra.note : `No data for ${label}. Default keeps your current rent - please set it.`, ra?.range)
         const incV = A(`${k}.income`, `${e.label}: net income in ${label}`, e.monthly_net_income_chf ?? income[s], 'CHF/mo', e.monthly_net_income_chf != null ? tag : known ? 'data' : 'missing', e.monthly_net_income_chf != null ? tagNote : known ? 'income kept: the synthetic data shows no reliable city effect on income' : `No data for ${label}. Default keeps your current income - please set it.`)
         const move = A(`${k}.move`, `${e.label}: moving cost`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Moving costs are not in the data. 0 by default.')
         // income only changes if someone actually set it (else later phases, e.g. post-study salary, are kept)
@@ -208,7 +212,7 @@ export function resolve(
         const h = e.household_type ?? 'family'
         for (let t = s; t < H; t++) household[t] = h
         const ra = rentAnchor(params, city[s], h)
-        const rentV = A(`${k}.rent`, `${e.label}: rent as ${h}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra?.note ?? 'no rent data for this city')
+        const rentV = A(`${k}.rent`, `${e.label}: rent as ${h}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra?.note ?? 'no rent data for this city', ra?.range)
         for (let t = s; t < H; t++) rent[t] = rentV
         break
       }
@@ -308,7 +312,7 @@ export function presets(profile: Profile, params: Params): Preset[] {
   const working = profile.status === 'employed' || profile.status === 'self_employed'
   const late = profile.status === 'retired' || profile.age >= 60
   if (!working && !late) out.push({ id: 'work', label: 'Start working', spec: { name: 'Start working', catalog_id: 'S001', events: [ev({ type: 'start_job', label: 'Start working' })] } })
-  if (!late) out.push({ id: 'master', label: "Master's degree", spec: { name: "Master's degree", catalog_id: 'S001', events: [ev({ type: 'study', label: "Master's" })] } })
+  if (profile.age < 40) out.push({ id: 'master', label: "Master's degree", spec: { name: "Master's degree", catalog_id: 'S001', events: [ev({ type: 'study', label: "Master's" })] } })
   const dest = profile.city === 'Zurich' ? 'Geneva' : 'Zurich'
   if (params.anchors.rent_by_city[dest]) out.push({ id: 'move', label: `Move to ${dest}`, spec: { name: `Move to ${dest}`, catalog_id: null, events: [ev({ type: 'relocate', label: `Move to ${dest}`, city: dest, start_month: 12 }), ...(!working && !late ? [ev({ type: 'start_job', label: 'Job', start_month: 12 })] : [])] } })
   if (!late) out.push({
@@ -317,7 +321,7 @@ export function presets(profile: Profile, params: Params): Preset[] {
       events: [ev({ type: 'relocate', label: 'Move abroad', city: 'abroad', monthly_net_income_chf: 3700, amount_chf: 6500, _source: 'UBS starter-kit illustrative value (scenario_config.json)' })],
     },
   })
-  if (profile.income > 0) out.push({ id: 'jobloss', label: 'Lose income 6 months', spec: { name: 'Income gap 6 months', catalog_id: null, events: [ev({ type: 'income_change', label: 'Income gap', start_month: 12, duration_months: 6, income_change_pct: -100, _source: 'preset: 6 months without income' })] } })
+  if (profile.income > 0 && profile.status !== 'retired') out.push({ id: 'jobloss', label: 'Lose income 6 months', spec: { name: 'Income gap 6 months', catalog_id: null, events: [ev({ type: 'income_change', label: 'Income gap', start_month: 12, duration_months: 6, income_change_pct: -100, _source: 'preset: 6 months without income' })] } })
   out.push({ id: 'invest', label: 'Invest CHF 500/mo', spec: { name: 'Invest 500/mo', catalog_id: null, events: [ev({ type: 'invest', label: 'Invest', monthly_amount_chf: 500, _source: 'preset amount' })] } })
   if (profile.investments > 0) out.push({ id: 'crash', label: 'Market crash −30%', spec: { name: 'Market crash', catalog_id: null, events: [ev({ type: 'market_shock', label: 'Crash', start_month: 24, drop_pct: 30, _source: 'illustrative stress test' })] } })
   const studyYears = profile.study_assumption?.study_duration_years ?? params.anchors.study.duration_years_median

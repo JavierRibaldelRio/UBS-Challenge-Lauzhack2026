@@ -5,6 +5,7 @@ import type { SimResult } from '../lib/sim'
 export function OutcomeCard(p: {
   name: string
   summary: string
+  warnings: string[]
   color: string
   result: SimResult
   baseline: { name: string; result: SimResult }
@@ -46,6 +47,18 @@ export function OutcomeCard(p: {
         ) : (
           <span className="flag good">✓ cash stays positive</span>
         )}
+        {r.homeBuys.map((h) =>
+          h.shortShare >= 0.5 ? (
+            <span key={h.month} className="flag bad">⚠ can’t pay the {chfk(h.down).replace('CHF ', '')} down payment at {Math.floor(p.age + h.month / 12)}</span>
+          ) : h.shortShare > 0.05 ? (
+            <span key={h.month} className="flag warn">⚠ down payment short in {Math.round(h.shortShare * 100)}%</span>
+          ) : (
+            <span key={h.month} className="flag good">🏠 down payment OK</span>
+          ),
+        )}
+        {p.warnings.map((w) => (
+          <span key={w} className="flag warn">⚠ {w}</span>
+        ))}
         {goals.length > 0 && (
           <span className={`flag ${reached === goals.length ? 'good' : reached ? 'warn' : 'bad'}`}>
             🎯 {reached}/{goals.length} goals

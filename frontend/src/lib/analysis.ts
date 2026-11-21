@@ -77,6 +77,8 @@ export function buildFacts(profile: Profile, params: Params, branches: Branch[],
       goals: b.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by: g.date.slice(0, 4), chance_pct: p(g.prob!) })),
       key_assumptions: b.plan.assumptions.filter((a) => !a.key.startsWith('g.') || a.source === 'you').slice(0, 8).map(summarize),
       unknown_inputs: b.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label),
+      home_purchases: b.result.homeBuys.map((h) => ({ age: Math.floor(profile.age + h.month / 12), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_cash_for_down_payment_pct: p(h.shortShare), note: 'cash drops by the down payment; net worth does not (the money becomes part of the home)' })),
+      warnings: b.plan.warnings,
     })),
     focus_path: focus.name,
     drivers_for_focus_path: drv.slice(0, 3).map((d) => ({ input: d.name, effect_on_end_net_worth_chf: [r100(Math.min(d.low, d.high)), r100(Math.max(d.low, d.high))] })),
@@ -90,6 +92,13 @@ export function buildFacts(profile: Profile, params: Params, branches: Branch[],
 export type Facts = ReturnType<typeof buildFacts>
 
 // ---------------------------------------------------------------- verify the LLM's numbers
+// A number: "1,200" "1'200" "1’200" "1 200" (space / no-break space, French style) "12.5" "1,5" (decimal comma)
+const NUM = /(-?\d{1,3}(?:[ \u00a0\u202f'’,]\d{3})+(?:[.,]\d+)?|-?\d+(?:[.,]\d+)?)/
+function toNumber(raw: string) {
+  let s = raw.replace(/[ \u00a0\u202f'’]/g, '')
+  s = /,\d{3}(?!\d)/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.')
+  return Number(s)
+}
 /** Every number in the text must match a number in the facts (allowing "k"/"M" and rounding). */
 export function verifyNumbers(text: string, facts: unknown): { total: number; unmatched: string[] } {
   const known: number[] = []
@@ -97,21 +106,26 @@ export function verifyNumbers(text: string, facts: unknown): { total: number; un
     if (typeof x === 'number') known.push(x, Math.abs(x))
     else if (Array.isArray(x)) x.forEach(walk)
     else if (x && typeof x === 'object') Object.values(x).forEach(walk)
-    else if (typeof x === 'string') (x.match(/-?\d+(?:\.\d+)?/g) ?? []).forEach((s) => known.push(Math.abs(Number(s))))
+    else if (typeof x === 'string') for (const m of x.matchAll(new RegExp(NUM.source + String.raw`(?:\s*(k|K|m|M|million)(?![\p{L}\d]))?`, 'gu'))) {
+      const v = toNumber(m[1])
+      known.push(v, m[2] && /^k$/i.test(m[2]) ? v * 1000 : m[2] ? v * 1e6 : v)
+    }
   }
   walk(facts)
-  const re = /(-?\d[\d'’,]*(?:\.\d+)?)\s*(k|K|M|million|%)?/g
+  // unit must stand alone: "28k" / "28 k" / "1.2 million" / "35%" — but NOT the "k" of "28 keeps"
+  const re = new RegExp(NUM.source + String.raw`(?:\s*(k|K|M|million)(?![\p{L}\d])|\s*(%))?`, 'gu')
   const unmatched: string[] = []
   let total = 0
   for (const m of text.matchAll(re)) {
     const raw = m[0].trim()
-    let v = Math.abs(Number(m[1].replace(/['’,]/g, '')))
+    let v = Math.abs(toNumber(m[1]))
     if (!Number.isFinite(v)) continue
     if (m[2] === 'k' || m[2] === 'K') v *= 1000
     if (m[2] === 'M' || m[2] === 'million') v *= 1e6
-    if (v <= 12 && !m[2] && Number.isInteger(v)) continue // small counts ("2 years", "3 paths")
+    const unit = m[2] ?? m[3]
+    if (v <= 12 && !unit && Number.isInteger(v)) continue // small counts ("2 years", "3 paths")
     total++
-    const tol = (x: number) => Math.max(1, Math.abs(x) * (m[2] ? 0.02 : 0.01))
+    const tol = (x: number) => Math.max(1, Math.abs(x) * (unit ? 0.02 : 0.01))
     if (!known.some((k) => Math.abs(k - v) <= tol(k))) unmatched.push(raw)
   }
   return { total, unmatched }

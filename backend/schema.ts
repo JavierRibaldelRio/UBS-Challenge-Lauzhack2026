@@ -58,5 +58,13 @@ export const ExplainSchema = z.object({
   caveat: z.string().describe('One sentence: the biggest assumption or limitation'),
 })
 
+export const AnswerSchema = z.object({
+  short_answer: z.string().describe('1-2 sentences that directly answer the question, in this simulation'),
+  reasoning: z.string().describe('2-4 short sentences: why, using only the facts'),
+  confidence_level: z.enum(['high', 'medium', 'low']).describe('Exactly the confidence value given in the facts'),
+  confidence_sentence: z.string().describe('One sentence that states the given confidence level and its main reason'),
+})
+
 export type ParseResult = z.infer<typeof ParseSchema>
+export type AnswerResult = z.infer<typeof AnswerSchema>
 export type ExplainResult = z.infer<typeof ExplainSchema>

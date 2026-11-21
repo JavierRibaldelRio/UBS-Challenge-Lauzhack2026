@@ -6,7 +6,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import OpenAI from 'openai'
 import { z } from 'zod'
-import { ExplainSchema, ParseSchema } from './schema.ts'
+import { AnswerSchema, ExplainSchema, ParseSchema } from './schema.ts'
 
 const PORT = Number(process.env.PORT ?? 8000)
 const BASE_URL = process.env.LLM_BASE_URL ?? 'https://api.together.ai/v1'
@@ -19,7 +19,7 @@ const JSON_MODE = (process.env.LLM_JSON_MODE ?? 'json_schema') as 'json_schema' 
 // "default" sends nothing (provider default). Other providers may reject the extra field -> use "default" there.
 const REASONING = (process.env.LLM_REASONING ?? 'off') as 'off' | 'on' | 'default'
 
-const client = API_KEY ? new OpenAI({ baseURL: BASE_URL, apiKey: API_KEY, timeout: TIMEOUT_MS, maxRetries: 1 }) : null
+const client = API_KEY ? new OpenAI({ baseURL: BASE_URL, apiKey: API_KEY, timeout: TIMEOUT_MS, maxRetries: 2 }) : null
 
 // Strict-mode friendly JSON Schema: every object closed + all keys required, no int64 bounds.
 function strictSchema(node: any): any {
@@ -38,6 +38,23 @@ function strictSchema(node: any): any {
 }
 const PARSE_JSON_SCHEMA = strictSchema(z.toJSONSchema(ParseSchema))
 const EXPLAIN_JSON_SCHEMA = strictSchema(z.toJSONSchema(ExplainSchema))
+const ANSWER_JSON_SCHEMA = strictSchema(z.toJSONSchema(AnswerSchema))
+
+const ANSWER_SYSTEM = `You answer a person's question about their simulated financial future, in plain, simple English (short sentences, no jargon).
+The simulation has already been run. You get its results as FACTS. The verdict and the confidence level were computed by the simulator.
+STRICT RULES
+- Start with a direct answer to the QUESTION as asked (e.g. "Which is better?" -> name the path that ends higher; "Can I afford X?" -> say whether cash stays above zero and goals are reached).
+- Use ONLY numbers that appear in the FACTS. Do not calculate new numbers. "k" style is fine (254300 -> CHF 254k).
+- Only make claims that follow directly from the FACTS (e.g. do not say ranges "overlap" unless you compare the given range numbers correctly).
+- Say "in this simulation" or "under these assumptions". Never promise outcomes. Never say "you should" or give advice: describe what the numbers show.
+- Answer in the same language as the QUESTION.
+- confidence_level: copy the given "confidence" value exactly (high / medium / low). Do not change it. In confidence_sentence, state it and explain it with the main reason from confidence_reasons.
+- If unknown_inputs is not empty, mention that the answer depends on them.
+- If a path buys a home and chance_not_enough_cash_for_down_payment_pct is above 0, say that the own money for the down payment is missing in that share of futures. That makes the purchase unaffordable there, whatever the final net worth.
+- Money that ends higher is not automatically the better life choice: if the paths differ in risk of running out of cash, say so.
+- The person and data are fictional.
+Reply with JSON only (no prose, no code fences), matching this JSON Schema:
+${JSON.stringify(ANSWER_JSON_SCHEMA)}`
 
 // ------------------------------------------------------------------ prompts
 function parseSystemPrompt(ctx: ParseContext) {
@@ -50,12 +67,14 @@ RULES
 - Timing: months after the start (month 0 = ${ctx.start_date}, when ${ctx.name} is ${ctx.age}). "at 25" -> (25-${ctx.age})*12. "next year" -> 12. "now" -> 0.
 - If the user compares options ("A or B"), return one scenario per option (max 3). Do not add a "do nothing" scenario; the app already has one.
 - Combine events in one scenario when they happen together (e.g. study abroad = relocate + study).
-- study: after it ends the person starts a job automatically; use income_change_pct only if the user states a salary premium.
-- income_change: part-time 60% -> -40. Job loss -> -100 with duration_months.
+- study: after it ends the person starts a job automatically. A salary premium the degree brings ("salary 15% higher afterwards") goes in the study event's income_change_pct. NEVER add a separate income_change for it.
+- income_change: part-time 60% -> -40. Job loss -> -100 with duration_months. Job loss WITH benefits or partial pay ("70% unemployment benefits", "keep 80% of my salary") -> the remaining share: 70% -> -30, 80% -> -20.
 - one_off: positive amount_chf = a cost, negative = money received.
 - buy_home: amount_chf = the home price; down_payment_pct and annual_rate_pct (mortgage) only if stated. Do NOT also add a one_off or take_loan for the same purchase.
 - Several things in ONE life (e.g. "do a master's now, lose my job at 27 and buy a flat at 30") = ONE scenario with several events, in any order.
 - "k" means thousand (25k = 25000), "m"/"million" = 1000000.
+- Amounts in another currency (EUR, GBP, USD...): do NOT convert. Leave the CHF field null and list it in "unsupported".
+- Write "name" and "label" in the SAME language the user wrote the question in. An English question gets English labels (default: English).
 - relocate.city must be one of: ${ctx.cities.join(', ')}; otherwise "abroad: <country>".
 - Put anything you cannot represent (taxes, specific stocks, career probabilities...) in "unsupported".
 - catalog_id: closest id from the catalog below, or null.
@@ -76,6 +95,7 @@ STRICT RULES
 - Say "in this simulation" / "under these assumptions". Never promise outcomes. Never give advice like "you should".
 - Mention the risk of running out of cash if it is above 0%.
 - If a break-even value is given, explain it in one sentence.
+- If a path buys a home: say that cash drops by the down payment while net worth does not. If chance_not_enough_cash_for_down_payment_pct is above 0, say clearly that the own money for the down payment is missing in that share of futures (a bank would not lend).
 - The person and data are fictional.
 Reply with JSON only (no prose, no code fences), matching this JSON Schema:
 ${JSON.stringify(EXPLAIN_JSON_SCHEMA)}`
@@ -111,6 +131,8 @@ async function callJson<T>(schema: z.ZodType<T>, jsonSchema: object, name: strin
   }
   throw new Error(`LLM output failed validation: ${lastErr}`)
 }
+
+const callSettings = (name: string) => ({ model: MODEL, base_url: BASE_URL, temperature: 0, response_format: JSON_MODE === 'json_schema' ? `json_schema "${name}" (strict)` : JSON_MODE, reasoning: REASONING })
 
 const stripFences = (s: string) => s.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
 
@@ -149,18 +171,28 @@ const server = createServer(async (req, res) => {
     if (url === '/api/health') {
       return send(res, 200, { ok: true, llm: client ? { base_url: BASE_URL, model: MODEL, json_mode: JSON_MODE, reasoning: REASONING } : null })
     }
-    if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA })
+    if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA, answer: ANSWER_JSON_SCHEMA })
     if (url === '/api/parse' && req.method === 'POST') {
       const ctx = (await readJson(req)) as ParseContext
-      const data = await callJson(ParseSchema, PARSE_JSON_SCHEMA, 'scenario', parseSystemPrompt(ctx), ctx.text)
+      const system = parseSystemPrompt(ctx)
+      const data = await callJson(ParseSchema, PARSE_JSON_SCHEMA, 'scenario', system, ctx.text)
       console.log(`[parse] ${Date.now() - t0}ms "${ctx.text.slice(0, 60)}" -> ${data.scenarios.length} scenario(s)`)
-      return send(res, 200, { ok: true, model: MODEL, data })
+      // `prompt` lets the UI show exactly what the AI was asked ("see the prompt")
+      return send(res, 200, { ok: true, model: MODEL, data, prompt: { system, user: ctx.text, settings: callSettings('scenario') }, ms: Date.now() - t0 })
     }
     if (url === '/api/explain' && req.method === 'POST') {
       const { facts } = await readJson(req)
-      const data = await callJson(ExplainSchema, EXPLAIN_JSON_SCHEMA, 'explanation', EXPLAIN_SYSTEM, `FACTS:\n${JSON.stringify(facts)}`)
+      const user = `FACTS:\n${JSON.stringify(facts)}`
+      const data = await callJson(ExplainSchema, EXPLAIN_JSON_SCHEMA, 'explanation', EXPLAIN_SYSTEM, user)
       console.log(`[explain] ${Date.now() - t0}ms`)
-      return send(res, 200, { ok: true, model: MODEL, data })
+      return send(res, 200, { ok: true, model: MODEL, data, prompt: { system: EXPLAIN_SYSTEM, user, settings: callSettings('explanation') }, ms: Date.now() - t0 })
+    }
+    if (url === '/api/answer' && req.method === 'POST') {
+      const { facts } = await readJson(req)
+      const user = `QUESTION: ${facts?.question ?? ''}\nFACTS:\n${JSON.stringify(facts)}`
+      const data = await callJson(AnswerSchema, ANSWER_JSON_SCHEMA, 'answer', ANSWER_SYSTEM, user)
+      console.log(`[answer] ${Date.now() - t0}ms`)
+      return send(res, 200, { ok: true, model: MODEL, data, prompt: { system: ANSWER_SYSTEM, user, settings: callSettings('answer') }, ms: Date.now() - t0 })
     }
     return send(res, 404, { ok: false, error: 'not found' })
   } catch (e) {

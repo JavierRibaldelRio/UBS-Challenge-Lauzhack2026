@@ -5,7 +5,9 @@ import { breakEven, drivers, verifyNumbers } from '../lib/analysis'
 import { makeEvent, medianLoanRate, presets, resolve } from '../lib/resolve'
 import { checks, runPath, simulate } from '../lib/sim'
 import { offlineParse } from '../lib/fallback'
-import type { Params, Profile, ScenarioSpec } from '../lib/types'
+import { verdict } from '../lib/answer'
+import { suggestQuestions } from '../lib/suggest'
+import type { Params, Profile, ScenarioSpec, TwinEvent } from '../lib/types'
 
 const params: Params = JSON.parse(readFileSync('src/model/params.json', 'utf8'))
 const profiles: Profile[] = JSON.parse(readFileSync('src/model/profiles.json', 'utf8'))
@@ -62,6 +64,23 @@ describe('scenario logic', () => {
     expect(home.rent[12]).toBe(0)
     for (const c of checks(home, params, alexia)) expect(c.ok, c.name).toBe(true)
   })
+  it('down payment check: a broke student cannot pay it, a worker can', () => {
+    const flat = (events: TwinEvent[]) => simulate(plan(alexia, { name: 'h', catalog_id: null, events }), params, alexia)
+    const broke = flat([makeEvent({ type: 'buy_home', label: 'h', start_month: 60, amount_chf: 300000 })])
+    expect(broke.homeBuys[0].down).toBe(60000)
+    expect(broke.homeBuys[0].shortShare).toBe(1)
+    const worker = flat([makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_home', label: 'h', start_month: 96, amount_chf: 600000 })])
+    expect(worker.homeBuys[0].shortShare).toBe(0)
+    // cash drops by ~the down payment that month, net worth does not
+    expect(worker.cash[95].p50 - worker.cash[96].p50).toBeGreaterThan(100000)
+    expect(Math.abs(worker.nw[96].p50 - worker.nw[95].p50)).toBeLessThan(10000)
+  })
+  it('"Can I afford a flat" is NO when the down payment is missing', () => {
+    const cp2 = (spec: ScenarioSpec) => { const pl = plan(alexia, spec); return { id: spec.name, name: spec.name, spec, overrides: {}, plan: pl, result: simulate(pl, params, alexia) } }
+    const v = verdict('Can I afford a flat for 300k at 25?', cp2({ name: 'Flat', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'h', start_month: 60, amount_chf: 300000 })] }), cp2(quo), alexia, params, 120, rate)
+    expect(v.kind).toBe('afford')
+    expect(v.probability!.p).toBe(0)
+  })
   it('buying a home without a price does nothing and warns', () => {
     const h = plan(alexia, { name: 'h', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'h' })] })
     expect(h.warnings.length).toBe(1)
@@ -97,10 +116,87 @@ describe('scenario logic', () => {
   })
 })
 
+describe('answer confidence (computed, not AI)', () => {
+  const cp = (p: Profile, spec: ScenarioSpec, o = {}) => {
+    const pl = plan(p, spec, o)
+    return { id: spec.name, name: spec.name, spec, overrides: o, plan: pl, result: simulate(pl, params, p) }
+  }
+  const ps = presets(alexia, params)
+  const work = ps.find((p) => p.id === 'work')!.spec
+  const master = ps.find((p) => p.id === 'master')!.spec
+  it('clear-cut comparison (work vs doing nothing) is HIGH', () => {
+    const v = verdict('q', cp(alexia, work), cp(alexia, quo), alexia, params, 120, rate)
+    expect(v.leader.name).toBe('Start working')
+    expect(v.pairedShare).toBe(1)
+    expect(v.confidence).toBe('high')
+  })
+  it('master vs work depends on an unknown premium and peer salaries -> not HIGH', () => {
+    const v = verdict('q', cp(alexia, master), cp(alexia, work), alexia, params, 120, rate)
+    expect(v.leader.name).toBe('Start working')
+    expect(v.unknowns.length).toBeGreaterThan(0)
+    expect(v.confidence).not.toBe('high')
+    expect(v.flip!.pct).toBeGreaterThan(20)
+  })
+  it('a near tie is LOW (premium set exactly at break-even)', () => {
+    const v = verdict('q', cp(alexia, master, { 'e0.premium': 23.6 }), cp(alexia, work), alexia, params, 120, rate)
+    expect(v.pairedShare).toBeGreaterThan(0.05)
+    expect(v.pairedShare).toBeLessThan(0.95)
+    expect(v.confidence).toBe('low')
+  })
+  it('goal question: answered by the goal probability (0% -> clear-cut "no" -> high)', () => {
+    const inv = { name: 'Invest 100', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 100 })] }
+    const v = verdict('Can I reach my emergency savings goal by 2029 if I invest 100 a month?', cp(alexia, inv), cp(alexia, quo), alexia, params, 120, rate)
+    expect(v.kind).toBe('goal')
+    expect(v.probability!.p).toBe(0)
+    expect(v.confidence).toBe('high')
+  })
+  it('investing at 0% return vs nothing: counted as a tie, not as "30% ends higher"', () => {
+    const inv = { name: 'Invest 100', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 100 })] }
+    const v = verdict('What if I invest 100 a month?', cp(alexia, inv), cp(alexia, quo), alexia, params, 120, rate)
+    expect(v.ties).toBe(1)
+    expect(v.reasons[0]).toMatch(/practically the same/)
+  })
+  it('afford question: answered by the chance that cash stays above zero', () => {
+    const v = verdict('Can I afford to start working now?', cp(alexia, work), cp(alexia, quo), alexia, params, 120, rate)
+    expect(v.kind).toBe('afford')
+    expect(v.probability!.p).toBe(1)
+  })
+  it('identical paths -> nobody "ends higher"', () => {
+    const v = verdict('q', cp(alexia, work), cp(alexia, work), alexia, params, 120, rate)
+    expect(v.pairedShare).toBe(0)
+  })
+})
+
+describe('suggested questions fit the person', () => {
+  it('no "start working" or master for retirees; student gets study/work questions', () => {
+    const retired = profiles.find((p) => p.status === 'retired')!
+    for (const q of suggestQuestions(retired, params)) expect(q.toLowerCase()).not.toMatch(/master|start working/)
+    expect(suggestQuestions(alexia, params).join(' ')).toMatch(/Master's/)
+  })
+  it('every profile gets 1-3 suggestions', () => {
+    for (const p of profiles) {
+      const s = suggestQuestions(p, params)
+      expect(s.length).toBeGreaterThan(0)
+      expect(s.length).toBeLessThanOrEqual(3)
+    }
+  })
+})
+
 describe('LLM number verifier', () => {
   const facts = { a: 254300, b: 35, c: [12000, 18000] }
   it('accepts numbers present in facts (incl. k)', () => expect(verifyNumbers('CHF 254k, 35% chance, 12,000 to 18’000', facts).unmatched).toEqual([]))
   it('flags invented numbers', () => expect(verifyNumbers('a 42% chance', facts).unmatched).toEqual(['42%']))
+  it('understands French / Swiss number formats', () => {
+    expect(verifyNumbers('environ CHF 254 300, soit 254\u202f300 ou 254’300', facts).unmatched).toEqual([])
+    expect(verifyNumbers('un écart de 12 000 CHF', facts).unmatched).toEqual([])
+  })
+  it('a word starting with k/M after a number is not a unit ("at 28 keeps")', () => {
+    expect(verifyNumbers('buying the flat at 28 keeps cash above zero, CHF 254k', { age: 28, a: 254300 }).unmatched).toEqual([])
+    expect(verifyNumbers('35% and 254 k', facts).unmatched).toEqual([])
+  })
+  it('numbers the user typed in the question count as known', () => {
+    expect(verifyNumbers('your 50k inheritance', { question: 'I inherit 50k at 27' }).unmatched).toEqual([])
+  })
 })
 
 it('prints Alexia summary', () => {

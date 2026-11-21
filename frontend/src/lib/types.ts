@@ -39,6 +39,7 @@ export type TwinEvent = {
 export type ScenarioSpec = { name: string; catalog_id: string | null; events: TwinEvent[] }
 export type ParseResult = { scenarios: ScenarioSpec[]; horizon_years: number | null; unsupported: string[]; note: string | null }
 export type ExplainResult = { headline: string; explanation: string; caveat: string }
+export type AnswerResult = { short_answer: string; reasoning: string; confidence_level: 'high' | 'medium' | 'low'; confidence_sentence: string }
 /** exactly what was sent to the LLM (returned by the backend so the UI can show it) */
 export type PromptInfo = { system: string; user: string; settings: Record<string, unknown> }
 /** where a path came from (shown in "how this path was made") */
@@ -78,7 +79,7 @@ export type Regression = {
   n_profiles: number
 }
 
-type Median = { median: number; n: number }
+type Median = { median: number; p10?: number; p90?: number; n: number }
 
 export type Params = {
   version: number
@@ -104,6 +105,9 @@ export type Params = {
     coverage_80_year_end: number
     coverage_50_year_end: number
     coverage_80_all_months: number
+    calibration_central?: { said: number; real: number }[]
+    calibration_ends_higher?: { said: string; pairs: number; avg_said: number; real: number }[]
+    calibration_negative_cash?: { said: string; profiles: number; avg_said: number; real: number }[]
     median_abs_error_year_end_chf: number
     median_abs_error_naive_chf: number
     brier_negative_cash_model: number
@@ -123,4 +127,6 @@ export type Assumption = {
   unit: string
   source: Source
   note: string
+  /** peer range from the data (10th-90th percentile) and which direction is good for the person */
+  range?: { lo: number; hi: number; good: 'higher' | 'lower' }
 }

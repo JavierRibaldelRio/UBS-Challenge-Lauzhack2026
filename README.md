@@ -123,6 +123,7 @@ A twin you can **talk to**, whose every number is **traceable**:
 4. A **Monte Carlo engine** (exact accounting formulas + randomness *learned* from the 28,800-month ledger) simulates 500 futures per path.
 5. You see bands, risk of running out of cash, goal chances, **what matters most**, and a **break-even** ("the master pays off only if salary is +24%").
 6. An LLM writes a plain-English paragraph from the computed facts only — and the app **checks every number** in it against the engine.
+7. A question gets a **direct answer** ("No — 0% chance of reaching your goal"), with a **confidence level computed by the simulator** (paired futures + real peer ranges + unknowns), backed by a test on ~20,000 pairs of real people.
 
 ---
 
@@ -185,8 +186,8 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 29 validation tests (accounting identities, edge cases, home purchase, number checker…)
-cd frontend && pnpm test:live                # 13 tests with the REAL LLM (backend must be running with a key)
+cd frontend && pnpm test                     # 41 validation tests (accounting identities, edge cases, home purchase, number checker…)
+cd frontend && pnpm test:live                # 23 tests with the REAL LLM (incl. 10 very complex sentences + answers) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 cd ml && uv sync --frozen && uv run train.py # re-train from pre_docs/Data -> rewrites frontend/src/model/*.json (~5 s, deterministic)
 curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow
@@ -297,10 +298,12 @@ mise.toml          pinned toolchain
 
 ### 2.6 Suggested 3-minute demo
 
+**The full script, with exact sentences, timings, a pre-demo checklist, fixes for problems, and judge FAQs, is in [demo.txt](demo.txt).** Short version:
+
 1. *(20 s)* Open the page. The big sentence says it: *"If nothing changes, Alexia's cash runs out at age 20."* The black dots on the chart are her **real** bank balance from the data, and our simulation sits right on them.
 2. *(40 s)* Click **▶ Demo**: *Start working* vs *Master's* vs *Move abroad* appear as cards and lines. Read the story card aloud: plain English, and "✓ all 13 numbers checked against the model".
 3. *(40 s)* Click the *Master's* card → **The numbers behind it**: tuition **from data** (her row in scenario-assumptions.csv), salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 24% higher". Set the premium to 30% → everything recomputes instantly.
-4. *(40 s)* Type: *"Work now, lose my job for 6 months at 25, then buy a flat for 600k at 28"* → one new path with 3 events. Toggle **Net worth / Cash**: buying the flat drops cash by the down payment, but net worth stays flat.
+4. *(40 s)* Click the example *"Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28"* → one new path with 3 events, plus an **answer card** with a direct answer and a **confidence level computed by the simulator** (here "low": 4% more salary would flip it).
 5. *(40 s)* Open **Can you trust this?**: maths checks 5/5; trained on 2025 and tested on 2026, the "8 in 10" range caught 78.5% of real results. "Don't predict the future, make it explorable."
 
 ### 2.7 Limitations (say them before the judges do)

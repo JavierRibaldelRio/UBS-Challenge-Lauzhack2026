@@ -79,6 +79,23 @@ We do **not** train a model to predict "what if I do a master's?". The data has 
 - typical error CHF 2,281, vs CHF 2,445 for a simple average
 - better at predicting cash crunches (Brier 0.0012 vs 0.0025)
 
+**Calibration curve:** does "we said X%" match reality at every level, not just at 80%?
+
+| we said | 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 90% |
+|---|---|---|---|---|---|---|---|---|---|
+| really happened | 9.3% | 18.7% | 28.3% | 37.6% | 49.9% | 59.0% | 68.8% | 78.5% | 87.9% |
+
+**"A ends higher than B" statements:** the answers say things like "in X% of futures, A ends higher". We tested exactly that kind of sentence on **19,980 random pairs of real people** (2026):
+
+| we said | 0.2% | 11% | 35% | 66% | 88% | 99.8% |
+|---|---|---|---|---|---|---|
+| really happened | 0.1% | 11% | 34% | 67% | 92% | 99.9% |
+
+So when we say "≥ 95%", the data says it was true 99.9% of the time. That is why a **high-confidence** answer needs at least 95%.
+The "cash goes below zero" probabilities are calibrated too (said <5% → 0% happened, said >95% → 100% happened).
+
+Training also saves the **peer range** for every default: e.g. employed people aged 20–24 earn CHF 4,963 (10th percentile) to CHF 10,519 (90th). The answer's confidence uses these ranges (see §5b).
+
 These numbers are saved in `params.json` and shown in the app under *Can you trust this?*.
 
 ### Outputs
@@ -156,7 +173,10 @@ Input: the person + a list of **events** (from the LLM, a preset button, or the 
 | `invest` | monthly amount and/or lump sum moved into investments | 0 (**unknown**) |
 | `market_shock` | investments fall by X% | 30% (**assumption**) |
 | `take_loan` | cash now, monthly repayments | median rate of the 283 loans (**data**); 5-year term (**assumption**) |
-| `buy_home` | own money (down payment) leaves cash, a mortgage is paid to the seller, the home is added to net worth, rent stops, upkeep starts. Interest-only mortgage | price: **unknown** (must be set); down payment 20%, mortgage 2%, upkeep 1%/yr (**assumption**) |
+| `buy_home` | own money (down payment) leaves cash, a mortgage is paid to the seller, the home is added to net worth, rent stops, upkeep starts. Interest-only mortgage | price: **unknown** (must be set; without a price nothing happens and the card warns "needs a price"); down payment 20%, mortgage 2%, upkeep 1%/yr (**assumption**) |
+
+**Buying a home: why cash drops but net worth doesn't.** On the purchase month, cash falls by the down payment (e.g. 120k for a 600k flat). Net worth stays flat, because that money became part of a home worth 600k and the mortgage covers the other 480k. In the net worth view the selected path's **cash is drawn as a dotted line**, a 🏠 marker shows the month, and a note under the chart says it in words.
+**Down-payment check:** a down payment must come from money you *have* (banks require own funds). In every one of the 500 futures the engine checks cash just before the purchase (`SimResult.homeBuys`). The card shows "🏠 down payment OK", "⚠ down payment short in X%" or "⚠ can't pay the 60k down payment at 25". "Can I afford a flat…?" questions answer **no** if the own money is missing (tested: a student with no job, flat 300k at 25 → 0%, "No").
 
 **One path can hold many events.** "Do a master's now, lose my job at 25 and buy a flat at 28" becomes **one path with 3 events** (one line on the chart). "Master's **or** work?" becomes **two paths** (two lines). One question can create 1–3 paths.
 
@@ -192,6 +212,57 @@ After the events, the resolver applies the **learned spending response**. When i
 - **Number check** (`verifyNumbers`): takes every number in the AI paragraph (understands "254k", "12,000", "35%") and looks for it in the facts. The UI shows "✓ all 13 numbers checked against the model", or lists the ones it couldn't find.
 - **Template** (`templateExplanation`): the paragraph used when the AI is offline. It also appears instantly while the AI is writing.
 
+- **Same random months, compared one by one:** every path uses the same 500 random futures, so "in 98% of futures A ends higher" compares future #1 of A with future #1 of B, and so on.
+
+---
+
+## 5b. Answering the question, and how confident to be (`frontend/src/lib/answer.ts`)
+
+The explanation card describes the chart in general. When someone **asks a question**, they also get a separate **answer card** above the outcome cards. It holds a direct answer (*"No. … the chance is 0%"*, *"Starting work ends higher…"*) plus a **confidence level computed by the app, never by the AI**.
+
+**Which paths are compared:** the paths the question created. One new path is compared with the baseline; several are compared with each other (the two that end highest).
+
+**Three kinds of question**, detected from the words:
+
+| kind | example | answered by | confidence comes from |
+|---|---|---|---|
+| goal | "Can I reach my emergency savings goal by 2029 if…?" | the share of futures that reach the goal (from `synthetic-goals.csv`) | how far that share is from a coin flip: ≤5% or ≥95% is clear-cut |
+| afford | "Can I afford a flat for 600k at 28…?" | the share of futures where cash never goes below zero | same |
+| compare | anything else ("A or B?", "what if…?") | which path ends higher | the three checks below |
+
+**The three checks for "compare":**
+1. **Luck:** in how many of the 500 paired futures does the leader end higher? Differences below max(CHF 1,000, 0.2%) count as "the same" (e.g. investing at 0% return = a tie, not a win). **Backed by data** (the table in §2: ≥95% statements were right 99.9% of the time).
+2. **Peer range from the data:** re-run with the leader's data-based numbers (salary, rent) at the **unlucky end of real peers** (10th/90th percentile) and the other path's at the **lucky end**. Does the leader still win?
+3. **Unknowns:** does the result depend on a number nobody knows (degree premium, rent abroad)? Only unknowns that **actually change the result** count. We test each one; an unknown overridden by another event doesn't matter. If it matters: how far would income need to move to flip the result (break-even)?
+
+**Rules:**
+- **High:** luck ≥ 95% AND the peer test holds AND no unknown that matters (unless break-even > 50%).
+- **Medium:** luck ≥ 80% AND (peer test holds OR break-even ≥ 20%).
+- **Low:** everything else (e.g. a salary change of 9% would flip it).
+
+The card lists the reasons in plain words.
+
+**The AI's job:** it gets `answerFacts()` (numbers + confidence + reasons) and must (a) answer the question as asked, in the user's language, (b) use only those numbers, (c) copy the confidence level into a `confidence_level` field. The app checks the numbers (✓ N/N) and warns if the level differs.
+
+**Tested live** (`pnpm test:live`, "complex + answer"): nine hard sentences. They include two paths with nine events and exact mortgage terms; a loan + master + "salary 15% higher afterwards"; "70% unemployment benefits" → −30%; an inheritance where half is invested; French; GBP (not converted, flagged); a long rambling sentence; a goal question; an afford question. All pass, every answer has 100% of its numbers verified, and the AI copied the computed confidence every time.
+
+---
+
+## 5c. Why Monte Carlo — and what the challenge docs say
+
+The UBS docs (`pre_docs/docs/ai-and-technology.md` §9, `digital-twin-concepts.md`) are explicit: *"Monte Carlo… is not the definition of a Financial Twin… not inherently equivalent to forecasting."* A twin is defined by capabilities (C01–C20): representation, **scenario creation**, **counterfactual comparison**, **constraints**, **uncertainty exploration (C10)**, **goal tracking (C11)**, **validation (C15)**, **transparency/provenance (C16–C17)**, **state updating (C03/C14)**.
+
+What that means for us:
+- **Monte Carlo only covers one kind of uncertainty: normal month-to-month luck.** We keep it because it is the honest way to get ranges, cash-crunch risk and goal chances from the *learned* behaviour, and it is **calibrated against real data** (§2). Here it is a tool, not the product.
+- **The uncertainty that decides "master's or work?" is about the assumptions**, not about luck. The docs point to sensitivity analysis, robust decisions, Bayesian parameter uncertainty and causal reasoning. We cover it with:
+  - **sensitivity** ("what matters most" bars, §5);
+  - **break-even / goal-seeking**: a 1-D optimization (docs §10, §30) that turns an unknown into a question you can answer ("does a master's raise pay 24%?");
+  - **robustness against real peer ranges** (answer confidence, §5b);
+  - **parameter uncertainty**: the personal spending level is sampled with its standard error, a simple Bayesian-style step (docs §20);
+  - **explicit unknowns** (red "unknown" tags) instead of silent guesses.
+- **Causal (docs §19, P(Y|X) ≠ P(Y|do(X))):** our decisions act on an explicit **structural model** (income, rent, costs, debt). "Do a master's" is a *do()*-operation on the plan, not a correlation from the data. The one correlational piece is the learned *spending response* regression; it is labelled `learned`, has CV R² 0.05, and is small.
+- **Not built yet (honest next steps):** **state updating** (C03/C14: add a new month of real data → re-calibrate the person), and **multi-stage planning / optimization** ("what's the latest age I can buy a flat and keep cash > 0?"). Both fit the current engine.
+
 ---
 
 ## 6. The LLM and the backend (`backend/`)
@@ -205,6 +276,9 @@ A ~170-line Node server (`server.ts`) with no framework. It holds the API key an
 | `GET /api/schema` | – | the exact JSON Schemas we demand |
 | `POST /api/parse` | question + person summary + city list + scenario catalog | `{ scenarios[], horizon_years, unsupported[], note }` |
 | `POST /api/explain` | `{ facts }` | `{ headline, explanation, caveat }` |
+| `POST /api/answer` | `{ facts }` from `answerFacts()` | `{ short_answer, reasoning, confidence_level, confidence_sentence }` |
+
+Both POST answers also return `prompt: { system, user, settings }` (exactly what was sent to the AI) and `ms` (time taken). The UI shows these in the **"see the prompt"** window.
 
 The frontend calls `/api/...` on port 5173, and Vite forwards it to port 8000, so there are never CORS problems.
 
@@ -249,15 +323,16 @@ Restart the backend after editing `.env`.
 ### What the user sees, top to bottom (`App.tsx`)
 1. **Person line:** avatar, name, age, city, savings, income, rent, goals. A dropdown on the right picks any of the 1,200 fictional people.
 2. **The hook:** one big sentence about the person's situation today, e.g. *"If nothing changes, Alexia's cash runs out at age 20."*
-3. **The question box:** type anything and press *Explore*. Below it:
-   - **quick buttons** (`+ Master's degree`…) add a path instantly, without AI
-   - **example questions** (in quotes) go through the AI
-4. **Outcome cards:** one per path. A big number (net worth at the end), the difference vs the baseline, "cash runs out at…" or "cash stays positive", and goals reached. Clicking a card selects it; the card colour is its chart line. "compare others to this" makes it the baseline. × removes it.
+3. **The question box:** type anything and press *Explore*. A question creates paths **and** an **answer card** (§5b) above the outcome cards, which you can close with ✕. Below the box are two labelled rows:
+   - **"Add a ready-made path · instant, no AI"**: the `+` buttons. Each one adds **one new path** with a fixed recipe (e.g. *+ Master's degree* = study for 2 years, then a job). Every missing number is filled from the data. Hover a button to read its recipe. They never call the AI, so they always work.
+   - **"Or try a question · the AI turns it into a path"**: example questions (in quotes). Clicking one is the same as typing it. They are **made for the person** (`lib/suggest.ts`, rules, no AI): a student gets "master's or work?", a retiree gets "markets fall 30%?" or "a medical bill at 72?". The goal question uses what is still **missing** to reach the goal (target − savings). The `+` buttons also adapt: no "master's" from age 40, no "start working" for retirees or people 60+, no "lose income" for retirees.
+4. **Outcome cards:** one per path. Under the name is one line saying what the path does (e.g. "job now · no income for 6 months at 25 · buy a home for 600k at 28"). Then a big number (net worth at the end), the difference vs the baseline, "cash runs out at…" or "cash stays positive", and goals reached. Clicking a card selects it; the card colour is its chart line. "compare others to this" makes it the baseline. × removes it.
 5. **Chart:** median line per path; shaded range only for the selected path (keeps it calm). Years: 3–30.
    - **Net worth vs cash:** *cash* = money in the bank. *Net worth* = cash + investments + home − debts. For someone with only a bank account (like Alexia) they are the **same**, so the app shows one chart called "Money" and no toggle. The toggle appears as soon as any path has investments, a home or a loan. Example: buying a flat makes cash drop by the down payment while net worth stays flat.
    - The **black dots** are the real bank balance from the data (first 24 months). They appear in the cash view, or in the single "Money" view.
+   - **🎯 markers = the person's goals** from `synthetic-goals.csv` (each has an amount and a date, e.g. emergency savings CHF 12,800 by Dec 2029). The marker sits at that amount and date, so it looks "low" on a chart that goes to 750k. Under the chart, a **goals strip** lists each goal with the % of futures that reach it, per path (path colours). A goal counts as reached if **cash + investments** are above the target at its date. A home doesn't count, because you can't spend it.
 6. **The story:** the AI paragraph, a highlighted **break-even** line, the main caveat, and "✓ all N numbers checked". The break-even reads "catches up only if income is X% higher" when a path is behind the baseline, or "stays ahead even if income were X% lower" when it is ahead. If you change things quickly, only the newest explanation is shown (older answers are dropped).
-7. **The numbers behind [path]** (folded): every number with its source label. Click a value to change it (instant recompute); ↺ resets it. Below that, the *what matters most* bars.
+7. **The numbers behind [path]** (folded). The first line says what the path does and **who made it**: the data, a `+` button, the AI from your question, or the offline rules. **"see the prompt" / "see how"** opens a window with the steps: your question → the exact instructions sent to the AI (folded, with a copy button) → the AI's raw JSON → the recipe → "the app filled the gaps". The explanation card has the same link for the paragraph. Below that line: every number with its source label. Click a value to change it (instant recompute); ↺ resets it. Below that, the *what matters most* bars.
 8. **Can you trust this?** (folded): the summary shows ✓ accounting, ✓ backtest, ✓ AI numbers. Opening it shows details in 4 plain blocks.
 
 **Demo button** (top right, or open `/?demo`): loads Alexia with *Start working* (baseline), *Master's degree* and *Move abroad*. This is the challenge's own example.
@@ -270,6 +345,10 @@ Restart the backend after editing `.env`.
 | `components/Chart.tsx` | chart (Recharts) |
 | `components/Details.tsx` | assumption list (editable), source chips, driver bars |
 | `components/Trust.tsx` | trust summary and details |
+| `components/HowMade.tsx` | the "see the prompt / see how" window (native `<dialog>`) |
+| `components/Answer.tsx` | the answer card (answer + computed confidence + reasons) |
+| `lib/answer.ts` | verdict + confidence (§5b) and the facts the answer-AI may use |
+| `lib/suggest.ts` | example questions made for each person |
 | `index.css` | all styles. Colours are CSS variables at the top; dark mode is automatic |
 | `lib/api.ts` | calls to the backend, with timeout and cache |
 | `lib/fallback.ts` | offline keyword parser |
@@ -288,8 +367,8 @@ Restart the backend after editing `.env`.
 
 | command | what it checks | needs |
 |---|---|---|
-| `cd frontend && pnpm test` | 29 tests: accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
-| `cd frontend && pnpm test:live` | 13 tests with the **real LLM**: 11 questions parsed and checked field by field, then a full explanation with every number verified | backend running with a key |
+| `cd frontend && pnpm test` | 41 tests: down-payment check (broke student can't pay, worker can; "can I afford" = no), answer confidence (clear case = high, unknown premium = not high, near-tie = low, goal 0% = high, 0%-return investing = tie, afford questions), suggestions fit every one of the 1,200 people, French/Swiss number formats, accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
+| `cd frontend && pnpm test:live` | 23 tests with the **real LLM**: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
 | `cd backend && pnpm typecheck` | backend types | nothing |
 | `cd frontend && pnpm build` | frontend types and production build | nothing |
 | `cd ml && uv run train.py` | re-trains and prints the data checks and backtest | uv |
@@ -304,6 +383,8 @@ Restart the backend after editing `.env`.
 - **Port busy:** another dev server is running. Close it (or change `PORT` in `.env` and the proxy target in `frontend/vite.config.ts`).
 - **The LLM gives bad JSON:** set `LLM_JSON_MODE=json_object` and restart.
 - **You changed `train.py`:** rerun it; the frontend reloads by itself.
+- **The chart is blank:** never add `max-width` to `.recharts-surface` (Firefox renders the SVG empty). The chart sits in `.chart-box`, which already prevents overflow.
+- **Phone layout:** checked at 390 and 360 px in every state (demo, answer, all sections open, prompt window): no sideways scroll, nothing clipped.
 - **Security:** deliberately ignored for the demo. CORS is open, the server listens on all network interfaces, and there's no auth. The key stays on the backend, never in the browser.
 
 ---

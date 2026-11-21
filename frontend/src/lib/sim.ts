@@ -37,6 +37,10 @@ export type SimResult = {
   firstNegMonth: number | null // median month cash first goes negative (if >= 50% of paths do)
   goals: GoalResult[]
   meanPath: { cash: number[]; nw: number[] }
+  /** end net worth of every simulated future (same seed for every path -> futures can be compared one by one) */
+  endNWPaths: Float64Array
+  /** home purchases: can the down payment actually be paid from cash in each future? */
+  homeBuys: { month: number; down: number; cashBeforeP50: number; shortShare: number }[]
 }
 
 type PathOut = { cash: Float64Array; nw: Float64Array; liquid: Float64Array }
@@ -157,6 +161,18 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
     return { p10: quantile(s, 0.1), p50: quantile(s, 0.5), p90: quantile(s, 0.9) }
   }
   firstNeg.sort((a, b) => a - b)
+  // a down payment must come from money you HAVE (banks require own funds): check cash just before the purchase
+  const homeBuys: SimResult['homeBuys'] = []
+  plan.homeDown.forEach((down, m) => {
+    if (down <= 0) return
+    let short = 0
+    const before = new Float64Array(paths)
+    for (let p = 0; p < paths; p++) {
+      before[p] = m === 0 ? plan.startCash : cashAll[m - 1][p]
+      if (before[p] < down) short++
+    }
+    homeBuys.push({ month: m, down, cashBeforeP50: quantile(before.sort(), 0.5), shortShare: short / paths })
+  })
   const det = runPath(plan, params, null, knobs)
   return {
     nw: nwAll.map(band),
@@ -173,6 +189,8 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
       return { name: g.name, target: g.target, date: g.date, month: m, prob: inside ? goalHits[i] / paths : null, medianLiquid: inside ? band(goalLiquid[i]).p50 : null }
     }),
     meanPath: { cash: Array.from(det.cash), nw: Array.from(det.nw) },
+    endNWPaths: endNW,
+    homeBuys,
   }
 }
 

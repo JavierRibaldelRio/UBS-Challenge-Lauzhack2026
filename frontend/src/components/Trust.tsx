@@ -40,6 +40,32 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         <div className="check">
           <span className="ok">✓</span> Typical miss {chf(bt.median_abs_error_year_end_chf)}, vs {chf(bt.median_abs_error_naive_chf)} for a simple average.
         </div>
+        {bt.calibration_ends_higher && (
+          <>
+            <p className="small" style={{ marginTop: 8 }}>
+              <b>When we say “A ends higher than B in X% of futures”, is that true?</b> Tested on {bt.calibration_ends_higher.reduce((a, x) => a + x.pairs, 0).toLocaleString()} pairs of real people (2026):
+            </p>
+            <table className="calib">
+              <thead>
+                <tr>
+                  <th>we said</th>
+                  {bt.calibration_ends_higher.map((c) => (
+                    <th key={c.said}>{Math.round(c.avg_said * 100)}%</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>it happened</td>
+                  {bt.calibration_ends_higher.map((c) => (
+                    <td key={c.said}>{Math.round(c.real * 1000) / 10}%</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+            <p className="muted small">That is why a “high confidence” answer needs at least 95%: in the data, those statements were right 99.9% of the time. (Decisions themselves are not in the data, so the confidence also checks peer ranges and unknown numbers.)</p>
+          </>
+        )}
         <div className="check">
           <span className="ok">✓</span> Better at spotting cash crunches than a simple average (score {bt.brier_negative_cash_model.toFixed(4)} vs {bt.brier_negative_cash_naive.toFixed(4)}, lower is better).
         </div>

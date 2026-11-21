@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ExplainResult, Origin, PromptInfo, ScenarioSpec } from '../lib/types'
+import type { AnswerResult, ExplainResult, Origin, PromptInfo, ScenarioSpec } from '../lib/types'
 
 export type HowMadeContent =
   | { what: 'path'; name: string; origin: Origin; spec: ScenarioSpec }
-  | { what: 'explanation'; prompt?: PromptInfo; answer: ExplainResult; model?: string; ms?: number; offline: boolean; verify?: { total: number; unmatched: string[] } }
+  | { what: 'explanation' | 'answer'; prompt?: PromptInfo; answer: ExplainResult | AnswerResult; model?: string; ms?: number; offline: boolean; verify?: { total: number; unmatched: string[] } }
 
 /** A simple window that shows exactly how a path (or the explanation) was produced: question, prompt, raw answer. */
 export function HowMade({ content, onClose }: { content: HowMadeContent | null; onClose: () => void }) {
@@ -19,7 +19,7 @@ export function HowMade({ content, onClose }: { content: HowMadeContent | null; 
       {content && (
         <div className="howmade-body">
           <div className="howmade-head">
-            <h2>{content.what === 'path' ? `How “${content.name}” was made` : 'How the explanation was written'}</h2>
+            <h2>{content.what === 'path' ? `How “${content.name}” was made` : content.what === 'answer' ? 'How the answer was made' : 'How the explanation was written'}</h2>
             <button className="icon" onClick={onClose} title="close">
               ✕
             </button>
@@ -84,7 +84,7 @@ function PathStory({ c }: { c: Extract<HowMadeContent, { what: 'path' }> }) {
   )
 }
 
-function ExplainStory({ c }: { c: Extract<HowMadeContent, { what: 'explanation' }> }) {
+function ExplainStory({ c }: { c: Exclude<HowMadeContent, { what: 'path' }> }) {
   if (c.offline)
     return (
       <ol className="steps">
@@ -96,7 +96,9 @@ function ExplainStory({ c }: { c: Extract<HowMadeContent, { what: 'explanation' 
   return (
     <ol className="steps">
       <li>
-        <b>The app computed the results first</b> (500 simulated futures per path). It packed only the final numbers into a small “facts” list.
+        <b>The app computed the results first</b> (500 simulated futures per path).{' '}
+        {c.what === 'answer' && 'It also computed which path ends higher and how confident that is (paired futures, peer ranges from the data, unknown inputs). '}
+        It packed only the final numbers into a small “facts” list.
       </li>
       <li>
         <b>We sent the facts to the AI</b> ({c.model}

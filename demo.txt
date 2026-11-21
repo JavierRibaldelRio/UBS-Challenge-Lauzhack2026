@@ -73,20 +73,23 @@ B. THE SCRIPT (3:00)
 - SAY: "If you believe a master's adds 30 percent, it now wins by about
   50,000 francs. Everything recalculates instantly."
 
-[1:50 – 2:30]  JUST ASK
+[1:50 – 2:30]  JUST ASK, AND GET AN ANSWER
 - DO: scroll up. Click the example question
-  "Work now, lose my job for 6 months at 25, then buy a flat for 600k at 28".
-  (Or type it into the box and press Explore.)
-- THEY SEE: after 1–3 seconds a new card: "job now · no income for 6 months
-  at 25 · buy a home for 600k at 28", about CHF 689k.
-- SAY: "You can also just ask in plain words. One sentence became one path
-  with three life events. The AI only described the events. Every amount it
-  was not told, like the mortgage rate, is filled in by the app and labelled
-  'assumption' or 'unknown'. With one click you can see the exact prompt."
-- DO: in the chart header click "Cash", then "Net worth".
-- SAY: "Here is cash versus net worth. At 28 she buys the flat: her cash drops
-  by the 120,000 down payment, but her net worth does not. The money became
-  part of a home."
+  "Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28".
+  (The example questions are made for each person. For Alexia this one is there.)
+- THEY SEE (after 2–4 seconds):
+  - At the top, an ANSWER card: "Start working" ends higher, by about CHF 41k,
+    with "Low confidence" and its reasons.
+  - A new card: "job now · no income for 6 months at 25 · buy a home for 300k
+    at 28", about CHF 705k.
+- SAY: "You can just ask in plain words. One sentence became one path with
+  three life events. The AI only described them. Every amount it was not told
+  is filled in by the app and labelled. You get a direct answer, and the
+  confidence is computed by the simulator, not by the AI. Here it says LOW,
+  because if her salary were just 4 percent higher, the result would flip.
+  It tells you when it is not sure."
+- OPTIONAL (only if time): click "Cash", then "Net worth". At 28 cash drops by
+  the 60,000 down payment, but net worth does not: the money became a home.
 
 [2:30 – 3:00]  WHY YOU CAN TRUST IT
 - DO: scroll down, click "Can you trust this?".
@@ -97,7 +100,7 @@ B. THE SCRIPT (3:00)
   verified."
 - SAY: "We don't predict the future. We make it explorable. Thank you."
 
-IF YOU ARE RUNNING LATE: skip the Cash/Net worth toggle in [1:50 – 2:30].
+IF YOU ARE RUNNING LATE: skip the optional Cash/Net worth toggle in [1:50 – 2:30].
 
 
 ---------------------------------------------------------------------
@@ -141,7 +144,7 @@ A: A decision is a list of life events (job, study, move, home...). The app
    money out.
 
 Q: How did you verify the calculations?
-A: Four ways. 29 automated tests, including UBS's own validation list (zero
+A: Four ways. 41 automated tests (plus 23 tests against the real AI), including UBS's own validation list (zero
    income, higher tuition, loan payoff, transfers). Live checks on screen
    (cash adds up, net worth = assets − debts, debt never negative, same seed =
    same result). A backtest on real 2026 data. And we checked UBS's ledger
@@ -164,6 +167,50 @@ Q: Why didn't you train a model to predict outcomes directly?
 A: Nobody in the data does a master's or moves abroad, so no model can learn
    "what if" from it. It would only repeat averages and break the accounting.
    So we learned how months behave, and kept the money maths exact.
+
+Q: How is the "confidence" computed? Is it real, or did the AI make it up?
+A: The AI never decides it. The simulator computes it from three checks.
+   1) Luck: in how many of 500 futures, with the same luck for both paths,
+      does one path end higher? We tested this kind of statement on almost
+      20,000 pairs of real people in the data. When we said "at least 95%",
+      it was true 99.9% of the time. When we said 66%, it was true 67%.
+   2) Peer range: does the result still hold if her salary is at the low end
+      of real people her age in the data, and the other path's at the high end?
+   3) Unknowns: does it depend on a number nobody knows? If so, how much
+      would have to change to flip it?
+   "Can I reach my goal?" questions are answered by the chance of reaching it.
+   0% or 100% is clear-cut; around 50% is low confidence.
+
+Q: The docs say Monte Carlo is not a digital twin. Why do you use it?
+A: We agree. Monte Carlo only handles normal month-to-month luck, and we
+   checked against real data that it does that honestly. What really decides
+   "master's or work" is the assumptions. For that we use what the docs
+   suggest: sensitivity ("what matters most"), break-even (a small
+   optimization: "the master's needs +24% salary"), robustness against real
+   peer ranges, and clearly marked unknowns. Decisions are applied to an
+   explicit model of income, costs and debt (a causal "do" on the plan), not
+   learned from correlations.
+
+Q: Buying a home doesn't drop the money?
+A: It drops CASH, not net worth. At the purchase, cash falls by the down
+   payment (20% of the price), but that money became part of a home, so net
+   worth stays flat. In the net worth view the dotted line is cash, and the 🏠
+   marks the month. We also check, in every future, that the down payment can
+   really be paid from cash. If not, the card says "can't pay the down
+   payment" and "Can I afford it?" is answered "No".
+
+Q: What are the orange 🎯 markers?
+A: The person's own goals from UBS's data, for example "emergency savings,
+   CHF 12,800 by December 2029". Each marker sits at that amount and date.
+   Below the chart, each goal shows in what % of futures each path reaches it.
+   A goal counts as reached if cash plus investments are above it at that date.
+
+Q: Does it understand complicated sentences or other languages?
+A: Yes. We tested 9 hard ones: two alternative lives with 9 events,
+   a loan to pay for a master's, "70% unemployment benefits", an inheritance
+   half invested, French, and pounds instead of francs (it refuses to convert
+   them and says so). All parsed correctly, and every answer passed the
+   number check.
 
 Q: How do you stop the AI from inventing numbers?
 A: Four guards. A strict JSON format. A rule: any amount the user did not say
@@ -242,11 +289,14 @@ E. NUMBERS TO REMEMBER
   month 9); about CHF −116k at 30.
 - Start working ≈ CHF 745k · Master's ≈ CHF 557k (−189k) · Move abroad ≈ CHF 178k.
 - Master's break-even: +24% salary. With +30%: ≈ CHF 795k (≈ +50k vs working).
-- "Work now, job loss at 25, flat for 600k at 28": ≈ CHF 689k.
-  Down payment 120k: cash 549k → 434k, net worth stays ≈ 550k.
 - Data: 1,200 people × 24 months = 28,800 months; 0 accounting errors.
 - Backtest: 78.5% inside the 80% range, 49.8% inside the 50% range.
-- 500 futures per path · AI answers in ~1–3 s · 29 automated tests + 13 live AI tests.
+- "Work now, job loss at 25, flat for 300k at 28": ≈ CHF 705k, ≈ 41k less than
+  Start working. Low confidence (4% more salary would flip it).
+  Down payment 60k: cash 549k → 495k, net worth stays ≈ 550k.
+- Confidence evidence: "≥95%" statements were right 99.9% of the time
+  (19,980 pairs of real people). Calibration: said 50% → 49.9%, said 90% → 87.9%.
+- 500 futures per path · AI answers in ~1–3 s · 41 automated tests + 23 live AI tests.
 
 
 ---------------------------------------------------------------------

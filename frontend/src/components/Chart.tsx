@@ -6,13 +6,19 @@ import type { Profile } from '../lib/types'
 export type ChartPath = { id: string; name: string; color: string; result: SimResult; isBaseline: boolean }
 
 /** Median line per path; the shaded 80% range only for the selected path (keeps the chart calm). */
-export function ProjectionChart({ paths, focusId, profile, metric, months }: { paths: ChartPath[]; focusId: string; profile: Profile; metric: 'nw' | 'cash'; months: number }) {
+export type Marker = { month: number; icon: string; text: string }
+
+export function ProjectionChart({ paths, focusId, profile, metric, months, markers = [] }: { paths: ChartPath[]; focusId: string; profile: Profile; metric: 'nw' | 'cash'; months: number; markers?: Marker[] }) {
   const rows = Array.from({ length: months }, (_, t) => {
     const row: Record<string, number | [number, number] | null> = { t: t + 1 }
     for (const p of paths) {
       const s = p.result[metric][t]
       row[p.id] = s.p50
-      if (p.id === focusId) row.band = [s.p10, s.p90]
+      if (p.id === focusId) {
+        row.band = [s.p10, s.p90]
+        // in the net worth view, also show the selected path's CASH (dotted): a home purchase drops cash, not net worth
+        if (metric === 'nw') row.focusCash = p.result.cash[t].p50
+      }
     }
     row.observed = metric === 'cash' && t < profile.ledger_closing_cash.length ? profile.ledger_closing_cash[t] : null
     return row
@@ -23,10 +29,11 @@ export function ProjectionChart({ paths, focusId, profile, metric, months }: { p
   const ticks = Array.from({ length: Math.floor(months / step) + 1 }, (_, i) => Math.max(1, i * step))
 
   return (
+    <div className="chart-box">
     <ResponsiveContainer width="100%" height={340}>
       <ComposedChart data={rows} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke="var(--grid)" />
-        <XAxis dataKey="t" type="number" domain={[1, months]} ticks={ticks} tickFormatter={(t) => `${Math.floor(profile.age + t / 12)}`} stroke="var(--muted)" fontSize={12} tickLine={false} label={{ value: 'age', position: 'insideBottomRight', offset: -2, fontSize: 11, fill: 'var(--muted)' }} />
+        <XAxis dataKey="t" type="number" domain={[1, months]} ticks={ticks} tickFormatter={(t) => `${Math.floor(profile.age + t / 12)}`} stroke="var(--muted)" fontSize={12} tickLine={false} />
         <YAxis tickFormatter={(v) => chfk(v).replace('CHF ', '')} stroke="var(--muted)" fontSize={12} width={52} tickLine={false} axisLine={false} />
         <Tooltip
           contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13 }}
@@ -34,6 +41,7 @@ export function ProjectionChart({ paths, focusId, profile, metric, months }: { p
           formatter={(v, key) => {
             if (key === 'band') return [`${chfk((v as number[])[0])} to ${chfk((v as number[])[1])}`, `${focus?.name}: 8 in 10 runs`]
             if (key === 'observed') return [chf(Number(v)), 'Real ledger (data)']
+            if (key === 'focusCash') return [chf(Number(v)), `${focus?.name}: cash only`]
             return [chf(Number(v)), paths.find((p) => p.id === key)?.name ?? key]
           }}
         />
@@ -42,11 +50,20 @@ export function ProjectionChart({ paths, focusId, profile, metric, months }: { p
         {paths.map((p) => (
           <Line key={p.id} dataKey={p.id} stroke={p.color} strokeWidth={p.id === focusId ? 3 : 2} strokeOpacity={p.id === focusId ? 1 : 0.55} strokeDasharray={p.isBaseline ? '6 4' : undefined} dot={false} isAnimationActive={false} />
         ))}
+        {metric === 'nw' && focus && focus.result.nw.some((b, i) => Math.abs(b.p50 - focus.result.cash[i].p50) > 1) && (
+          <Line dataKey="focusCash" stroke={focus.color} strokeWidth={1.5} strokeDasharray="2 3" dot={false} isAnimationActive={false} />
+        )}
+        {markers
+          .filter((m) => m.month >= 0 && m.month < months)
+          .map((m, i) => (
+            <ReferenceLine key={`${m.month}-${i}`} x={m.month + 1} stroke={focus?.color ?? 'var(--muted)'} strokeOpacity={0.35} strokeDasharray="3 3" label={{ value: m.icon, position: 'insideTopLeft', fontSize: 14 }} />
+          ))}
         {metric === 'cash' && <Line dataKey="observed" stroke="var(--text)" strokeWidth={0} dot={{ r: 2.5, fill: 'var(--text)' }} isAnimationActive={false} />}
         {goals.map((g) => (
-          <ReferenceDot key={g.name} x={g.m} y={g.target} r={5} fill="var(--goal)" stroke="var(--card)" strokeWidth={2} label={{ value: g.name, position: 'top', fontSize: 11, fill: 'var(--muted)' }} />
+          <ReferenceDot key={g.name} x={g.m} y={g.target} r={5} fill="var(--goal)" stroke="var(--card)" strokeWidth={2} label={{ value: `🎯 ${chfk(g.target).replace('CHF ', '')}`, position: 'top', fontSize: 11, fill: 'var(--muted)' }} />
         ))}
       </ComposedChart>
     </ResponsiveContainer>
+    </div>
   )
 }
