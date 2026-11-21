@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chat, type ChatHandle, type ChatLine, type ChatMode, type ChatMsg } from './components/Chat'
 import { CompareChart, type ChartSide } from './components/CompareChart'
-import { AssumptionList, Drivers } from './components/Details'
+import { AssumptionList } from './components/Details'
 import { EconomyBar } from './components/Economy'
 import { HowMade, type HowMadeContent } from './components/HowMade'
+import { Sensitivity } from './components/Sensitivity'
 import { Comparison, NodeTile, type TileData } from './components/Tiles'
 import { Tree, type TreeItem } from './components/Tree'
 import { TrustDetails, TrustSummary } from './components/Trust'
@@ -18,7 +19,7 @@ import { downloadJson, scenarioReport } from './lib/report'
 import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Plan, type Preset } from './lib/resolve'
 import { checks, simulate, type SimResult } from './lib/sim'
 import { branchIdeas, followUpIdeas, suggestQuestions } from './lib/suggest'
-import { eventKey, inferParent, withParentEvents } from './lib/tree'
+import { addEvents, eventKey, inferParent, shiftBranch, withParentEvents } from './lib/tree'
 import type { Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
 import { unknownImpact } from './lib/unknowns'
 import paramsJson from './model/params.json'
@@ -56,7 +57,7 @@ function linkGap(c: { spec: ScenarioSpec }, parent: { id: string; name: string; 
   const yrs = Math.round(d / 6) / 2 // to the half year
   const label = d < 0 ? `at ${age}` : d < 6 ? (parent.id === 'today' ? 'now' : 'right after') : `+${yrs} yr${yrs === 1 ? '' : 's'}`
   const title = parent.id === 'today' ? `first decision at age ${age}${first < 6 ? ' (now)' : `, in ${yrs} year${yrs === 1 ? '' : 's'}`}` : d < 0 ? `its new decision (age ${age}) comes before “${parent.name}”’s last one` : `its new decision comes ${d < 6 ? 'right after' : `${yrs} year${yrs === 1 ? '' : 's'} after`} “${parent.name}”’s last one (age ${age})`
-  return { label, title }
+  return { label, title, years: d / 12 }
 }
 
 /** The twin's memory: facts the person told it about TODAY. Applied on top of the data, in order. */
@@ -71,6 +72,8 @@ function applyUpdates(p: Profile, ups: TwinUpdate[]): Profile {
       cash: u.cash_chf ?? q.cash,
       investments: u.investments_chf ?? q.investments,
       calib: u.monthly_spending_chf != null ? { ...q.calib, other_mu: u.monthly_spending_chf } : q.calib,
+      home: u.home_value_chf != null ? u.home_value_chf : q.home,
+      minCash: u.min_cash_chf != null ? u.min_cash_chf : q.minCash,
     }
   }
   return q
@@ -226,6 +229,15 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const undoEdit = (id: string) =>
     setPaths((ps) => ps.map((x) => (x.id === id && x.history.length ? { ...x, spec: x.history.at(-1)!.spec, overrides: x.history.at(-1)!.overrides, history: x.history.slice(0, -1), edits: x.edits.slice(0, -1) } : x)))
   const update = (id: string, f: (p: PathState) => PathState) => setPaths((ps) => ps.map((p) => (p.id === id ? f(p) : p)))
+  /** The time on a link was edited: move that branch's own decisions (and their copies further down the tree). Undo-able. */
+  const editGap = useCallback((id: string, years: number) => {
+    setPaths((ps) => {
+      const changed = shiftBranch(ps, id, years)
+      if (!changed?.size) return ps
+      const note = { instruction: `time on the link set to ${years >= 0 ? '+' : ''}${years} yrs`, changes: [`moved to ${years >= 0 ? '+' : ''}${years} years after the path it continues`] }
+      return ps.map((x) => (changed.has(x.id) ? { ...x, spec: changed.get(x.id)!, history: [...x.history, { spec: x.spec, overrides: x.overrides }], edits: [...x.edits, note] } : x))
+    })
+  }, [])
 
   const reset = (id: string, next: PathState[] = [TODAY()], s: Sel = { a: 'today', b: null }) => {
     setProfileId(id)
@@ -329,6 +341,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     usual_spending_without_rent_chf_per_month: Math.round(profile.calib.other_mu), spending_ups_and_downs_chf: Math.round(profile.calib.other_sd),
     usual_monthly_balance_chf: Math.round(profile.income - profile.rent - profile.calib.other_mu), // income − rent − usual spending (negative = losing money each month)
     loans: profile.loans.map((l) => ({ principal_chf: Math.round(l.principal), rate_pct: Math.round(l.annual_rate * 10000) / 100 })),
+    home_already_owned_chf: profile.home ? Math.round(profile.home) : 0,
+    net_worth_today_chf: Math.round(profile.cash + profile.investments + (profile.home ?? 0) - profile.loans.reduce((a, l) => a + l.principal, 0)),
+    minimum_cash_floor_chf: profile.minCash ? Math.round(profile.minCash) : null,
     goals: profile.goals.map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by: g.date.slice(0, 7), priority: g.priority })),
     told_the_twin: describeMemory(dataProfile, updates),
     economy: { current: macro.name, conditions: describeMacro(macro, profile.age), presets: MACRO_PRESETS.map((p) => `${p.id}: ${p.name}${p.catalog ? ` (${p.catalog})` : ''}`) },
@@ -345,6 +360,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     const rest = computed.filter((c) => c.id !== 'today' && !must.has(c.id)).slice(-20)
     return [...computed.filter((c) => c.id !== 'today' && must.has(c.id)), ...rest].map((c) => ({
       id: c.id, name: c.name, parent_id: c.parentId, events: compactEvents(c.spec),
+      last_change: c.edits.at(-1) ? { asked: c.edits.at(-1)!.instruction, changes: c.edits.at(-1)!.changes } : null, can_undo: c.history.length > 0,
+      undo_would_restore: c.history.length ? describeSpec(c.history.at(-1)!.spec, profile.age) : null,
       net_worth_at_end_median_chf: r100(c.result.endNW.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100), cash_runs_out_at_age: ageOut(c.result.firstNegMonth),
       goals: c.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, chance_pct: Math.round(g.prob! * 100) })),
       unknown_inputs: c.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label),
@@ -396,7 +413,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     const lines: ChatLine[] = []
     // 1) facts about today -> the twin updates itself
     const u = d.profile_update
-    if (u && [u.monthly_net_income_chf, u.monthly_rent_chf, u.cash_chf, u.investments_chf, u.monthly_spending_chf].some((x) => x != null)) {
+    if (u && [u.monthly_net_income_chf, u.monthly_rent_chf, u.cash_chf, u.investments_chf, u.monthly_spending_chf, u.home_value_chf, u.min_cash_chf].some((x) => x != null)) {
       const ch = describeMemory(profile, [{ id: 0, said: text, update: u }])
       setUpdates((us) => [...us, { id: updId.current++, said: text, update: u }])
       if (ch.length) lines.push({ text: `🧠 Updated what I know: ${ch.join(', ')}. Every path now starts from this.` })
@@ -427,6 +444,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       lines.push({ text: `🗑 Removed “${byId.get(id)!.name}”` })
       remove(id)
     }
+    // 2b) undo changes the user did not want ("I didn't want any changes to the others"): back to the previous version
+    const undone = (d.undo_path_ids ?? []).filter((id) => (byId.get(id)?.history.length ?? 0) > 0 && !removable.includes(id))
+    for (const id of undone) {
+      lines.push({ text: `↶ Restored “${byId.get(id)!.history.at(-1)!.spec.name}” to how it was before`, pathId: id })
+      undoEdit(id)
+    }
     // 3) edit existing paths (one or several, e.g. "add a house to all paths"); old versions kept for undo
     const editedIds: string[] = []
     const editRecords: Record<string, PathEdit[]> = {}
@@ -440,7 +463,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       }
       if (removable.includes(p.id) || editedIds.includes(p.id)) continue
       // the full new version, or (shorter) only events to add, everything else unchanged
-      const spec = ed.path ? keepSources(p.spec, ed.path) : ed.add_events?.length ? { ...p.spec, events: [...p.spec.events, ...ed.add_events] } : null
+      const base = undone.includes(p.id) ? p.history.at(-1)!.spec : p.spec // an undo in the same turn happens first
+      const spec = ed.path ? keepSources(base, ed.path) : ed.add_events?.length ? { ...base, events: addEvents(base.events, ed.add_events) } : null
       if (!spec) continue
       editedSpecs[p.id] = spec
       const keepGlobal = Object.fromEntries(Object.entries(p.overrides).filter(([k]) => k.startsWith('g.')))
@@ -464,6 +488,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       const parent = parentIds[i] && parentIds[i] !== 'today' ? byId.get(parentIds[i]!) : undefined
       lines.push({ text: `＋ ${sc.name}${parent ? ` (branch of ${parent.name})` : ''}: ${describeSpec(sc, profile.age)}`, pathId: ids[i] })
     })
+    // a purchase without a price changes nothing (prices are not in the data): say so right away, and how to fix it
+    for (const sp of [...newSpecs, ...Object.values(editedSpecs)]) {
+      for (const e of sp.events.filter((x) => (x.type === 'buy_home' || x.type === 'buy_asset') && !(x.amount_chf && x.amount_chf > 0))) {
+        lines.push({ text: `⚠ “${e.label}” in ${sp.name} has no price yet, so it changes nothing. Prices are not in the data: tell me one (e.g. “the flat costs 500k”).` })
+      }
+    }
     // the horizon only changes when the user talks about time, or a new event would fall off the chart
     const touchedEvents = [...newSpecs.flatMap((x) => x.events), ...Object.values(editedSpecs).flatMap((x) => x.events)]
     const needMonths = Math.max(0, ...touchedEvents.map((e) => (e.start_month ?? 0) + (e.duration_months ?? 0)))
@@ -560,10 +590,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const treeItems: TreeItem[] = useMemo(
     () =>
       computed.map((c) => {
-        const b = breach(c.result)
+        const b = breach(c.result, profile.minCash)
         return { id: c.id, parentId: c.parentId, name: c.id === 'today' ? 'Today · no change' : c.name, icons: sortedEvents(c.spec).slice(0, 6).map(iconOf).join(''), endNW: c.result.endNW.p50, risk: b >= 0.5 ? 'bad' : b > 0.05 ? 'warn' : 'ok', busy: editing === c.id, gap: linkGap(c, c.parentId ? byId.get(c.parentId) : undefined, profile.age) }
       }),
-    [computed, byId, editing, profile.age],
+    [computed, byId, editing, profile.age, profile.minCash],
   )
   const tileOf = (c: Computed, key: 'a' | 'b', unk: typeof unkA): TileData => ({
     key, id: c.id, name: c.id === 'today' ? 'If nothing changes' : c.name, parentName: c.parentId && c.parentId !== 'today' ? (byId.get(c.parentId)?.name ?? null) : null,
@@ -577,7 +607,6 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     ...(B && B.id !== A?.id ? [{ key: 'b' as const, name: B.name, plan: B.plan, result: B.result, unknownFrom: unkB?.from ?? null, markers: sortedEvents(B.spec).map((e) => ({ month: e.start_month ?? 0, icon: iconOf(e), text: e.label })) }] : []),
   ]
   const numFor = numbers.tab === 'b' && B ? B : (A ?? B ?? today)
-  const drv = useMemo(() => (numbers.open ? drivers(numFor.plan, params) : []), [numbers.open, numFor, params])
   const liveChecks = useMemo(() => checks(numFor.plan, params, profile), [numFor, params, profile])
   const openNumbers = (tab: 'a' | 'b') => {
     setNumbers({ open: true, tab })
@@ -709,6 +738,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               onPick={pick}
               onBranch={(id) => setAdding((cur) => (cur === id ? null : id))}
               onToggle={toggleFold}
+              onEditGap={editGap}
               onCloseAdd={() => setAdding(null)}
               addCard={
                 branchFrom
@@ -759,6 +789,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                     t={t}
                     age={profile.age}
                     endAge={endAge}
+                    floor={profile.minCash}
                     story={storyOf(t.id)}
                     status={textStatus}
                     busy={editing === t.id}
@@ -782,6 +813,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               a={tA}
               b={tB}
               age={profile.age}
+              floor={profile.minCash}
               text={text?.comparison || null}
               caveat={text?.caveat ?? null}
               status={textStatus}
@@ -864,6 +896,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             </section>
           )}
 
+          {/* ---------------- sensitivity: what if an assumption is off? ---------------- */}
+          {chartSides.length > 0 && <Sensitivity sides={chartSides.map((s) => ({ key: s.key, name: s.name, plan: s.plan }))} params={params} endAge={endAge} />}
+
           {/* ---------------- everything else, folded ---------------- */}
           <details className="card fold" ref={numbersRef} open={numbers.open} onToggle={(e) => setNumbers((n) => ({ ...n, open: (e.target as HTMLDetailsElement).open }))}>
             <summary>
@@ -917,13 +952,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                     })
               }
             />
-            {drv.length > 0 && (
-              <>
-                <h3>What matters most</h3>
-                <p className="muted small">Change each input by 10% and see how much the end result moves.</p>
-                <Drivers drivers={drv} />
-              </>
-            )}
+            <p className="muted small" style={{ marginTop: 10 }}>What matters most, and what if an assumption is off: see <b>Sensitivity</b> above.</p>
           </details>
 
           <details className="card fold">
@@ -979,5 +1008,7 @@ function describeMemory(data: Profile, ups: TwinUpdate[]): string[] {
   line('savings', data.cash, now.cash)
   line('investments', data.investments, now.investments)
   line('usual spending', data.calib.other_mu, now.calib.other_mu, '/mo')
+  line('home you own', data.home ?? 0, now.home ?? 0)
+  if ((now.minCash ?? 0) !== (data.minCash ?? 0)) out.push(now.minCash ? `cash never below ${chf(now.minCash)} (your floor)` : 'no cash floor')
   return out
 }

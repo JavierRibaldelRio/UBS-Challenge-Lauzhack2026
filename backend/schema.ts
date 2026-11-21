@@ -54,6 +54,8 @@ export const ProfileUpdateSchema = z.object({
   cash_chf: num.describe('Current savings / cash, if the user says it'),
   investments_chf: num.describe('Current investments, if the user says it'),
   monthly_spending_chf: num.describe('Usual monthly spending WITHOUT rent, if the user says it'),
+  home_value_chf: num.describe('Value of a home/flat they ALREADY OWN today (gifted, inherited, bought before). Not a purchase. null if not said'),
+  min_cash_chf: num.describe('The least cash they want to keep at all times ("never below 20k"): a safety floor. null if not said'),
   summary: z.string().describe('One short sentence: what changed'),
 })
 
@@ -103,6 +105,7 @@ export const TurnSchema = z.object({
     )
     .describe('Changes to EXISTING paths, one entry per path ("instead", "that path", "add X to all paths" -> one entry for EVERY path id). Empty if not editing.'),
   remove_path_ids: z.array(z.string()).describe('ids of paths to delete (user says delete / that was wrong / I did not mean that)'),
+  undo_path_ids: z.array(z.string()).describe('ids of EXISTING paths whose last change must be reverted (the user says a change you made to them was wrong / unwanted / they did not want it changed)'),
   new_goals: z
     .array(z.object({ name: z.string().describe('short goal name, e.g. "Car fund"'), target_chf: z.number(), by_month: z.number().int().describe('months after the start date') }))
     .describe('Savings goals the user wants to add ("I want 50k saved by 30", "add a goal: emergency fund of 10k by 2027"). Empty otherwise.'),

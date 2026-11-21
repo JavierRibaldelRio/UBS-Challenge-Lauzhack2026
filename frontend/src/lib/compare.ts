@@ -16,23 +16,30 @@ const r100 = (x: number) => Math.round(x / 100) * 100
 const pct = (x: number) => Math.round(x * 100)
 const kfmt = (x: number) => (Math.abs(x) >= 1e6 ? `CHF ${(x / 1e6).toFixed(2)}M` : `CHF ${(x / 1000).toFixed(1)}k`)
 
-/** The worst constraint breach of a path: cash below zero, or a down payment it cannot pay. */
-export const breach = (r: SimResult) => Math.max(r.probNegCash, ...r.homeBuys.map((h) => h.shortShare), 0)
+/** Share of futures where cash ever drops below a floor the person set ("never below 20k"). */
+export const belowFloor = (r: SimResult, floor: number | undefined) => {
+  if (!floor) return 0
+  let n = 0
+  for (const m of r.minCashPaths) if (m < floor) n++
+  return n / r.minCashPaths.length
+}
+/** The worst constraint breach of a path: cash below zero (or below the person's own floor), or a down payment it cannot pay. */
+export const breach = (r: SimResult, floor?: number) => Math.max(r.probNegCash, belowFloor(r, floor), ...r.homeBuys.map((h) => h.shortShare), 0)
 
-export const FIT_RULE = 'In this order: 1) not running out of cash (and being able to pay any down payment), 2) your goals, high-priority goals count double, 3) net worth at the end.'
+export const FIT_RULE = 'In this order: 1) not running into cash trouble (cash below zero, below your own minimum if you set one, or a down payment you cannot pay), 2) your goals, high-priority goals count double, 3) net worth at the end.'
 
 export type Fit = { pick: 'first' | 'second' | 'even'; decidedBy: 'cash' | 'goals' | 'net worth' | 'none'; reasons: string[] }
 
 /** Lexicographic on purpose: easy to explain, and no hidden weights. */
 export function goalFit(a: Side, b: Side, profile: Profile): Fit {
-  const ba = breach(a.result)
-  const bb = breach(b.result)
+  const ba = breach(a.result, profile.minCash)
+  const bb = breach(b.result, profile.minCash)
   const reasons: string[] = []
   // 1) cash trouble: a clear difference decides
   if (Math.abs(ba - bb) >= 0.2 || (Math.max(ba, bb) >= 0.5 && Math.min(ba, bb) < 0.2)) {
     const safer = ba < bb ? a : b
     const other = safer === a ? b : a
-    reasons.push(`“${other.name}” runs into cash trouble in ${pct(breach(other.result))}% of simulated futures, “${safer.name}” in ${pct(breach(safer.result))}%.`)
+    reasons.push(`“${other.name}” runs into cash trouble${profile.minCash ? ` (below zero, below your ${Math.round(profile.minCash).toLocaleString('de-CH')} floor, or a down payment)` : ''} in ${pct(breach(other.result, profile.minCash))}% of simulated futures, “${safer.name}” in ${pct(breach(safer.result, profile.minCash))}%.`)
     return { pick: safer === a ? 'first' : 'second', decidedBy: 'cash', reasons }
   }
   // 2) goals (only goals both paths can be measured on)
@@ -77,6 +84,7 @@ function describe(s: Side, profile: Profile, H: number) {
     cash_at_end_median_chf: r100(r.endCash.p50),
     lowest_cash_median_chf: r100(r.minCash.p50),
     chance_cash_goes_below_zero_pct: pct(r.probNegCash),
+    ...(profile.minCash ? { chance_cash_goes_below_your_floor_pct: pct(belowFloor(r, profile.minCash)) } : {}),
     age_cash_goes_below_zero: r.firstNegMonth != null ? age(r.firstNegMonth) : null,
     goals: r.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by_year: g.date.slice(0, 4), chance_pct: pct(g.prob!) })),
     home_or_asset_purchases: r.homeBuys.map((h) => ({ what: h.label, age: age(h.month), price_chf: r100(h.price), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_own_money_pct: pct(h.shortShare) })),
@@ -97,6 +105,8 @@ export function compareFacts(o: { profile: Profile; H: number; first: Side; seco
       cash_chf: Math.round(p.cash),
       investments_chf: Math.round(p.investments),
       debts_chf: Math.round(p.loans.reduce((a, l) => a + l.principal, 0)),
+      ...(p.home ? { home_already_owned_chf: Math.round(p.home), net_worth_today_chf: Math.round(p.cash + p.investments + p.home - p.loans.reduce((a, l) => a + l.principal, 0)) } : {}),
+      ...(p.minCash ? { your_minimum_cash_floor_chf: Math.round(p.minCash) } : {}),
       net_income_chf_per_month: Math.round(p.income),
       rent_chf_per_month: Math.round(p.rent),
       usual_other_spending_chf_per_month: Math.round(p.calib.other_mu),

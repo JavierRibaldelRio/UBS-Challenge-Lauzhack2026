@@ -77,3 +77,60 @@ export function withParentEvents(spec: ScenarioSpec, parent: ScenarioSpec): Scen
   const missing = parent.events.filter((e) => !has(e))
   return missing.length ? { ...spec, events: [...missing, ...spec.events] } : spec
 }
+
+/**
+ * Set the time on a link: the branch's NEW decisions (those not in its parent) move so the first one starts
+ * `years` after the parent's last decision. Every sub-branch that copied those decisions moves with them,
+ * so the tree stays consistent. Returns the paths that change (id -> new spec), or null if nothing can move.
+ */
+export function shiftBranch(nodes: { id: string; parentId: string | null; spec: ScenarioSpec }[], childId: string, years: number): Map<string, ScenarioSpec> | null {
+  const child = nodes.find((n) => n.id === childId)
+  const parent = child?.parentId ? nodes.find((n) => n.id === child.parentId) : undefined
+  if (!child || !parent || !Number.isFinite(years)) return null
+  const known = new Set(parent.spec.events.map(eventKey))
+  const fresh = child.spec.events.filter((e) => !known.has(eventKey(e)))
+  if (!fresh.length) return null
+  const ref = Math.max(0, ...parent.spec.events.map((e) => e.start_month ?? 0))
+  const first = Math.min(...fresh.map((e) => e.start_month ?? 0))
+  const delta = Math.max(0, ref + Math.round(years * 12)) - first
+  if (!delta) return new Map()
+  const moved = new Map(fresh.map((e) => [eventKey(e), { ...e, start_month: Math.max(0, (e.start_month ?? 0) + delta) }]))
+  // the child and all its descendants (they carry copies of these decisions)
+  const kids = new Map<string, string[]>()
+  for (const n of nodes) if (n.parentId) kids.set(n.parentId, [...(kids.get(n.parentId) ?? []), n.id])
+  const out = new Map<string, ScenarioSpec>()
+  const visit = (id: string, guard = 0) => {
+    const n = nodes.find((x) => x.id === id)
+    if (!n || guard > 500) return
+    let changed = false
+    const events = n.spec.events.map((e) => {
+      const m = moved.get(eventKey(e))
+      if (!m) return e
+      changed = true
+      return { ...m, label: e.label, _source: e._source }
+    })
+    if (changed) out.set(id, { ...n.spec, events })
+    for (const k of kids.get(id) ?? []) visit(k, guard + 1)
+  }
+  visit(childId)
+  return out
+}
+
+/**
+ * Add events to a path. An "added" event that is really a change of an existing one (same type, and the same start or
+ * the same label, e.g. giving the house its price) is MERGED into it instead of creating a duplicate.
+ */
+export function addEvents(events: TwinEvent[], add: TwinEvent[]): TwinEvent[] {
+  const out = [...events]
+  for (const e of add) {
+    const i = out.findIndex((x) => x.type === e.type && ((x.start_month ?? 0) === (e.start_month ?? 0) || x.label.trim().toLowerCase() === e.label.trim().toLowerCase()))
+    if (i < 0) {
+      out.push(e)
+      continue
+    }
+    const merged = { ...out[i] } as Record<string, unknown>
+    for (const [k, v] of Object.entries(e)) if (v != null && k !== 'label') merged[k] = v
+    out[i] = merged as TwinEvent
+  }
+  return out
+}

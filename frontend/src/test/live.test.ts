@@ -7,6 +7,7 @@ import { answerFacts, verdict } from '../lib/answer'
 import { cities, medianLoanRate, presets, resolve } from '../lib/resolve'
 import { simulate } from '../lib/sim'
 import { compareFacts, goalFit, type CompareResult, type Side } from '../lib/compare'
+import { addEvents } from '../lib/tree'
 import type { AnswerResult, EditResult, ExplainResult, Params, ParseResult, Profile, TurnResult, TwinEvent } from '../lib/types'
 
 const API = process.env.API ?? 'http://localhost:8000'
@@ -401,6 +402,110 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     expect(r.data.new_paths.filter((p) => p.parent_id && paths.some((x) => x.id === p.parent_id)).length).toBeGreaterThanOrEqual(6)
     expect(r.data.horizon_years ?? null).toBeNull()
   }, 130000)
+  // ---------------- a REAL conversation (Nov 2026), replayed turn by turn with the app's own rules, then simulated
+  describe('conversation: house, master\'s, "assume I had a house", undo, gifted', () => {
+    type P = { id: string; name: string; parentId: string | null; events: TwinEvent[]; history: TwinEvent[][]; lastChange: string[] | null }
+    let prof: Profile = { ...alexia }
+    let paths: P[] = []
+    const hist: { role: string; text: string }[] = []
+    let n = 1
+    const stateOf = () => ({
+      name: prof.name, age: prof.age, city: prof.city, job_status: prof.status, household: prof.household, net_income_chf_per_month: prof.income, rent_chf_per_month: prof.rent, cash_chf: prof.cash,
+      investments_chf: prof.investments, home_already_owned_chf: prof.home ?? 0, minimum_cash_floor_chf: prof.minCash ?? null, usual_spending_without_rent_chf_per_month: Math.round(prof.calib.other_mu),
+      goals: prof.goals.map((g) => ({ goal: g.name, target_chf: g.target, by: g.date.slice(0, 7) })),
+    })
+    const nw0 = (p: Profile, evs: TwinEvent[] = []) => simulate(resolve(p, params, { name: 'x', catalog_id: null, events: evs }, {}, 120, rate), params, p).nw[0].p50
+    const end = (p: Profile, evs: TwinEvent[]) => simulate(resolve(p, params, { name: 'x', catalog_id: null, events: evs }, {}, 120, rate), params, p).endNW.p50
+    /** one turn, applied exactly like App.tsx does */
+    async function turn(text: string) {
+      const r = await post<TurnResult>('/api/chat', { ...ctx(text, prof), history: hist.slice(-12), state: stateOf(), paths: paths.map((p) => ({ id: p.id, name: p.name, parent_id: p.parentId, events: p.events, last_change: p.lastChange ? { changes: p.lastChange } : null, can_undo: p.history.length > 0, undo_would_restore: p.history.length ? p.history.at(-1) : null })), focus_path_id: null, target_path_id: null, fork_from_path_id: null, compare: { A: null, B: null } })
+      expect(r.ok, r.error).toBe(true)
+      const d = r.data
+      show(`turn "${text.slice(0, 40)}"`, r)
+      if (r.data.undo_path_ids?.length) console.log(`   undo ${JSON.stringify(r.data.undo_path_ids)}`)
+      const u = d.profile_update
+      if (u) prof = { ...prof, income: u.monthly_net_income_chf ?? prof.income, rent: u.monthly_rent_chf ?? prof.rent, cash: u.cash_chf ?? prof.cash, home: u.home_value_chf ?? prof.home, minCash: u.min_cash_chf ?? prof.minCash }
+      for (const id of d.undo_path_ids ?? []) {
+        const p = paths.find((x) => x.id === id)
+        if (p?.history.length) {
+          p.events = p.history.pop()!
+          p.lastChange = null
+        }
+      }
+      for (const ed of d.edits) {
+        const p = paths.find((x) => x.id === ed.path_id)
+        if (!p) continue
+        p.history.push(p.events)
+        p.events = ed.path ? (ed.path.events as TwinEvent[]) : addEvents(p.events, (ed.add_events ?? []) as TwinEvent[])
+        p.lastChange = ed.changes
+      }
+      paths = paths.filter((p) => !d.remove_path_ids.includes(p.id))
+      for (const np of d.new_paths) {
+        const parent = np.parent_id ? paths.find((x) => x.id === np.parent_id) : undefined
+        paths.push({ id: `p${n++}`, name: np.name, parentId: parent?.id ?? 'today', events: [...(parent?.events ?? []), ...(np.events as TwinEvent[])], history: [], lastChange: null })
+      }
+      hist.push({ role: 'user', text }, { role: 'twin', text: d.reply })
+      return d
+    }
+    const homeAt = (p: P) => p.events.filter((e) => e.type === 'buy_home').map((e) => e.start_month ?? 0)
+
+    it('1) "buy a house 2 yrs later with minimum wage… or a master\'s first?" -> two paths (home at 22, master\'s)', async () => {
+      await turn('buy a house 2 yrs later with minimum wage, do i die of hunger or not? should i do a masters first instead and fint a job later?')
+      expect(paths.some((p) => homeAt(p).includes(24))).toBe(true)
+      expect(paths.some((p) => p.events.some((e) => e.type === 'study'))).toBe(true)
+    }, 130000)
+    it('1b) no price was given -> the twin says so; "the house costs 300k" -> priced, the result changes', async () => {
+      const home = paths.find((p) => homeAt(p).includes(24))!
+      const before = end(prof, home.events)
+      await turn('the house costs 300k')
+      expect(home.events.find((e) => e.type === 'buy_home')!.amount_chf).toBe(300000)
+      expect(end(prof, home.events)).not.toBeCloseTo(before, -2) // the graph updates
+    }, 130000)
+    it('2) "actually i wanna buy the home in 5 years" -> the house moves to 25, nothing is added, result recomputes', async () => {
+      // "the home" is ambiguous when two paths buy one at 22: either may move, but at least one must, and no house may be added
+      const before = paths.map((p) => end(prof, p.events))
+      const houses = paths.map((p) => homeAt(p).length)
+      const count = paths.length
+      await turn('actually i wanna buy the home in 5 years')
+      expect(paths.length).toBe(count)
+      expect(paths.some((p) => homeAt(p).includes(60))).toBe(true)
+      expect(paths.map((p) => homeAt(p).length)).toEqual(houses)
+      expect(paths.some((p, i) => Math.abs(end(prof, p.events) - before[i]) > 100)).toBe(true) // the graph updates
+    }, 130000)
+    it('3) "assume I have a house for the baseline, worth 200k" -> a fact about today: no path touched, net worth +200k', async () => {
+      const snapshot = JSON.stringify(paths.map((p) => p.events))
+      const nwBefore = nw0(prof)
+      await turn('assume i have a house for the baseline. worth 200k')
+      expect(prof.home).toBe(200000)
+      expect(JSON.stringify(paths.map((p) => p.events))).toBe(snapshot)
+      expect(nw0(prof) - nwBefore).toBeCloseTo(200000, -3)
+    }, 130000)
+    it('4) a wrong edit, then "I didn\'t want any changes to the others" -> the twin restores it exactly', async () => {
+      // replay the mistake from the real chat: the twin had changed the home path instead of the baseline
+      const home = paths.find((p) => homeAt(p).length)!
+      const original = JSON.stringify(home.events)
+      home.history.push(home.events)
+      home.events = [...home.events.filter((e) => e.type !== 'buy_home'), { ...home.events[0], type: 'buy_home', label: 'Home 200k', start_month: 0, amount_chf: 200000, duration_months: null, down_payment_pct: 100 } as TwinEvent]
+      home.lastChange = ['removed the separate home purchase at 25', 'home worth 200k now owned from the start (age 20)']
+      hist.push({ role: 'user', text: 'assume i have a house at the start' }, { role: 'twin', text: `[actions applied: ✏️ Changed ${home.name}: ✓ removed the separate home purchase at 25 ✓ home worth 200k now owned from the start]` })
+      await turn('i meant assume i had a house at the very start, at 20. i didnt want any changes to the others')
+      expect(JSON.stringify(home.events)).toBe(original)
+      expect(prof.home).toBe(200000)
+    }, 130000)
+    it('5) "it was free for me, say gifted" -> still owned (net worth keeps the 200k), no purchase added anywhere', async () => {
+      const buys = paths.map((p) => homeAt(p).length)
+      await turn('it was free for me, say gifted')
+      expect(prof.home).toBe(200000)
+      expect(paths.map((p) => homeAt(p).length)).toEqual(buys)
+      expect(nw0(prof)).toBeGreaterThan(200000)
+    }, 130000)
+    it('6) "I never want my savings below 5k" -> a cash floor (a constraint), not a path', async () => {
+      const count = paths.length
+      await turn('also, I never want my savings to go below 5k')
+      expect(prof.minCash).toBe(5000)
+      expect(paths.length).toBe(count)
+    }, 130000)
+  })
   it('explain: Alexia demo, all numbers traced to the engine', async () => {
     const ps = presets(alexia, params)
     const specs = [ps.find((p) => p.id === 'work')!, ps.find((p) => p.id === 'master')!, ps.find((p) => p.id === 'abroad')!]

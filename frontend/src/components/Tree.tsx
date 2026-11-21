@@ -11,7 +11,7 @@ export type TreeItem = {
   risk: 'ok' | 'warn' | 'bad'
   busy?: boolean
   /** time on the link from the parent: "+8 yrs" (the tree is not a timeline) */
-  gap?: { label: string; title: string } | null
+  gap?: { label: string; title: string; years: number } | null
 }
 /** The "new path" card, shown next to the node it branches from. */
 export type AddCard = { id: string; title: ReactNode; body: ReactNode }
@@ -41,6 +41,8 @@ export const Tree = memo(function Tree(p: {
   onPick: (id: string) => void
   onBranch: (id: string) => void
   onToggle: (id: string) => void
+  /** set the time on a link (years after the parent's last decision) */
+  onEditGap?: (id: string, years: number) => void
   addCard?: AddCard | null
   onCloseAdd?: () => void
 }) {
@@ -196,7 +198,7 @@ export const Tree = memo(function Tree(p: {
 
   // drag the view: middle button anywhere, or left button on empty canvas
   const onCanvasDown = (e: React.PointerEvent) => {
-    const onEmpty = !(e.target as HTMLElement).closest('.node, .tree-tools, .add-card')
+    const onEmpty = !(e.target as Element).closest('.node, .tree-tools, .add-card, .edge-hit, .edge-label, .gap-edit')
     if (!(e.button === 1 || (e.button === 0 && onEmpty))) return
     e.preventDefault() // no middle-click autoscroll / paste
     touched.current = true
@@ -232,6 +234,20 @@ export const Tree = memo(function Tree(p: {
       },
     )
   }
+  // ------------------------------------------------ editing the time on a link (click its pill, or the link itself)
+  const [gapEdit, setGapEdit] = useState<{ id: string; value: string } | null>(null)
+  const openGap = (id: string) => {
+    const g = p.items.find((n) => n.id === id)?.gap
+    if (g && p.onEditGap) setGapEdit({ id, value: String(g.years) })
+  }
+  const commitGap = () => {
+    if (!gapEdit) return
+    const v = Number(gapEdit.value.replace(',', '.'))
+    const g = p.items.find((n) => n.id === gapEdit.id)?.gap
+    if (Number.isFinite(v) && g && v !== g.years) p.onEditGap?.(gapEdit.id, Math.round(v * 2) / 2)
+    setGapEdit(null)
+  }
+
   const resetLayout = () => {
     setMoved({})
     touched.current = false
@@ -321,17 +337,43 @@ export const Tree = memo(function Tree(p: {
       onAuxClick={(e) => e.preventDefault()}
     >
       <div className="tree" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
-        <svg className="tree-edges" width={1} height={1} aria-hidden>
+        <svg className="tree-edges" width={Math.max(1, bounds.minX + bounds.w + 200)} height={Math.max(1, bounds.minY + bounds.h + 200)} aria-hidden>
           {links.map((l) => {
             const s = sel(l.id)
             return <path key={l.id} d={l.d} className={`edge ${s ? `edge-${s}` : ''}`} />
           })}
+          {/* a wider invisible line on top: easy to click to change the time */}
+          {p.onEditGap && links.filter((l) => l.gap).map((l) => <path key={`h${l.id}`} d={l.d} className="edge-hit" onClick={() => openGap(l.id)}><title>{`${l.gap!.title} · click to change`}</title></path>)}
         </svg>
         {links.map((l) =>
-          l.gap && l.len > 70 ? (
-            <span key={`g${l.id}`} className={`edge-label ${sel(l.id) ? `edge-label-${sel(l.id)}` : ''} ${/^(now|right after)$/.test(l.gap.label) ? 'edge-label-quiet' : ''}`} style={{ left: l.mx, top: l.my }} title={l.gap.title}>
-              {l.gap.label}
+          gapEdit?.id === l.id ? (
+            <span key={`g${l.id}`} className="gap-edit" style={{ left: l.mx, top: l.my }}>
+              <span>+</span>
+              <input
+                autoFocus
+                type="number"
+                step={0.5}
+                value={gapEdit.value}
+                onChange={(e) => setGapEdit({ id: l.id, value: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitGap()
+                  if (e.key === 'Escape') setGapEdit(null)
+                }}
+                onBlur={commitGap}
+                aria-label="years after the previous decision"
+              />
+              <span>yrs</span>
             </span>
+          ) : l.gap && l.len > 70 ? (
+            <button
+              key={`g${l.id}`}
+              className={`edge-label ${sel(l.id) ? `edge-label-${sel(l.id)}` : ''} ${/^(now|right after)$/.test(l.gap.label) ? 'edge-label-quiet' : ''}`}
+              style={{ left: l.mx, top: l.my }}
+              title={`${l.gap.title} · click to change`}
+              onClick={() => openGap(l.id)}
+            >
+              {l.gap.label}
+            </button>
           ) : null,
         )}
         {p.items.map((n) => {

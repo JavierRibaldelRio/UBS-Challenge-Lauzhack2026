@@ -1,5 +1,5 @@
 import type { Verdict } from '../lib/answer'
-import { breach, FIT_RULE, type Fit, type Story } from '../lib/compare'
+import { belowFloor, breach, FIT_RULE, type Fit, type Story } from '../lib/compare'
 import { chfk } from '../lib/fmt'
 import type { SimResult } from '../lib/sim'
 
@@ -19,7 +19,7 @@ export type TileData = {
 type TextStatus = 'loading' | 'ai' | 'offline'
 
 /** "What's going on" for one selected path: the numbers that matter, then the story in plain words. */
-export function NodeTile(p: { t: TileData; age: number; endAge: number; story: Story | null; status: TextStatus; busy: boolean; onChange: () => void; onBranch: () => void; onUndo: () => void; onRemove: () => void; onNumbers: () => void }) {
+export function NodeTile(p: { t: TileData; age: number; endAge: number; floor?: number; story: Story | null; status: TextStatus; busy: boolean; onChange: () => void; onBranch: () => void; onUndo: () => void; onRemove: () => void; onNumbers: () => void }) {
   const { t } = p
   const r = t.result
   const goals = r.goals.filter((g) => g.prob != null)
@@ -73,6 +73,13 @@ export function NodeTile(p: { t: TileData; age: number; endAge: number; story: S
             <span key={h.month} className="flag good">{h.kind === 'home' ? '🏠' : '🚗'} down payment OK</span>
           ),
         )}
+        {p.floor ? (
+          belowFloor(r, p.floor) > 0.05 ? (
+            <span className={`flag ${belowFloor(r, p.floor) >= 0.5 ? 'bad' : 'warn'}`}>⚠ below your {chfk(p.floor).replace('CHF ', '')} floor in {Math.round(belowFloor(r, p.floor) * 100)}%</span>
+          ) : (
+            <span className="flag good">✓ stays above your {chfk(p.floor).replace('CHF ', '')} floor</span>
+          )
+        ) : null}
         {goals.length > 0 && <span className={`flag ${reached === goals.length ? 'good' : reached ? 'warn' : 'bad'}`}>🎯 {reached}/{goals.length} goals likely</span>}
         {t.unknownFromAge != null && <span className="flag fogflag">? depends on unknowns from {t.unknownFromAge}</span>}
         {t.warnings.map((w) => (
@@ -124,6 +131,7 @@ export function Comparison(p: {
   a: TileData
   b: TileData
   age: number
+  floor?: number
   text: string | null
   caveat: string | null
   status: TextStatus
@@ -143,7 +151,8 @@ export function Comparison(p: {
   const better = (x: number, y: number, higher = true, tol = 0): 'a' | 'b' | null => (Math.abs(x - y) <= tol ? null : (x > y) === higher ? 'a' : 'b')
   const rows: Row[] = [
     { label: 'Lowest cash', hint: 'liquidity: the tightest moment (typical future)', av: chfk(a.result.minCash.p50), bv: chfk(b.result.minCash.p50), better: better(a.result.minCash.p50, b.result.minCash.p50, true, 500) },
-    { label: 'Cash trouble', hint: 'constraint breach: cash below zero or a down payment you can’t pay', av: `${Math.round(breach(a.result) * 100)}%`, bv: `${Math.round(breach(b.result) * 100)}%`, better: better(breach(a.result), breach(b.result), false, 0.02) },
+    { label: 'Cash trouble', hint: `constraint breach: share of futures with cash below zero${p.floor ? `, below your ${chfk(p.floor)} floor` : ''} or a down payment you can’t pay`, av: `${Math.round(breach(a.result, p.floor) * 100)}%`, bv: `${Math.round(breach(b.result, p.floor) * 100)}%`, better: better(breach(a.result, p.floor), breach(b.result, p.floor), false, 0.02) },
+    { label: `Cash at ${p.age + a.result.nw.length / 12}`, hint: 'savings in the bank at the end (typical future)', av: chfk(a.result.endCash.p50), bv: chfk(b.result.endCash.p50), better: better(a.result.endCash.p50, b.result.endCash.p50, true, 1000) },
     { label: `Net worth at ${p.age + a.result.nw.length / 12}`, hint: 'everything owned − debts (typical future)', av: chfk(a.result.endNW.p50), bv: chfk(b.result.endNW.p50), better: better(a.result.endNW.p50, b.result.endNW.p50, true, 1000) },
     ...goalRows.map((g) => {
       const gb = b.result.goals.find((x) => x.name === g.name)

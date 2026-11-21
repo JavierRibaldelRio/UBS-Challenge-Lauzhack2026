@@ -29,6 +29,8 @@ export type Plan = {
   loans: { start: number; principal: number; annualRate: number; payment: number; isNew: boolean; toSeller?: boolean; amort?: { perMonth: number; months: number } }[]
   startCash: number
   startInvest: number
+  /** a home owned from the start (told in the chat) */
+  startHome: number
   muSe: number // standard error of the personal spending level (parameter uncertainty)
   invReturn: number // expected real annual return
   invVol: number // annual volatility
@@ -128,6 +130,9 @@ export function resolve(
   // ---- global, profile-level numbers
   const startCash = A('g.cash', 'Starting cash', profile.cash, 'CHF', 'data', `opening_cash_chf, ${profile.as_of} (synthetic-profiles.csv)`)
   const startInvest = A('g.invest', 'Starting investments', profile.investments, 'CHF', 'data', 'investment_portfolio (synthetic-assets.csv)')
+  // a home they already own (told in the chat, not in the data): part of net worth from day one, never cash
+  const startHome = profile.home ? A('g.home', 'Home you already own', profile.home, 'CHF', 'you', 'you told the twin (a fact about today); value kept constant in 2025 francs') : 0
+  if (startHome) homeValue.fill(startHome)
   const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `average of your ${profile.calib.months} ledger months, seasonality and bonus removed`)
   const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `std-dev of your ${profile.calib.months} ledger months`)
   const invReturn = A('m.ret', 'Economy: investment return (real, per year)', macro.market_return_pct, '%', macro.market_return_pct ? 'macro' : 'assumption', macro.market_return_pct ? `set by the economy “${macro.name}”` : 'Not in the data (assets are a single snapshot). 0% = no growth. Choose an economy or edit.') / 100
@@ -384,7 +389,7 @@ export function resolve(
     revalue,
     purchases,
     months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, homeDown, homeValue, status, household, city, shocks, loans,
-    startCash, startInvest, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
+    startCash, startInvest, startHome, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
   }
 }
 

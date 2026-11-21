@@ -342,3 +342,71 @@ describe('A/B comparison', () => {
     expect(facts.history_from_the_data!.months_observed).toBe(24) // the real ledger is reported as observed history
   })
 })
+
+// ---------------------------------------------------------------- facts about today: an owned home, a cash floor; editing link years
+import { shiftBranch } from '../lib/tree'
+import { belowFloor, breach } from '../lib/compare'
+
+describe('facts about today (from a real chat: "assume I had a house at 20, gifted, worth 200k")', () => {
+  const owner = { ...alexia, home: 200000 }
+  it('an owned home adds to net worth from day one, cash is unchanged, accounting still adds up', () => {
+    const a = runPath(plan(alexia, quo), params, null)
+    const b = runPath(plan(owner, quo), params, null)
+    expect(b.nw[0] - a.nw[0]).toBeCloseTo(200000, 0)
+    expect(b.nw.at(-1)! - a.nw.at(-1)!).toBeCloseTo(200000, 0)
+    expect(b.cash.at(-1)!).toBeCloseTo(a.cash.at(-1)!, 6)
+    for (const c of checks(plan(owner, quo), params, owner)) expect(c.ok, `${c.name}: ${c.detail}`).toBe(true)
+    expect(plan(owner, quo).assumptions.find((x) => x.key === 'g.home')?.source).toBe('you')
+  })
+  it('the simulated median starts ~200k higher (the chart and the tiles use this)', () => {
+    const r0 = simulate(plan(alexia, quo), params, alexia)
+    const r1 = simulate(plan(owner, quo), params, owner)
+    expect(r1.endNW.p50 - r0.endNW.p50).toBeCloseTo(200000, -2)
+  })
+  it('a cash floor counts every future that dips below it (a constraint, C_t >= C_min)', () => {
+    const work = presets(alexia, params).find((p) => p.id === 'work')!.spec
+    const r = simulate(plan(alexia, work), params, alexia)
+    expect(belowFloor(r, undefined)).toBe(0)
+    expect(belowFloor(r, 1e9)).toBe(1) // nobody keeps a billion
+    expect(belowFloor(r, 1)).toBeGreaterThanOrEqual(r.probNegCash)
+    expect(breach(r, 1e9)).toBe(1)
+    expect(breach(r)).toBe(r.probNegCash)
+  })
+})
+
+describe('adding events that are really changes', () => {
+  it('a priced house "added" next to an unpriced one is merged, not duplicated; a real addition is appended', async () => {
+    const { addEvents } = await import('../lib/tree')
+    const house = makeEvent({ type: 'buy_home', label: 'House', start_month: 24 })
+    const out = addEvents([house], [makeEvent({ type: 'buy_home', label: 'House', start_month: 24, amount_chf: 300000 })])
+    expect(out).toHaveLength(1)
+    expect(out[0].amount_chf).toBe(300000)
+    expect(addEvents([house], [makeEvent({ type: 'buy_asset', label: 'Car', amount_chf: 20000 })])).toHaveLength(2)
+  })
+})
+
+describe('editing the time on a link', () => {
+  const job = makeEvent({ type: 'start_job', label: 'Job' })
+  const flat = makeEvent({ type: 'buy_home', label: 'Flat', amount_chf: 400000, start_month: 60 })
+  const kid = makeEvent({ type: 'household_change', label: 'Kid', household_type: 'family', start_month: 72 })
+  const nodes = [
+    { id: 'today', parentId: null, spec: { name: 'Today', catalog_id: null, events: [] } },
+    { id: 'w', parentId: 'today', spec: { name: 'Work', catalog_id: null, events: [job] } },
+    { id: 'wf', parentId: 'w', spec: { name: '+ flat', catalog_id: null, events: [job, flat] } },
+    { id: 'wfk', parentId: 'wf', spec: { name: '+ kid', catalog_id: null, events: [job, flat, kid] } },
+  ]
+  it('+5 yrs -> +8 yrs moves the flat (and its copy in the sub-branch), nothing else', () => {
+    const m = shiftBranch(nodes, 'wf', 8)!
+    expect([...m.keys()].sort()).toEqual(['wf', 'wfk'])
+    expect(m.get('wf')!.events.find((e) => e.type === 'buy_home')!.start_month).toBe(96)
+    expect(m.get('wfk')!.events.find((e) => e.type === 'buy_home')!.start_month).toBe(96)
+    expect(m.get('wfk')!.events.find((e) => e.type === 'household_change')!.start_month).toBe(72) // the kid's own time is kept
+    expect(m.get('wf')!.events.find((e) => e.type === 'start_job')!.start_month ?? 0).toBe(0)
+  })
+  it('half years work; it never goes before the start; the root and unchanged links do nothing', () => {
+    expect(shiftBranch(nodes, 'wf', 1.5)!.get('wf')!.events.find((e) => e.type === 'buy_home')!.start_month).toBe(18)
+    expect(shiftBranch(nodes, 'wf', -50)!.get('wf')!.events.find((e) => e.type === 'buy_home')!.start_month).toBe(0)
+    expect(shiftBranch(nodes, 'today', 3)).toBeNull()
+    expect(shiftBranch(nodes, 'wf', 5)!.size).toBe(0)
+  })
+})

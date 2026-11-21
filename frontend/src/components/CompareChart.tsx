@@ -11,11 +11,12 @@ const COLOR = { a: 'var(--a)', b: 'var(--b)' }
 /** The value at the very start (before month 1): what the person has today. */
 function startValue(plan: Plan, metric: 'nw' | 'cash') {
   if (metric === 'cash') return plan.startCash
-  return plan.startCash + plan.startInvest - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
+  return plan.startCash + plan.startInvest + plan.startHome - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
 }
 
 /** A vs B, one point per year (age on the x axis). Median line + the range where 8 in 10 simulated futures land. */
 export function CompareChart({ sides, metric, profile, years, observed }: { sides: ChartSide[]; metric: 'nw' | 'cash'; profile: Profile; years: number; observed: boolean }) {
+  const floor = metric === 'cash' && profile.minCash ? profile.minCash : null
   const rows = Array.from({ length: years + 1 }, (_, y) => {
     const t = y * 12 - 1
     const row: Record<string, number | [number, number] | null> = { age: profile.age + y }
@@ -59,6 +60,7 @@ export function CompareChart({ sides, metric, profile, years, observed }: { side
             }}
           />
           <ReferenceLine y={0} stroke="var(--danger)" strokeDasharray="4 4" strokeOpacity={0.6} />
+          {floor != null && <ReferenceLine y={floor} stroke="var(--warn)" strokeDasharray="6 4" strokeOpacity={0.8} label={{ value: `your floor ${chfk(floor).replace('CHF ', '')}`, position: 'insideBottomLeft', fontSize: 11, fill: 'var(--warn)' }} />}
           {sides.map((s) => (
             <Area key={`${s.key}_band`} dataKey={`${s.key}_band`} stroke="none" fill={COLOR[s.key]} fillOpacity={0.12} isAnimationActive={false} activeDot={false} />
           ))}

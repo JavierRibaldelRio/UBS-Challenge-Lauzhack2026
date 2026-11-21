@@ -45,6 +45,10 @@ export type ProfileUpdate = {
   cash_chf: number | null
   investments_chf: number | null
   monthly_spending_chf: number | null
+  /** value of a home they ALREADY own today (gifted, inherited, bought earlier) */
+  home_value_chf?: number | null
+  /** the least cash they ever want to have: a liquidity floor (constraint) */
+  min_cash_chf?: number | null
   summary: string
 }
 export type ParseResult = { profile_update?: ProfileUpdate | null; scenarios: ScenarioSpec[]; horizon_years: number | null; unsupported: string[]; note: string | null }
@@ -55,6 +59,7 @@ export type TurnResult = {
   /** path = the complete new version (events changed / removed), or null + add_events (only additions: shorter) */
   edits: { path_id: string; path: ScenarioSpec | null; add_events?: TwinEvent[]; changes: string[] }[]
   remove_path_ids: string[]
+  undo_path_ids?: string[]
   new_goals: { name: string; target_chf: number; by_month: number }[]
   remove_goals: string[]
   macro_update: import('./macro').MacroUpdate | null
@@ -91,6 +96,10 @@ export type Profile = {
   study_assumption: { study_duration_years?: number; annual_tuition_chf?: number } | null
   calib: { other_mu: number; other_sd: number; months: number }
   ledger_closing_cash: number[]
+  /** told in the chat: a home they already own (not in the data) */
+  home?: number
+  /** told in the chat: the least cash they want to keep (a constraint, C_t >= C_min) */
+  minCash?: number
 }
 
 export type Regression = {

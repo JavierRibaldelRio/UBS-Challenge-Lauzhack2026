@@ -189,8 +189,8 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 58 validation tests (accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
-cd frontend && pnpm test:live                # 47 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
+cd frontend && pnpm test                     # 64 validation tests (accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
+cd frontend && pnpm test:live                # 54 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 cd ml && uv sync --frozen && uv run train.py # re-train from pre_docs/Data -> rewrites frontend/src/model/*.json (~5 s, deterministic)
 curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow

@@ -88,7 +88,7 @@
   <h1>How the Financial Twin works,<br />from your words to a verified answer</h1>
   <p class="lead">A fictional person, their real (synthetic) bank history, and a twin you can talk to. You describe a decision in plain words; the twin turns it into a plan, simulates 500 possible futures, answers your question with a confidence it can justify, and checks every number it tells you.</p>
   <nav class="toc">
-    <a href="#big">1 · Big picture</a><a href="#layers">2 · Three layers</a><a href="#vars">2b · Person vs economy</a><a href="#data">3 · The data</a><a href="#learn">4 · What it learns</a><a href="#month">5 · One month</a><a href="#futures">6 · 500 futures</a><a href="#words">7 · Words ⇄ numbers</a><a href="#answer">8 · Answers &amp; confidence</a><a href="#unknown">9 · Unknowns</a><a href="#twin">10 · A living twin</a><a href="#trust">11 · Trust</a><a href="#safe">12 · Never breaks</a><a href="#brief">✓ UBS brief</a><a href="#code">13 · Where it lives</a>
+    <a href="#big">1 · Big picture</a><a href="#screen">1b · The screen</a><a href="#layers">2 · Three layers</a><a href="#vars">2b · Person vs economy</a><a href="#data">3 · The data</a><a href="#learn">4 · What it learns</a><a href="#month">5 · One month</a><a href="#futures">6 · 500 futures</a><a href="#words">7 · Words ⇄ numbers</a><a href="#answer">8 · Answers &amp; confidence</a><a href="#unknown">9 · Unknowns</a><a href="#twin">10 · A living twin</a><a href="#trust">11 · Trust</a><a href="#safe">12 · Never breaks</a><a href="#twindef">✓ A Financial Twin?</a><a href="#brief">✓ UBS brief</a><a href="#code">13 · Where it lives</a>
   </nav>
 </header>
 
@@ -154,9 +154,9 @@
 
     <rect class="bx" x="810" y="176" width="130" height="96" rx="14" stroke="var(--out)" />
     <text class="tt" x="826" y="204">📊 Results</text>
-    <text class="st" x="826" y="224">cards, chart,</text>
-    <text class="st" x="826" y="241">goals, risks,</text>
-    <text class="st" x="826" y="258">checks</text>
+    <text class="st" x="826" y="224">tree, A vs B,</text>
+    <text class="st" x="826" y="241">charts, goals,</text>
+    <text class="st" x="826" y="258">sensitivity</text>
 
     <path class="ln" d="M180,224 L208,224" /><path class="ln" d="M385,224 L413,224" /><path class="ln" d="M590,224 L618,224" /><path class="ln" d="M780,224 L808,224" />
     <!-- model files feed resolver + engine -->
@@ -173,7 +173,7 @@
     <rect class="bx" x="620" y="320" width="160" height="90" rx="14" stroke="var(--ai)" />
     <text class="tt" x="636" y="348">✦ AI #2</text>
     <text class="st" x="636" y="368">numbers → plain words</text>
-    <text class="st" x="636" y="385">(answer + explanation)</text>
+    <text class="st" x="636" y="385">(A/B story, answer)</text>
 
     <rect class="bx" x="415" y="320" width="175" height="90" rx="14" stroke="var(--ok)" />
     <text class="tt" x="431" y="348">✓ Number checker</text>
@@ -201,8 +201,34 @@
     <li><span><b>AI #1, the twin’s voice</b> (DeepSeek V4.1 Flash on Together AI, reasoning off), gets <b>the context</b>: the last 12 messages, your current numbers and results, and every path on screen. In one strict-JSON turn it <b>replies</b> and <b>acts</b>: updates facts about today, adds new paths, edits the path you mean (“have the kid at 35 instead”), or removes one it got wrong. Any amount you didn’t say stays <i>empty</i>. It describes; it never calculates the simulation.</span></li>
     <li><span><b>The resolver</b> builds a month-by-month plan and fills every empty number from the data (e.g. “median salary of 69 employed people aged 20–24”), labelling each one: <span class="tag t-data">from data</span> <span class="tag t-learned">learned</span> <span class="tag t-you">you</span> <span class="tag t-assumption">assumption</span> <span class="tag t-missing">unknown</span>.</span></li>
     <li><span><b>The engine</b> runs exact bookkeeping, month by month, 500 times with realistic luck learned from the data, and returns ranges, risks and goal chances.</span></li>
-    <li><span><b>AI #2</b> receives only the final numbers and writes the answer in plain words. <b>The number checker</b> verifies every number it wrote. You see “✓ all 13 numbers checked”.</span></li>
+    <li><span><b>AI #2</b> receives only the final numbers and writes, for the two paths you compare, what happened so far (from the real data) and what tends to happen next, plus a personal comparison; and the direct answer to a question. <b>The number checker</b> verifies every number it wrote. You see “✓ all 13 numbers checked”.</span></li>
   </ol>
+</section>
+
+
+<!-- =============================================================== 1b the screen -->
+<section class="card sec" id="screen">
+  <h2><span class="num">1b</span> The screen: a tree of possible lives, two at a time</h2>
+  <div class="grid2">
+    <div>
+      <svg viewBox="0 0 530 230" style="width:100%;height:auto" role="img" aria-label="A scenario tree: today branches into paths; a branch continues its parent; the time is on the links">
+        <style>.nd{fill:var(--card);stroke:var(--border);stroke-width:1.5}.na{stroke:#15803d;stroke-width:2.5}.nb{stroke:#2563eb;stroke-width:2.5}.lk{fill:none;stroke:var(--muted);stroke-opacity:.55;stroke-width:2}.t1{font-size:12px;font-weight:700;fill:var(--text)}.t2{font-size:10.5px;fill:var(--muted)}.pill{fill:var(--card);stroke:#2563eb;stroke-opacity:.5}</style>
+        <text class="t2" x="14" y="86" style="font-weight:800;letter-spacing:.12em">BASELINE</text>
+        <rect class="nd" x="10" y="94" width="140" height="44" rx="10"/><text class="t1" x="20" y="113">Today · no change</text><text class="t2" x="20" y="129">CHF −116k · cash runs out</text>
+        <path class="lk" d="M150,116 C178,116 178,46 206,46"/><path class="lk" d="M150,116 C178,116 178,116 206,116"/><path class="lk" d="M150,116 C178,116 178,186 206,186"/>
+        <rect class="nd na" x="206" y="24" width="140" height="44" rx="10"/><text class="t1" x="216" y="43">A · Start working</text><text class="t2" x="216" y="59">CHF 745k · cash OK</text>
+        <rect class="nd" x="206" y="94" width="140" height="44" rx="10"/><text class="t1" x="216" y="113">Master's degree</text><text class="t2" x="216" y="129">CHF 557k</text>
+        <rect class="nd" x="206" y="164" width="140" height="44" rx="10"/><text class="t1" x="216" y="183">Move abroad</text><text class="t2" x="216" y="199">CHF 199k</text>
+        <path class="lk" d="M346,46 L384,46" style="stroke:#2563eb;stroke-opacity:.6"/><rect class="pill" x="341" y="37" width="48" height="18" rx="9"/><text class="t2" x="349" y="50" style="fill:#2563eb;font-weight:700">+8 yrs</text>
+        <rect class="nd nb" x="384" y="24" width="140" height="44" rx="10"/><text class="t1" x="394" y="43">B · + flat at 28</text><text class="t2" x="394" y="59">keeps the job decision</text>
+      </svg>
+    </div>
+    <div class="grid3" style="grid-template-columns:1fr">
+      <div class="tile"><h3>🌳 A scenario tree, as in UBS’s examples</h3><p class="small">Every path is a node. A branch keeps every decision of its parent and adds one (work → then a flat → then a child). Placement shows what builds on what, not when: the time is on the links (“+8 yrs”), and you can click it to change it. Pan, zoom, drag nodes; a node’s “+” opens a card next to it.</p></div>
+      <div class="tile"><h3>🟢 A vs 🔵 B</h3><p class="small">Click two nodes: the first is A (green), the second B (blue). Tiles say in plain words what happened so far (real data) and what tends to happen next; a comparison measures liquidity, net worth, goals and constraint breaches (UBS’s four catalog metrics) and names the path that <b>fits your goals better, in this simulation</b>, by a rule shown on screen. Labelled <b>Not financial advice</b>.</p></div>
+      <div class="tile"><h3>📈 Year by year + sensitivity</h3><p class="small">Net worth and cash in the bank, A and B, with the real bank balance as black dots. The sensitivity card shows what moves the result most and what happens if an assumption is off by up to 30%, and where the order of A and B would flip.</p></div>
+    </div>
+  </div>
 </section>
 
 <!-- =============================================================== 2 layers -->
@@ -278,7 +304,21 @@
     <div class="tile"><h3>📈 Response to change</h3><div class="big">R² 0.05 · 0.80</div><p class="small muted">Spending <i>level</i> barely depends on income here (so we start from your own history); spending <i>volatility</i> is well explained (used when your situation changes).</p></div>
     <div class="tile"><h3>👥 Peer ranges</h3><div class="big">10th–90th %</div><p class="small muted">E.g. employed people aged 20–24 earn CHF 4,963 to 10,519 (median 8,070, 69 people). Used to test how robust an answer is.</p></div>
   </div>
+
+  <h3 style="margin-top:6px">What <code>ml/train.py</code> writes, and where the app uses it</h3>
+  <div class="scroll"><table style="min-width:640px">
+    <tr><th>In the model files</th><th>Learned from</th><th>Used in the app</th></tr>
+    <tr><td>Expensive months (per job status)</td><td>calendar-month effects, kept only if |t| &gt; 3</td><td>every simulated month (engine)</td></tr>
+    <tr><td>December bonus</td><td>outlier Decembers vs each person’s other months</td><td>each future’s December (engine)</td></tr>
+    <tr><td>Surprise shape (201 points)</td><td>28,800 real monthly surprises</td><td>the random part of spending in every future</td></tr>
+    <tr><td>Two regressions</td><td>spending level and its ups &amp; downs vs income, rent, age, household, status</td><td>when a decision changes the situation (resolver)</td></tr>
+    <tr><td>Medians + peer ranges</td><td>salary by job × age, rent by city × household, tuition</td><td>every number you didn’t give; the peer-range confidence test</td></tr>
+    <tr><td>Your own habit (profiles.json)</td><td>your 24 months: usual spending and how sure we are</td><td>your starting point; the real balance = black dots</td></tr>
+    <tr><td>Backtest + calibration</td><td>trained on 2025, predicted 2026 for 1,200 people</td><td>“Can you trust this?” and the confidence thresholds</td></tr>
+  </table></div>
+  <p class="small muted">It does <b>not</b> learn “what if I do a master’s”: nobody in the data does one. Decisions are applied by exact formulas; the data teaches how normal months behave. Run once, ~5 s, fixed seed: the same files every time.</p>
 </section>
+
 
 <!-- =============================================================== 5 month -->
 <section class="card sec" id="month">
@@ -324,14 +364,15 @@
         <div class="b me">but buy the flat at 30 instead</div>
         <div class="b tw">✏️ Changed it: ✓ flat: at 28 → at 30 (everything else kept)</div>
       </div>
-      <p class="small muted">It sees the last 12 messages, your current numbers and every path, so “instead”, “that path”, “the kid” make sense, and corrections (“no, I meant rent”) fix the right thing. 12 event types (including buying a car or other assets); “A or B” → separate paths; other currencies are never converted silently. 36 live tests, including a real messy conversation, French and very long sentences.</p>
+      <p class="small muted">It sees the last 12 messages, your current numbers and every path, so “instead”, “that path”, “the kid” make sense, and corrections (“no, I meant rent”) fix the right thing. 12 event types (including buying a car or other assets); “A or B” → separate paths; other currencies are never converted silently. 54 live tests, including two real messy conversations replayed turn by turn, French and very long sentences.</p>
     </div>
     <div class="tile">
-      <h3>✦ AI #2: explaining back</h3>
+      <h3>✦ AI #2: explaining back, for A and B</h3>
       <div class="chat">
-        <div class="b tw">In this simulation, the master’s ends at about CHF 557k, CHF 189k less than starting work… It only catches up if it raises the salary by 24%.</div>
+        <div class="b tw"><b>So far</b> In UBS’s data your bank balance went from CHF 8k to −17k in two years… <b>Ahead</b> In this simulation you reach about CHF 745k at 30 and cash stays above zero…</div>
+        <div class="b tw">On cash, Start working is clearly calmer… In this simulation, Start working fits your goals better: the master’s runs out of cash in 100% of futures. More money is not automatically the better fit. <i>Not financial advice.</i></div>
       </div>
-      <p class="small muted">Gets only the final numbers. Rules: plain words, use only these numbers, say “in this simulation”, never give advice. Then the app checks every number (understands “557k”, “12’000”, “35%”, French spacing). Typical speed: 1–2 seconds.</p>
+      <p class="small muted">Gets only the final numbers (and the verdicts the app computed). Rules: plain, warm words; use only these numbers; never pick a different “better fit” than the computed one; never “you should”. The app checks every number (understands “557k”, “12’000”, “35%”, French spacing). Typical speed: 1–3 seconds.</p>
     </div>
   </div>
 </section>
@@ -420,7 +461,7 @@
   <div class="grid3">
     <div class="tile"><h3>✓ Accounting, live</h3><p class="small">Cash adds up every month; moving money between pockets never changes net worth; debt never negative; same seed → same result. Checked on every change.</p></div>
     <div class="tile"><h3>✓ Better than a simple average</h3><p class="small">Typical miss CHF 2,281 vs 2,445; cash-crunch prediction score 0.0012 vs 0.0025 (lower is better).</p></div>
-    <div class="tile"><h3>✓ Tests</h3><p class="small">47 automatic tests (UBS’s validation list: zero income, higher tuition, loan payoff…) + 38 tests against the real AI, including a real messy conversation and the person-vs-economy split. All 47 automatic tests pass.</p></div>
+    <div class="tile"><h3>✓ Tests</h3><p class="small">64 automatic tests (UBS’s validation list: zero income, higher tuition, loan payoff…; the tree; the comparison) + 54 tests against the real AI, including real conversations replayed turn by turn. All pass.</p></div>
   </div>
 </section>
 
@@ -434,6 +475,26 @@
   </div>
 </section>
 
+
+<!-- =============================================================== twin definition -->
+<section class="card sec" id="twindef">
+  <h2><span class="num">✓</span> Why this is a Financial Twin, by UBS’s own definition</h2>
+  <div class="eq">x(t+1) = F( x(t), a(t), w(t); θ )  &nbsp; — UBS, scenario-modelling.md §2: “The model must distinguish user-controlled decisions from external conditions.”</div>
+  <div class="scroll"><table style="min-width:620px">
+    <tr><th></th><th>UBS’s term</th><th>In this twin</th></tr>
+    <tr><td><b>x</b></td><td>financial state</td><td>cash, investments, homes, debts, income, rent, spending, job, household, goals: from the person’s rows in UBS’s CSVs</td></tr>
+    <tr><td><b>F</b></td><td>transition</td><td>exact monthly bookkeeping; cash identity and net worth = assets − debts checked live</td></tr>
+    <tr><td><b>a</b></td><td>decisions</td><td>the nodes of the tree: job, study, move, home, child, loan, investing… each number labelled with its source</td></tr>
+    <tr><td><b>w</b></td><td>external conditions</td><td>the economy (inflation, rates, recession, markets, house prices): one setting shared by every path</td></tr>
+    <tr><td><b>θ</b></td><td>parameters</td><td>learned by <code>ml/train.py</code> (§4) and backtested (§11)</td></tr>
+  </table></div>
+  <div class="grid3">
+    <div class="tile"><h3>Data → Model → Scenarios → Explain</h3><p class="small">The four building blocks from UBS’s deck: UBS’s synthetic ledger → formulas + learned behaviour → the tree and A vs B → plain-English tiles with checked numbers.</p></div>
+    <div class="tile"><h3>A twin, not a calculator</h3><p class="small">Starts from this person’s data and own habits; updates itself from what you tell it (“I now earn 1,500”, “I own a 200k flat”, “never below 5k”); remembers the conversation; fixes its own mistakes (undo); every path recomputes.</p></div>
+    <div class="tile"><h3>UBS capabilities C01–C20</h3><p class="small">State, personalization, updating, scenarios, counterfactuals, life events, constraints (incl. your own cash floor), comparison, uncertainty &amp; sensitivity, goals, explainability, interactivity, validation, transparency, provenance, reproducibility, responsible support.</p></div>
+  </div>
+</section>
+
 <!-- =============================================================== 12b brief -->
 <section class="card sec" id="brief">
   <h2><span class="num">✓</span> Checked against UBS’s brief</h2>
@@ -441,10 +502,12 @@
     <tr><th>UBS asks</th><th></th><th>How</th></tr>
     <tr><td><b>MUST</b> · Fictional client profile</td><td>✅</td><td>1,200 fictional people from UBS’s data; their own learned spending habit</td></tr>
     <tr><td><b>MUST</b> · One working scenario</td><td>✅</td><td>12 event types (home, car, job, study…), combined freely, in plain words or one click</td></tr>
-    <tr><td><b>MUST</b> · Before / after comparison</td><td>✅</td><td>baseline vs every path: cards, chart, answer card</td></tr>
+    <tr><td><b>MUST</b> · Before / after comparison</td><td>✅</td><td>baseline vs any path, any two paths side by side (A/B): tiles, year-by-year charts, UBS’s four measures, a computed “fits your goals better”</td></tr>
     <tr><td><b>MUST</b> · Transparent assumptions</td><td>✅</td><td>every number tagged and editable; unknowns dotted; the AI’s prompt visible; scenario report in UBS’s template</td></tr>
     <tr><td><b>BONUS</b> · Conversational AI</td><td>✅</td><td>a chat that answers, acts, remembers, edits, and checks its numbers</td></tr>
-    <tr><td><b>BONUS</b> · Sensitivity &amp; uncertainty</td><td>✅</td><td>calibrated Monte Carlo (personal + economy luck), what matters most, break-even, peer ranges, economy stress tests</td></tr>
+    <tr><td><b>BONUS</b> · Sensitivity &amp; uncertainty</td><td>✅</td><td>calibrated Monte Carlo (personal + economy luck), the sensitivity card (what moves the result; “what if it’s off by…”, where A and B flip), break-even, peer ranges, unknown ranges, economy stress tests</td></tr>
+    <tr><td>Examples · scenario tree, constraints, sensitivity chart</td><td>✅</td><td>the tree with time on the links; cash below zero, down payment and your own cash floor as constraints; the sensitivity card</td></tr>
+    <tr><td>Responsible AI</td><td>✅</td><td>synthetic data only, every number sourced, unknowns shown, AI numbers checked, “in this simulation”, “Not financial advice”</td></tr>
     <tr><td>“Help someone understand a decision”</td><td>✅</td><td>direct answers with a computed confidence and a plain-English story</td></tr>
   </table></div>
 </section>
@@ -456,10 +519,10 @@
     <tr><th>Folder</th><th>What</th><th>Tech</th></tr>
     <tr><td><code>pre_docs/</code></td><td>UBS challenge material and data</td><td>CSV, Markdown</td></tr>
     <tr><td><code>ml/train.py</code></td><td>learns habits, runs the backtest, writes the model files</td><td>Python, numpy, pandas (pinned with uv)</td></tr>
-    <tr><td><code>backend/</code></td><td>AI gateway: <code>/api/chat</code> (the conversation) <code>/api/answer</code> <code>/api/explain</code> (+ <code>/api/parse</code>, <code>/api/edit</code>)</td><td>Node, OpenAI-compatible SDK, zod schemas</td></tr>
+    <tr><td><code>backend/</code></td><td>AI gateway: <code>/api/chat</code> (the conversation) <code>/api/compare</code> (the A/B texts) <code>/api/answer</code> (+ <code>/api/explain</code>, <code>/api/parse</code>, <code>/api/edit</code>)</td><td>Node, OpenAI-compatible SDK, zod schemas</td></tr>
     <tr><td><code>frontend/src/lib/</code></td><td>resolver, engine, answers &amp; confidence, unknowns, checks</td><td>TypeScript, runs in the browser</td></tr>
-    <tr><td><code>frontend/src/components/</code></td><td>chat, cards, chart, “how did the twin get this?”</td><td>React, Recharts</td></tr>
-    <tr><td><code>demo.mjs</code></td><td>starts everything: <code>node demo.mjs --prod</code></td><td>Node</td></tr>
+    <tr><td><code>frontend/src/components/</code></td><td>chat, scenario tree, A/B tiles &amp; comparison, year-by-year charts, sensitivity, “how did the twin get this?”</td><td>React, Recharts</td></tr>
+    <tr><td><code>demo.mjs</code></td><td>starts everything: <code>node demo.mjs --prod</code> → <code>http://localhost:4173/?demo</code> (dev: <code>node demo.mjs</code> → :5173; both use the backend on :8000)</td><td>Node</td></tr>
   </table></div>
   <p class="small muted">Full details: <code>DEV_NOTES.md</code> (how to change anything) · <code>README.md</code> (setup) · <code>demo.txt</code> (3-minute script + FAQ).</p>
 </section>

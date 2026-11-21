@@ -134,7 +134,13 @@ body.dragging, body.dragging * { cursor: col-resize !important; user-select: non
 .tree { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 .tree-edges { overflow: visible; }
 /* time on the links: small, quiet pills; coloured on the A / B links */
-.edge-label { position: absolute; transform: translate(-50%, -50%); font-size: 0.68rem; font-weight: 650; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); cursor: help; z-index: 1; }
+.edge-label { position: absolute; transform: translate(-50%, -50%); font: inherit; font-size: 0.68rem; font-weight: 650; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); cursor: pointer; z-index: 1; transition: border-color 0.12s, color 0.12s; }
+.edge-label:hover { color: var(--text); border-color: var(--text); }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.edge-hit:hover { stroke: color-mix(in srgb, var(--text) 8%, transparent); }
+.tree-edges .edge-hit { pointer-events: stroke; }
+.gap-edit { position: absolute; transform: translate(-50%, -50%); z-index: 6; display: inline-flex; align-items: center; gap: 3px; background: var(--card); border: 1.5px solid var(--text); border-radius: 999px; padding: 1px 8px; font-size: 0.72rem; font-weight: 650; box-shadow: var(--shadow-lift); }
+.gap-edit input { width: 44px; border: 0; background: transparent; font: inherit; font-variant-numeric: tabular-nums; outline: none; text-align: right; }
 .edge-label-a { color: var(--a); border-color: color-mix(in srgb, var(--a) 40%, var(--border)); }
 .edge-label-b { color: var(--b); border-color: color-mix(in srgb, var(--b) 40%, var(--border)); }
 .edge-label-quiet { border-color: transparent; background: color-mix(in srgb, var(--card-2) 85%, transparent); box-shadow: none; font-weight: 600; opacity: 0.85; }
@@ -290,6 +296,28 @@ body.dragging, body.dragging * { cursor: col-resize !important; user-select: non
 .gh-a { border-color: var(--a); }
 .gh-b { border-color: var(--b); }
 
+/* ===================================================================== sensitivity */
+.sens-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+.sens-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.sens-note { margin-top: 6px; line-height: 1.5; }
+.tornado { display: grid; gap: 10px; margin-top: 4px; }
+.tornado-axis { display: grid; grid-template-columns: 150px 1fr 1fr 1fr; text-align: center; font-size: 0.72rem; }
+.tornado-axis span:first-child { grid-column: 2; text-align: left; }
+.tornado-axis span:last-child { text-align: right; }
+.t-row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: center; }
+.t-name { font-size: 0.84rem; line-height: 1.25; }
+.t-name small { font-size: 0.7rem; }
+.t-bars { display: grid; gap: 3px; }
+.t-bar { --c: var(--a); position: relative; height: 14px; }
+.t-bar.t-b { --c: var(--b); }
+.t-bar::before { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--border); }
+.t-neg, .t-pos { position: absolute; top: 2px; bottom: 2px; background: var(--c); }
+.t-neg { right: 50%; opacity: 0.45; border-radius: 4px 0 0 4px; }
+.t-pos { left: 50%; border-radius: 0 4px 4px 0; }
+.t-val { position: absolute; top: -1px; font-size: 0.68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.t-val-l { left: 0; }
+.t-val-r { right: 0; }
+
 /* ===================================================================== folded sections */
 .fold summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .fold summary::-webkit-details-marker { display: none; }
@@ -411,5 +439,5 @@ footer { text-align: center; margin-top: 6px; }
 
 /* PC first: below ~1200px the two-column blocks stack, nothing else changes */
 @media (max-width: 1200px) {
-  .compare-body, .charts { grid-template-columns: minmax(0, 1fr); }
+  .compare-body, .charts, .sens-grid { grid-template-columns: minmax(0, 1fr); }
 }

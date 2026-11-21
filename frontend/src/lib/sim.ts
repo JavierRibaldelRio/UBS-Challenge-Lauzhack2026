@@ -39,6 +39,8 @@ export type SimResult = {
   meanPath: { cash: number[]; nw: number[] }
   /** end net worth of every simulated future (same seed for every path -> futures can be compared one by one) */
   endNWPaths: Float64Array
+  /** lowest cash of every simulated future (to test any liquidity floor, e.g. "never below 20k") */
+  minCashPaths: Float64Array
   /** a few single futures (bumpy), drawn behind the smooth median line */
   samples: { nw: Float64Array; cash: Float64Array }[]
   /** home purchases: can the down payment actually be paid from cash in each future? */
@@ -216,6 +218,7 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
     }),
     meanPath: { cash: Array.from(det.cash), nw: Array.from(det.nw) },
     endNWPaths: endNW,
+    minCashPaths: minCash,
     samples,
     homeBuys,
   }
@@ -236,7 +239,7 @@ export function checks(plan: Plan, params: Params, profile: Profile): Check[] {
 
   // net worth moves only by income - spending - costs - interest + investment gains (transfers & loan principal cancel)
   let maxNwErr = 0
-  let prevNw = plan.startCash + plan.startInvest - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
+  let prevNw = plan.startCash + plan.startInvest + plan.startHome - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
   for (const r of rows) {
     const loanIn = plan.loans.filter((l) => l.isNew && !l.toSeller && l.start === r.t).reduce((a, l) => a + l.principal, 0)
     const expected = prevNw + (r.inflow - loanIn) - r.spend - plan.extra[r.t] - plan.oneOff[r.t] - r.interest + r.investGain + r.revalue

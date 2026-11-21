@@ -12,29 +12,54 @@ How to read this file
 
 
 ---------------------------------------------------------------------
-A. TEN MINUTES BEFORE (checklist)
+A. BEFORE THE DEMO: EXACT STEPS (do them in this order, nothing else)
 ---------------------------------------------------------------------
-1. In the repo folder run:   node demo.mjs --prod
-   (--prod = built version, uses much less memory. Without it: port 5173.)
-   Wait until you see "Financial Twin API on http://localhost:8000"
-   and "Local: http://localhost:4173".
-2. Open http://localhost:4173 in the browser you will present with.
-3. Top right must show a GREEN dot and "AI on".
-   If it says "AI offline": check backend/.env has LLM_API_KEY, restart step 1.
-4. Rehearse the whole script ONCE in this same browser. This stores the AI
-   answers in the browser, so they replay even if the Wi-Fi dies.
-   Do NOT clear browser data or switch to a private window after this.
-5. Press F5 (reload). You must see the start screen: the chat on the left,
-   one node "Today · no change" in the tree, and top right
-   "If nothing changes, cash runs out at 20."
-6. Use a laptop/desktop screen with a mouse (the app is built for PC, not
-   phones). In the tree: scroll = zoom, drag the canvas = move, drag a node =
-   rearrange (↺ resets), ⤢ = fit all. A node's "+" opens the new-path card next to it. Zoom so
-   the tree and the two A/B tiles fit on one screen (Ctrl + / Ctrl -, 90-100%).
-   Drag the divider between the chat and the rest if the chat is too wide.
-   Full screen: F11. Turn off notifications. Close other tabs.
-7. Backup: have a screen recording of a full run on a USB stick or phone.
-   (Slides are not allowed, but images and videos are allowed as backup.)
+THE NIGHT BEFORE (once, on the laptop you will present with)
+1. Get the latest code:            git pull
+2. Install exactly what is locked:  cd frontend && pnpm install --frozen-lockfile && cd ..
+                                    cd backend  && pnpm install --frozen-lockfile && cd ..
+3. backend/.env must contain your key:  LLM_API_KEY=...   (never commit this file)
+4. Sanity check (1 minute):         cd frontend && pnpm test && cd ..
+   Must end with "64 passed". (Optional, ~5 min, uses the AI:
+   start the demo first, then  cd frontend && pnpm test:live  -> "54 passed".)
+
+DEV vs PROD: WHICH COMMAND, WHICH ADDRESS (they are NOT the same)
+   node demo.mjs          -> development: the web app on http://localhost:5173
+                             (reloads when code changes, ~700 MB RAM)
+   node demo.mjs --prod   -> builds the app once and serves the build on
+                             http://localhost:4173 (~120 MB RAM, nothing recompiles)
+   BOTH start the AI gateway (backend) on port 8000. That is on purpose: the
+   web app sends every /api call to port 8000. Consequences:
+   - Never run both at the same time: starting one stops the other's backend.
+   - USE --prod FOR THE DEMO, and open http://localhost:4173/?demo
+   - The backend never auto-reloads. After ANY code change or git pull:
+     Ctrl+C, then start  node demo.mjs --prod  again (it rebuilds).
+   - The browser cache of AI answers is PER ADDRESS. Answers rehearsed on
+     5173 are NOT available on 4173. Rehearse on the address you present.
+
+ONE HOUR BEFORE
+5. In the repo folder:  node demo.mjs --prod
+   Wait for "Financial Twin API on http://localhost:8000" and
+   "Local: http://localhost:4173". Keep this terminal open (Ctrl+C stops it).
+6. Check the AI is reachable:  curl localhost:8000/api/health
+   -> must show "llm": {"model": ...}. If "llm": null, the key is missing.
+7. Open http://localhost:4173/?demo in the browser you present with.
+   The chat header (top left) must show a GREEN dot and "AI on".
+8. Rehearse the whole script below ONCE on this address. Every AI answer is
+   stored in this browser and replays if the Wi-Fi dies.
+   Do NOT clear browser data or use a private window after this.
+
+TEN MINUTES BEFORE
+9. Press F5. Start screen: chat on the left, the tree with "Today · no change"
+   (BASELINE), top right "If nothing changes, cash runs out at 20."
+10. Laptop/desktop with a mouse (the app is built for PC, not phones). Tree:
+    scroll = zoom, drag the canvas = move, drag a node = rearrange (↺ resets),
+    ⤢ = fit all, click a link's "+N yrs" to change the time, a node's "+"
+    opens the new-path card next to it. Zoom the browser so the tree and the
+    two A/B tiles fit (Ctrl + / Ctrl -, 90-100%). F11 full screen.
+    Notifications off, other tabs closed.
+11. Backup: a screen recording of a full run on a USB stick or phone.
+    (Slides are not allowed; images and videos are allowed as backup.)
 
 
 ---------------------------------------------------------------------
@@ -88,6 +113,9 @@ B. THE SCRIPT (3:00)
   still runs out of cash while she studies, in every simulated future. So the
   twin does not call it the better fit: the most money is not automatically
   the best choice, exactly as UBS's guidance says."
+- OPTIONAL (only if time): scroll to "Sensitivity". SAY: "And this is the
+  sensitivity view UBS asked for: what moves the result most, and what happens
+  if an assumption is off by up to 30 percent, for both paths at once." 
 
 [1:50 – 2:30]  JUST ASK, AND BRANCH OFF
 - DO: in the chat, click the idea
@@ -182,7 +210,9 @@ A: No. It is a simulation under assumptions you can see and change. It shows
    month ups and downs, learned from the data.
 
 Q: Which assumptions affect the result most?
-A: "🔢 Numbers" on a tile, then "What matters most". For the master's, income matters most (±83k for
+A: The Sensitivity card (under the charts). Left: what moves the result
+   most (each input ±10%), for A and B. Right: pick an input and see both paths
+   from −30% to +30%, and where their order flips. For the master's, income matters most (±83k for
    a 10% change), then other spending (±15k) and rent (±11k). The biggest
    unknown is the degree's salary premium; that's why we show the break-even
    (24%).
@@ -194,7 +224,7 @@ A: A decision is a list of life events (job, study, move, home...). The app
    money out.
 
 Q: How did you verify the calculations?
-A: Four ways. 58 automated tests (plus 47 tests against the real AI), including UBS's own validation list (zero
+A: Four ways. 64 automated tests (plus 54 tests against the real AI), including UBS's own validation list (zero
    income, higher tuition, loan payoff, transfers). Live checks on screen
    (cash adds up, net worth = assets − debts, debt never negative, same seed =
    same result). A backtest on real 2026 data. And we checked UBS's ledger
@@ -364,7 +394,7 @@ E. NUMBERS TO REMEMBER
   Down payment 60k: cash 549k → 495k, net worth stays ≈ 550k.
 - Confidence evidence: "≥95%" statements were right 99.9% of the time
   (19,980 pairs of real people). Calibration: said 50% → 49.9%, said 90% → 87.9%.
-- 500 futures per path · AI answers in ~1–3 s · 58 automated tests + 47 live AI tests.
+- 500 futures per path · AI answers in ~1–3 s · 64 automated tests + 54 live AI tests.
 
 
 ---------------------------------------------------------------------
@@ -374,3 +404,147 @@ USE:   "simulation", "possible futures", "under these assumptions",
        "in this simulation", "from the data", "unknown", "break-even".
 AVOID: "predict", "will happen", "she should", "we recommend", "best choice",
        "guaranteed". (UBS explicitly asks for no forecasts and no advice.)
+
+
+---------------------------------------------------------------------
+G. WHAT ml/train.py PRODUCES, AND HOW THE APP USES IT
+---------------------------------------------------------------------
+Run once, offline (cd ml && uv run train.py, ~5 s, fixed seed = identical files
+every time). It reads UBS's CSVs (1,200 people x 24 months = 28,800 rows) and
+writes two files that are BUNDLED into the web app (no download at demo time):
+
+frontend/src/model/params.json  (what was learned + the evidence)
+  WHAT                          FROM THE DATA                     USED BY THE APP IN
+  season[status][month]         extra spending per calendar      sim.ts: every simulated month
+                                month, per job status; kept only  (students +34% in February)
+                                if statistically clear (|t|>3)
+  bonus[status]                 chance + size of a December       sim.ts: December of each future
+                                bonus (employed: 54%, ~61% of a   (drawn at random)
+                                month's pay)
+  shock_quantiles (201 points)  the REAL shape of surprise         sim.ts: the random part of
+                                expenses (skewed, not a bell       spending in every future
+                                curve; no month-to-month memory)
+  regressions.other_spending    how spending changes with income,  resolve.ts: when a decision changes
+  regressions.spending_volatility rent, age, household, status     someone's situation (job, child…),
+                                (CV R² 0.05 and 0.80)              spending and its ups and downs follow
+  anchors (medians + 10th/90th) salary by job x age band, rent by  resolve.ts: every number the user did
+                                city x household, tuition, study   not give ("median of 69 people aged
+                                length                             20-24"); answer.ts: peer-range test
+  backtest + calibration        trained on 2025 only, predicted    "Can you trust this?" panel; the
+                                2026 for all 1,200 people          confidence rules (≥95% = high)
+  data_checks                   UBS ledger: 0 identity errors,      trust panel
+                                0 continuity errors
+  catalog                       UBS's 120 scenario ideas           the AI tags each path with the
+                                                                   closest one (catalog_id)
+frontend/src/model/profiles.json  (one record per person)
+  starting cash, investments, loans, income, rent, goals (with priority), study
+  assumptions, the REAL 24-month bank balance (black dots on the cash chart),
+  and the person's OWN learned spending level + its uncertainty (calib).
+
+What it does NOT do: it does not predict "what if I do a master's". Nobody in
+the data does a master's or moves, so that cannot be learned honestly.
+Decisions are applied by exact formulas; the data teaches how normal months
+behave (seasons, bonuses, surprises, habits) and the typical values.
+Proof it works: trained on 2025, the "8 in 10" range caught 78.5% of real 2026
+results (ideal 80), the middle half 49.8% (ideal 50); "A ends higher than B"
+statements were right 99.9% of the time when we said ≥95% (19,980 pairs).
+
+
+---------------------------------------------------------------------
+H. WHY THIS IS A FINANCIAL TWIN, BY UBS'S OWN DEFINITION
+---------------------------------------------------------------------
+UBS (scenario-modelling.md §2):  x(t+1) = F( x(t), a(t), w(t); θ ),
+"The model must distinguish user-controlled decisions from external conditions."
+  x  the state       cash, investments, homes, debts, income, rent, spending,
+                     job, household, goals: from the person's rows in the CSVs
+  F  the transition  exact monthly bookkeeping (cash identity, net worth =
+                     assets − debts), checked live on every change
+  a  decisions       the nodes of the tree (job, study, move, home, child,
+                     loan, investing…), each number labelled with its source
+  w  external        the economy (inflation, rates, recession, markets, house
+                     conditions   prices), ONE setting shared by every path
+  θ  parameters      learned by train.py (section G)
+UBS deck, "a digital twin is more than a dashboard": DATA (UBS's synthetic
+ledger) -> MODEL (formulas + learned behaviour) -> SCENARIOS (the tree, A vs B)
+-> EXPLAIN (plain-English tiles and comparison, every number checked).
+It is a TWIN, not a calculator: it starts from this person's data and their
+own learned habits, it UPDATES itself ("I now earn 1,500", "I own a 200k
+flat", "never below 5k"), it keeps a memory of the conversation, and every
+path recomputes from the new state.
+UBS capability list (ai-and-technology.md §2): C01 state, C02 personal habits,
+C03/C14 updating, C04-C07 scenarios and life events in plain words, C08
+constraints (cash below zero, down payment, your own cash floor), C09 fair
+comparison (same luck, same economy), C10 uncertainty + sensitivity, C11
+goals, C12/C18 plain explanations, C13 interactive, C15/C19 validation and
+reproducibility (fixed seed), C16/C17 every number tagged with its source,
+C20 responsible: "in this simulation", "Not financial advice".
+
+
+---------------------------------------------------------------------
+I. UBS'S BRIEF AND RUBRIC: WHAT WE SHOW, AND WHERE (no disqualification risk)
+---------------------------------------------------------------------
+THE 4 MUSTs (UBS deck, "What success looks like after 24 hours")
+  ✅ Fictional client profile   1,200 fictional people from UBS's data; Alexia
+                                by default; nothing real.
+  ✅ One working scenario       any decision in plain words or one click; 12
+                                event types; branches of branches.
+  ✅ Before / after comparison  BASELINE vs any path, any two paths side by
+                                side (A green, B blue): tiles, year-by-year
+                                charts, the 4 UBS measures (liquidity, net
+                                worth, goal feasibility, constraint breaches).
+  ✅ Transparent assumptions    every number tagged from data / learned / you /
+                                assumption / unknown / economy, editable;
+                                unknowns drawn dotted; "see the prompt";
+                                scenario report in UBS's 15-field template.
+THE 2 BONUSes
+  ✅ Conversational AI          a chat that answers, acts (paths, branches,
+                                edits, undo, facts, goals, economy), remembers
+                                and checks its own numbers.
+  ✅ Sensitivity & uncertainty  Monte Carlo (500 futures, backtested), the
+                                Sensitivity card (tornado + "what if it's off
+                                by" chart, where the order flips), break-even,
+                                peer-range robustness, unknown ranges, economy
+                                stress tests (UBS S101-S110).
+UBS's suggested demo order (demo-and-submission.md), all in the script:
+  problem -> initial state -> intervention -> calculation -> comparison ->
+  trade-offs -> validation.
+Proposed rubric (judge-scorecard.md), where we score:
+  Financial modelling & correctness (25)  exact formulas, live checks, tests
+  Scenario & counterfactual (20)          tree, branches, A vs B, economy
+  Technical execution & validation (15)   64 tests + 54 live AI tests, backtest
+  UX & communication (15)                 chat + tree + plain-English tiles
+  Innovation (15)                         section J
+  Responsible design (10)                 sources, unknowns, no advice, checks
+Rules we respect (nothing that could disqualify us):
+  - Synthetic data only; no real client data anywhere.
+  - No API key in git (backend/.env is ignored); the key stays on the backend.
+  - What we reused vs built is stated in README §2.8 (LauzHack rule).
+  - No slides (backup video only). Not presented as a forecast or as advice.
+  - Simulated probabilities are labelled as simulations, with their evidence.
+
+
+---------------------------------------------------------------------
+J. WHY IT IS INNOVATIVE, AND WHY IT MATTERS
+---------------------------------------------------------------------
+INNOVATIVE
+  - A tree of possible lives, not a list of scenarios: decisions build on each
+    other (work -> then a flat -> then a child), with the time on each link,
+    exactly the "scenario tree" in UBS's examples, and you can rearrange it.
+  - The AI never does the maths, and is never trusted blindly: it turns words
+    into a strict JSON plan; the engine computes; the AI explains; the app
+    checks every number it wrote (✓ N numbers checked).
+  - Confidence is COMPUTED, not claimed, and backtested on real data.
+  - "Fits your goals better" is computed with the rule shown on screen (cash
+    safety, then goals, then money), so more money is not automatically
+    "better", as UBS's FAQ asks.
+  - Unknowns are shown, not hidden: dotted lines, a break-even ("pays off only
+    if salary +24%"), and a sensitivity chart.
+  - A living twin: it updates itself from what you tell it and fixes its own
+    mistakes (undo, remove, correct) in the conversation.
+IMPACT
+  - Anyone facing a big decision can rehearse it before making it, in their
+    own words, and see what is known, assumed and unknown.
+  - An advisor could use it live with a client: one shared picture, two paths
+    side by side, plain language, no promises.
+  - Built to be trusted: reproducible, validated, transparent, responsible.
+
