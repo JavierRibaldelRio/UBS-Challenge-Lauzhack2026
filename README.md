@@ -1,5 +1,10 @@
 # [Lauzhack 2026](https://lauzhack.com)
 
+## USEFUL LINKS
+
+[Google Docs Plan & Understanding](https://docs.google.com/document/d/1Nwf3SoaL9csPrZBiiXJPQGaQfBoytl8wBbCtf3ApGYI/edit?usp=sharing)
+
+
 LauzHack is a student-run hackathon at EPFL in Lausanne, Switzerland.
 
 q: Is there a specific topic?
@@ -106,3 +111,4 @@ You are encouraged to use existing libraries and APIs, you may use existing code
 
 
 ### Idea: 
+
