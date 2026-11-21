@@ -18,7 +18,7 @@ import { downloadJson, scenarioReport } from './lib/report'
 import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Plan, type Preset } from './lib/resolve'
 import { checks, simulate, type SimResult } from './lib/sim'
 import { branchIdeas, followUpIdeas, suggestQuestions } from './lib/suggest'
-import { inferParent, withParentEvents } from './lib/tree'
+import { eventKey, inferParent, withParentEvents } from './lib/tree'
 import type { Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
 import { unknownImpact } from './lib/unknowns'
 import paramsJson from './model/params.json'
@@ -39,6 +39,25 @@ const fromPreset = (p: Preset): Origin => ({ kind: 'preset', button: p.label, de
 const ICON: Record<string, string> = { start_job: '💼', study: '🎓', relocate: '🚚', income_change: '📉', household_change: '👶', recurring_expense: '🔁', one_off: '💸', invest: '📈', market_shock: '📉', take_loan: '🏦', buy_home: '🏠', buy_asset: '🚗' }
 const iconOf = (e: TwinEvent) => (e.type === 'household_change' && e.household_type === 'couple' ? '💑' : e.type === 'income_change' && (e.income_change_pct ?? 0) > 0 ? '📈' : e.type === 'one_off' && (e.amount_chf ?? 0) < 0 ? '🎁' : ICON[e.type])
 const sortedEvents = (spec: ScenarioSpec) => [...spec.events].sort((a, b) => (a.start_month ?? 0) - (b.start_month ?? 0))
+
+/**
+ * The time on a tree link: when the branch's first NEW decision happens, counted from its parent's last decision
+ * ("+8 yrs"). The tree itself is not a timeline, so the time lives on the links.
+ */
+function linkGap(c: { spec: ScenarioSpec }, parent: { id: string; name: string; spec: ScenarioSpec } | undefined, age0: number) {
+  if (!parent) return null
+  const known = new Set(parent.spec.events.map(eventKey))
+  const fresh = c.spec.events.filter((e) => !known.has(eventKey(e)))
+  if (!fresh.length) return null
+  const first = Math.min(...fresh.map((e) => e.start_month ?? 0))
+  const ref = Math.max(0, ...parent.spec.events.map((e) => e.start_month ?? 0))
+  const d = first - ref
+  const age = Math.floor(age0 + first / 12)
+  const yrs = Math.round(d / 6) / 2 // to the half year
+  const label = d < 0 ? `at ${age}` : d < 6 ? (parent.id === 'today' ? 'now' : 'right after') : `+${yrs} yr${yrs === 1 ? '' : 's'}`
+  const title = parent.id === 'today' ? `first decision at age ${age}${first < 6 ? ' (now)' : `, in ${yrs} year${yrs === 1 ? '' : 's'}`}` : d < 0 ? `its new decision (age ${age}) comes before “${parent.name}”’s last one` : `its new decision comes ${d < 6 ? 'right after' : `${yrs} year${yrs === 1 ? '' : 's'} after`} “${parent.name}”’s last one (age ${age})`
+  return { label, title }
+}
 
 /** The twin's memory: facts the person told it about TODAY. Applied on top of the data, in order. */
 type TwinUpdate = { id: number; said: string; update: ProfileUpdate }
@@ -542,9 +561,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     () =>
       computed.map((c) => {
         const b = breach(c.result)
-        return { id: c.id, parentId: c.parentId, name: c.id === 'today' ? 'Today · no change' : c.name, icons: sortedEvents(c.spec).slice(0, 6).map(iconOf).join(''), endNW: c.result.endNW.p50, risk: b >= 0.5 ? 'bad' : b > 0.05 ? 'warn' : 'ok', busy: editing === c.id }
+        return { id: c.id, parentId: c.parentId, name: c.id === 'today' ? 'Today · no change' : c.name, icons: sortedEvents(c.spec).slice(0, 6).map(iconOf).join(''), endNW: c.result.endNW.p50, risk: b >= 0.5 ? 'bad' : b > 0.05 ? 'warn' : 'ok', busy: editing === c.id, gap: linkGap(c, c.parentId ? byId.get(c.parentId) : undefined, profile.age) }
       }),
-    [computed, editing],
+    [computed, byId, editing, profile.age],
   )
   const tileOf = (c: Computed, key: 'a' | 'b', unk: typeof unkA): TileData => ({
     key, id: c.id, name: c.id === 'today' ? 'If nothing changes' : c.name, parentName: c.parentId && c.parentId !== 'today' ? (byId.get(c.parentId)?.name ?? null) : null,
@@ -681,36 +700,42 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                 + New path
               </button>
             </div>
-            {branchFrom && (
-              <div className="add-panel">
-                <div className="add-row">
-                  <span className="small">Branch from</span>
-                  <select className="mini" value={branchFrom.id} onChange={(e) => setAdding(e.target.value)}>
-                    {computed.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.id === 'today' ? 'Today (nothing changes)' : c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="muted small">{branchFrom.id === 'today' ? 'a fresh path from today' : 'keeps all its decisions and adds one'}</span>
-                  <span className="spacer" />
-                  <button className="icon" onClick={() => setAdding(null)} title="close">
-                    ✕
-                  </button>
-                </div>
-                <div className="chips">
-                  <button className="chip chip-write" onClick={() => startMode('fork', branchFrom.id)}>
-                    ✦ Describe it in the chat…
-                  </button>
-                  {quick.map((p) => (
-                    <button key={p.id} className="chip" title={`${p.desc} (instant, no AI)`} onClick={() => branchPreset(p, branchFrom.id)}>
-                      + {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <Tree items={treeItems} a={sel.a} b={sel.b} collapsed={collapsed} onPick={pick} onBranch={(id) => setAdding(id)} onToggle={toggleFold} />
+            <Tree
+              key={profileId}
+              items={treeItems}
+              a={sel.a}
+              b={sel.b}
+              collapsed={collapsed}
+              onPick={pick}
+              onBranch={(id) => setAdding((cur) => (cur === id ? null : id))}
+              onToggle={toggleFold}
+              onCloseAdd={() => setAdding(null)}
+              addCard={
+                branchFrom
+                  ? {
+                      id: branchFrom.id,
+                      title: branchFrom.id === 'today' ? 'New path from today' : <>Branch off <b>{branchFrom.name}</b></>,
+                      body: (
+                        <>
+                          <p className="add-lead">{branchFrom.id === 'today' ? 'Starts from today’s numbers. Pick one, or describe your own.' : `Keeps every decision of “${branchFrom.name}” and adds one more.`}</p>
+                          <button className="add-chat" onClick={() => startMode('fork', branchFrom.id)}>
+                            <span>✦</span> Describe it in the chat…
+                          </button>
+                          <div className="add-sub">Ready-made · instant, no AI</div>
+                          <div className="add-list">
+                            {quick.map((q) => (
+                              <button key={q.id} className="add-item" title={q.desc} onClick={() => branchPreset(q, branchFrom.id)}>
+                                <b>+ {q.label}</b>
+                                <small>{q.desc}</small>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      ),
+                    }
+                  : null
+              }
+            />
           </section>
 
           {/* ---------------- A and B: a clear break between the tree (exploring) and the text (understanding) ---------------- */}

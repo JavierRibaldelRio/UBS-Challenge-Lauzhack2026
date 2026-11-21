@@ -127,13 +127,39 @@ body.dragging, body.dragging * { cursor: col-resize !important; user-select: non
 
 /* ===================================================================== the tree */
 .tree-card { padding-bottom: 14px; }
-.add-panel { display: grid; gap: 10px; padding: 12px 14px; margin-bottom: 12px; border-radius: 12px; background: var(--card-2); border: 1px solid var(--border); animation: pop 0.15s ease-out; }
-.add-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* the tree sits on its own canvas: tall, dotted, pan (drag / middle button) & zoom (wheel), resizable from the bottom-right corner */
 .tree-canvas { position: relative; overflow: hidden; height: clamp(340px, 44vh, 600px); min-height: 220px; resize: vertical; border-radius: 12px; border: 1px solid var(--border); background-color: var(--card-2); background-image: radial-gradient(color-mix(in srgb, var(--muted) 28%, transparent) 1px, transparent 1.2px); cursor: grab; touch-action: none; user-select: none; overscroll-behavior: contain; }
 .tree-canvas.panning { cursor: grabbing; }
 .tree-canvas.panning .node { pointer-events: none; }
 .tree { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.tree-edges { overflow: visible; }
+/* time on the links: small, quiet pills; coloured on the A / B links */
+.edge-label { position: absolute; transform: translate(-50%, -50%); font-size: 0.68rem; font-weight: 650; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); cursor: help; z-index: 1; }
+.edge-label-a { color: var(--a); border-color: color-mix(in srgb, var(--a) 40%, var(--border)); }
+.edge-label-b { color: var(--b); border-color: color-mix(in srgb, var(--b) 40%, var(--border)); }
+.edge-label-quiet { border-color: transparent; background: color-mix(in srgb, var(--card-2) 85%, transparent); box-shadow: none; font-weight: 600; opacity: 0.85; }
+.node.is-dragged { z-index: 3; box-shadow: var(--shadow-lift); cursor: grabbing; transition: none; }
+.node.is-adding { box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 18%, transparent), var(--shadow-lift); }
+.node-dragging, .node-dragging * { cursor: grabbing !important; }
+/* the "new path" card, attached to its node by a thin connector */
+.card-link { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 4; }
+.card-link path { fill: none; stroke: var(--text); stroke-opacity: 0.35; stroke-width: 1.5; stroke-dasharray: 4 4; }
+.card-link circle { fill: var(--card); stroke: var(--text); stroke-opacity: 0.45; stroke-width: 1.5; }
+.add-card { position: absolute; z-index: 5; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 40px rgba(17, 24, 39, 0.16), 0 2px 6px rgba(17, 24, 39, 0.06); cursor: default; animation: pop 0.15s ease-out; user-select: text; }
+.add-card-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 8px 14px; border-bottom: 1px solid var(--border); cursor: grab; user-select: none; }
+.add-card-head:active { cursor: grabbing; }
+.add-card-title { flex: 1; min-width: 0; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.add-card-body { padding: 10px 12px 12px; display: grid; gap: 8px; overflow-y: auto; }
+.add-lead { font-size: 0.8rem; color: var(--muted); }
+.add-chat { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 10px; background: var(--text); color: var(--card); padding: 8px 12px; font-weight: 650; font-size: 0.86rem; text-align: left; }
+.add-chat span { color: color-mix(in srgb, var(--accent) 70%, var(--card)); }
+.add-chat:hover { opacity: 0.9; }
+.add-sub { font-size: 0.66rem; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.add-list { display: grid; gap: 4px; }
+.add-item { display: grid; gap: 1px; text-align: left; border: 1px solid transparent; background: none; border-radius: 9px; padding: 6px 8px; }
+.add-item:hover { background: var(--card-2); border-color: var(--border); }
+.add-item b { font-size: 0.85rem; font-weight: 650; }
+.add-item small { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .node-tag { position: absolute; left: 4px; bottom: calc(100% + 6px); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; color: var(--muted); white-space: nowrap; }
 .tree-hint { position: absolute; left: 12px; bottom: 10px; right: 190px; font-size: 0.75rem; color: var(--muted); line-height: 1.4; pointer-events: none; text-shadow: 0 0 6px var(--card-2), 0 0 2px var(--card-2); }
 .tree-hint b { color: var(--text); font-weight: 650; }
@@ -142,7 +168,7 @@ body.dragging, body.dragging * { cursor: col-resize !important; user-select: non
 .tree-tools button + button { border-left: 1px solid var(--border); }
 .tree-tools button:hover { background: var(--card-2); color: var(--text); }
 .tree-tools .tree-pct { font-size: 0.75rem; min-width: 50px; font-variant-numeric: tabular-nums; }
-.tree-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.tree-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .edge { fill: none; stroke: color-mix(in srgb, var(--muted) 45%, var(--border)); stroke-width: 2; }
 .edge-a { stroke: var(--a); stroke-opacity: 0.7; stroke-width: 2.5; }
 .edge-b { stroke: var(--b); stroke-opacity: 0.7; stroke-width: 2.5; }
@@ -167,7 +193,8 @@ body.dragging, body.dragging * { cursor: col-resize !important; user-select: non
 .node-fork { flex: none; width: 30px; border: 0; border-left: 1px solid var(--border); background: none; color: var(--muted); font-size: 1.2rem; font-weight: 600; border-radius: 0 13px 13px 0; opacity: 0.35; transition: opacity 0.12s, background 0.12s; }
 .node:hover .node-fork { opacity: 1; }
 .node-fork:hover { background: var(--card-2); color: var(--text); }
-.node-fold { position: absolute; right: -18px; top: 50%; transform: translate(100%, -50%); border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 999px; font-size: 0.68rem; padding: 0 6px; line-height: 1.5; z-index: 1; }
+.node-fold { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 55%); border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 999px; font-size: 0.66rem; padding: 0 7px; line-height: 1.5; z-index: 2; }
+.node-fold:hover { color: var(--text); border-color: var(--text); }
 
 /* ===================================================================== the break between the tree and the text */
 .section-rule { display: flex; align-items: center; gap: 14px; margin: 14px 0 2px; font-size: 0.8rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }

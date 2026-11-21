@@ -28,7 +28,8 @@ A. TEN MINUTES BEFORE (checklist)
    one node "Today · no change" in the tree, and top right
    "If nothing changes, cash runs out at 20."
 6. Use a laptop/desktop screen with a mouse (the app is built for PC, not
-   phones). In the tree: scroll = zoom, middle-click drag = move, ⤢ = fit all. Zoom so
+   phones). In the tree: scroll = zoom, drag the canvas = move, drag a node =
+   rearrange (↺ resets), ⤢ = fit all. A node's "+" opens the new-path card next to it. Zoom so
    the tree and the two A/B tiles fit on one screen (Ctrl + / Ctrl -, 90-100%).
    Drag the divider between the chat and the rest if the chat is too wide.
    Full screen: F11. Turn off notifications. Close other tabs.
@@ -58,7 +59,7 @@ B. THE SCRIPT (3:00)
   two tiles, then the comparison, then the year-by-year charts.
 - SAY: "Every possible life is a node in this tree, starting from the BASELINE:
   today, if nothing changes. A branch continues the one before it; left to
-  right is not time, the ages are inside each path. Click any two to compare:
+  right is not time: the time is written on the links, like "+8 yrs". Click any two to compare:
   the first turns green, the second blue. Start working ends at about 745,000
   francs at 30, the master's at about 557,000."
 - DO: point at the "So far / Ahead" text in the two tiles.
@@ -193,7 +194,7 @@ A: A decision is a list of life events (job, study, move, home...). The app
    money out.
 
 Q: How did you verify the calculations?
-A: Four ways. 58 automated tests (plus 44 tests against the real AI), including UBS's own validation list (zero
+A: Four ways. 58 automated tests (plus 47 tests against the real AI), including UBS's own validation list (zero
    income, higher tuition, loan payoff, transfers). Live checks on screen
    (cash adds up, net worth = assets − debts, debt never negative, same seed =
    same result). A backtest on real 2026 data. And we checked UBS's ledger
@@ -363,7 +364,7 @@ E. NUMBERS TO REMEMBER
   Down payment 60k: cash 549k → 495k, net worth stays ≈ 550k.
 - Confidence evidence: "≥95%" statements were right 99.9% of the time
   (19,980 pairs of real people). Calibration: said 50% → 49.9%, said 90% → 87.9%.
-- 500 futures per path · AI answers in ~1–3 s · 58 automated tests + 44 live AI tests.
+- 500 futures per path · AI answers in ~1–3 s · 58 automated tests + 47 live AI tests.
 
 
 ---------------------------------------------------------------------
