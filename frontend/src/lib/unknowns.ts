@@ -5,6 +5,7 @@
 // The low/high values are ILLUSTRATIVE (the data has no range for unknowns), and the UI says so.
 import { resolve, type Overrides, type Plan } from './resolve'
 import { runPath } from './sim'
+import { BASE_MACRO, type Macro } from './macro'
 import type { Assumption, Params, Profile, ScenarioSpec } from './types'
 
 export type UnknownImpact = {
@@ -24,7 +25,7 @@ function probes(a: Assumption, profile: Profile): [number, number] {
   return [0, 3 * inc] // an unknown one-off cost
 }
 
-export function unknownImpact(spec: ScenarioSpec, overrides: Overrides, plan: Plan, profile: Profile, params: Params, H: number, loanRate: number): UnknownImpact | null {
+export function unknownImpact(spec: ScenarioSpec, overrides: Overrides, plan: Plan, profile: Profile, params: Params, H: number, loanRate: number, macro: Macro = BASE_MACRO): UnknownImpact | null {
   const unknown = plan.assumptions.filter((a) => a.source === 'missing')
   if (!unknown.length) return null
   const base = runPath(plan, params, null)
@@ -33,8 +34,8 @@ export function unknownImpact(spec: ScenarioSpec, overrides: Overrides, plan: Pl
   const items: UnknownImpact['items'] = []
   for (const a of unknown) {
     const [lo, hi] = probes(a, profile)
-    const rLo = runPath(resolve(profile, params, spec, { ...overrides, [a.key]: lo }, H, loanRate), params, null)
-    const rHi = runPath(resolve(profile, params, spec, { ...overrides, [a.key]: hi }, H, loanRate), params, null)
+    const rLo = runPath(resolve(profile, params, spec, { ...overrides, [a.key]: lo }, H, loanRate, macro), params, null)
+    const rHi = runPath(resolve(profile, params, spec, { ...overrides, [a.key]: hi }, H, loanRate, macro), params, null)
     if (Math.abs(end(rLo) - end(base)) < 1 && Math.abs(end(rHi) - end(base)) < 1) continue // doesn't matter
     runs.push(rLo, rHi)
     items.push({ label: a.label, month: a.month ?? 0, lo, hi, unit: a.unit })

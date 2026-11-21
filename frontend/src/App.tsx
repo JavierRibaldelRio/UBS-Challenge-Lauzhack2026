@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnswerCard } from './components/Answer'
 import { Chat, type ChatLine, type ChatMsg } from './components/Chat'
+import { EconomyBar } from './components/Economy'
+import { applyMacroUpdate, BASE_MACRO, describeMacro, MACRO_PRESETS, type Macro } from './lib/macro'
 import { ProjectionChart, type Marker } from './components/Chart'
 import { AssumptionList, Drivers } from './components/Details'
 import { HowMade, type HowMadeContent } from './components/HowMade'
@@ -15,6 +17,7 @@ import { chf, chfk, monthIndex } from './lib/fmt'
 import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Preset } from './lib/resolve'
 import { checks, simulate } from './lib/sim'
 import { suggestQuestions } from './lib/suggest'
+import { downloadJson, scenarioReport } from './lib/report'
 import type { AnswerResult, ExplainResult, Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
 import { unknownImpact } from './lib/unknowns'
 import paramsJson from './model/params.json'
@@ -74,6 +77,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const dataProfile = profiles.find((p) => p.id === profileId) ?? profiles[0]
   const profile = useMemo(() => applyUpdates(dataProfile, updates), [dataProfile, updates])
   const [years, setYears] = useState(10)
+  const [macro, setMacro] = useState<Macro>(BASE_MACRO) // the economy: shared by every path
   const H = years * 12
   const [paths, setPaths] = useState<PathState[]>([TODAY()])
   const [baselineId, setBaselineId] = useState('today')
@@ -120,6 +124,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
 
   const reset = (id: string, next: PathState[] = [TODAY()], base = 'today', focus = 'today') => {
     setProfileId(id)
+    setMacro(BASE_MACRO)
     setUpdates([])
     setPaths(next)
     setBaselineId(base)
@@ -159,10 +164,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const computed = useMemo(
     () =>
       paths.map((p) => {
-        const plan = resolve(profile, params, p.spec, p.overrides, H, loanRate)
-        return { ...p, name: p.spec.name, plan, result: simulate(plan, params, profile), isBaseline: p.id === baselineId, unknown: unknownImpact(p.spec, p.overrides, plan, profile, params, H, loanRate) }
+        const plan = resolve(profile, params, p.spec, p.overrides, H, loanRate, macro)
+        return { ...p, name: p.spec.name, plan, result: simulate(plan, params, profile), isBaseline: p.id === baselineId, unknown: unknownImpact(p.spec, p.overrides, plan, profile, params, H, loanRate, macro) }
       }),
-    [paths, profile, params, H, loanRate, baselineId],
+    [paths, profile, params, H, loanRate, baselineId, macro],
   )
   const baseline = computed.find((c) => c.isBaseline) ?? computed[0]
   const focus = computed.find((c) => c.id === focusId) ?? baseline
@@ -170,7 +175,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const drv = useMemo(() => drivers(focus.plan, params), [focus, params])
   const be = useMemo(() => (focus.id !== baseline.id ? breakEven(focus.plan, baseline.plan, params) : null), [focus, baseline, params])
   const liveChecks = useMemo(() => checks(focus.plan, params, profile), [focus, params, profile])
-  const facts = useMemo(() => buildFacts(profile, params, computed, drv, be, focus.id), [profile, params, computed, drv, be, focus.id])
+  const economy = useMemo(() => ({ name: macro.name, ubs_scenario: macro.catalog, conditions: describeMacro(macro, profile.age), note: macro.id === 'base' ? 'today’s economy, nothing special' : 'illustrative economy scenario, shared by every path' }), [macro, profile.age])
+  const facts = useMemo(() => ({ ...buildFacts(profile, params, computed, drv, be, focus.id), economy }), [profile, params, computed, drv, be, focus.id, economy])
   const factsKey = JSON.stringify(facts)
 
   // ------------------------------------------------------------ the direct answer to the last question
@@ -185,9 +191,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       pair = [mine[0], ref]
     } else pair = [...mine].sort((x, y) => y.result.endNW.p50 - x.result.endNW.p50).slice(0, 2)
     if (pair[0].id === pair[1].id) return null
-    return computeVerdict(asked.question, asPath(pair[0]), asPath(pair[1]), profile, params, H, loanRate)
-  }, [asked, computed, baseline, profile, params, H, loanRate])
-  const ansFacts = useMemo(() => (verdict ? answerFacts(verdict, profile, params, H) : null), [verdict, profile, params, H])
+    return computeVerdict(asked.question, asPath(pair[0]), asPath(pair[1]), profile, params, H, loanRate, macro)
+  }, [asked, computed, baseline, profile, params, H, loanRate, macro])
+  const ansFacts = useMemo(() => (verdict ? { ...answerFacts(verdict, profile, params, H), economy } : null), [verdict, profile, params, H, economy])
   const ansKey = ansFacts ? JSON.stringify(ansFacts) : ''
   const answerSeq = useRef(0)
   const askedMsg = useRef<number | null>(null)
@@ -247,6 +253,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     loans: profile.loans.map((l) => ({ principal_chf: Math.round(l.principal), rate_pct: Math.round(l.annual_rate * 10000) / 100 })),
     goals: profile.goals.map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by: g.date.slice(0, 7) })),
     told_the_twin: describeMemory(dataProfile, updates),
+    economy: { current: macro.name, conditions: describeMacro(macro, profile.age), presets: MACRO_PRESETS.map((p) => `${p.id}: ${p.name}${p.catalog ? ` (${p.catalog})` : ''}`) },
     if_nothing_changes: {
       years_simulated: years, age_at_end: profile.age + years, net_worth_at_end_median_chf: r100(today.result.endNW.p50),
       chance_cash_below_zero_pct: Math.round(today.result.probNegCash * 100), cash_runs_out_at_age: ageOut(today.result.firstNegMonth),
@@ -301,6 +308,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       const ch = describeMemory(profile, [{ id: 0, said: text, update: u }])
       setUpdates((us) => [...us, { id: updId.current++, said: text, update: u }])
       if (ch.length) lines.push({ text: `🧠 Updated what I know: ${ch.join(', ')}. Every path now starts from this.` })
+    }
+    // 1b) the economy (macro, shared by every path)
+    if (d.macro_update && Object.values(d.macro_update).some((x) => x != null)) {
+      const next = applyMacroUpdate(macro, d.macro_update)
+      setMacro(next)
+      lines.push({ text: `🌍 Economy for every path: ${next.name}${describeMacro(next, profile.age).length ? ` (${describeMacro(next, profile.age).join(', ')})` : ''}` })
     }
     // 2) remove paths the user says were wrong
     const removable = d.remove_path_ids.filter((id) => id !== 'today' && computed.some((c) => c.id === id))
@@ -487,6 +500,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
         )}
 
         {/* ---------------- the futures ---------------- */}
+        <EconomyBar macro={macro} age={profile.age} onPick={setMacro} />
+
         <div className="section-title">
           <span className="eyebrow">Possible futures</span>
           <span className="muted small">click a card to look closer · {years} years</span>
@@ -656,6 +671,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             {focus.edits.length > 0 && `, then ${focus.edits.length} follow-up${focus.edits.length > 1 ? 's' : ''}`} ·{' '}
             <button className="link-btn" onClick={() => setHowMade({ what: 'path', name: focus.name, origin: focus.origin, spec: focus.spec, edits: focus.edits })}>
               {focus.origin.kind === 'ai' || focus.edits.length ? 'see the prompt' : 'see how'}
+            </button>{' '}
+            ·{' '}
+            <button className="link-btn" title="the 15 fields UBS asks every scenario to document (scenario-modelling.md §20)" onClick={() => downloadJson(`scenario-${focus.name.replace(/\W+/g, '-').toLowerCase()}.json`, scenarioReport({ profile, path: focus, baseline: focus.id === baseline.id ? today : baseline, macro, years, drivers: drv, checks: liveChecks, params, breakEvenPct: be?.pct ?? null }))}>
+              ⬇ scenario report (UBS template)
             </button>
           </p>
           {focus.plan.warnings.map((w) => (
@@ -667,7 +686,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             items={focus.plan.assumptions}
             overrides={focus.overrides}
             onChange={(key, v) =>
-              update(focus.id, (p) => {
+              key.startsWith('m.')
+                ? v != null && setMacro(editMacro(macro, key, v))
+                : update(focus.id, (p) => {
                 const o = { ...p.overrides }
                 if (v == null) delete o[key]
                 else o[key] = v
@@ -700,6 +721,20 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       </main>
     </div>
   )
+}
+
+/** Editing an economy number (an "m." row) changes the shared economy, for every path. */
+function editMacro(m: Macro, key: string, v: number): Macro {
+  const n: Macro = { ...m, id: 'custom', name: 'Custom economy' }
+  if (key === 'm.gap') n.inflation_pct = n.wage_growth_pct + v
+  if (key === 'm.rate') n.rate_shift_pct = v
+  if (key === 'm.ret') n.market_return_pct = v
+  if (key === 'm.vol') n.market_vol_pct = v
+  if (key === 'm.risk') n.recession_risk_per_year_pct = v
+  if (key === 'm.rec' && n.recession) n.recession = { ...n.recession, income_drop_pct: Math.abs(v) }
+  if (key === 'm.crash' && n.crash) n.crash = { ...n.crash, drop_pct: Math.abs(v) }
+  if (key === 'm.house' && n.housing_drop) n.housing_drop = { ...n.housing_drop, drop_pct: Math.abs(v) }
+  return n
 }
 
 /** "income CHF 1,200 → 1,500" style lines for what the person told the twin. */

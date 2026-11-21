@@ -14,10 +14,11 @@ How to read this file
 ---------------------------------------------------------------------
 A. TEN MINUTES BEFORE (checklist)
 ---------------------------------------------------------------------
-1. In the repo folder run:   node demo.mjs
+1. In the repo folder run:   node demo.mjs --prod
+   (--prod = built version, uses much less memory. Without it: port 5173.)
    Wait until you see "Financial Twin API on http://localhost:8000"
-   and "VITE ... ready".
-2. Open http://localhost:5173 in the browser you will present with.
+   and "Local: http://localhost:4173".
+2. Open http://localhost:4173 in the browser you will present with.
 3. Top right must show a GREEN dot and "AI on".
    If it says "AI offline": check backend/.env has LLM_API_KEY, restart step 1.
 4. Rehearse the whole script ONCE in this same browser. This stores the AI
@@ -74,9 +75,10 @@ B. THE SCRIPT (3:00)
   50,000 francs. Everything recalculates instantly."
 
 [1:50 – 2:30]  JUST ASK, AND GET AN ANSWER
-- DO: scroll up. Click the example question
+- DO: scroll up to the chat. Click the example question
   "Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28".
   (The example questions are made for each person. For Alexia this one is there.)
+  Your message appears in the chat, and the twin replies there.
 - THEY SEE (after 2–4 seconds):
   - At the top, an ANSWER card: "Start working" ends higher, by about CHF 41k,
     with "Low confidence" and its reasons.
@@ -88,7 +90,12 @@ B. THE SCRIPT (3:00)
   confidence is computed by the simulator, not by the AI. Here it says LOW,
   because if her salary were just 4 percent higher, the result would flip.
   It tells you when it is not sure."
-- OPTIONAL (only if time): click "Cash", then "Net worth". At 28 cash drops by
+- OPTIONAL (only if time), show that the twin is alive:
+  type in the chat: "I now earn 1,500 a month". The twin replies "Updated what I
+  know: income 1,200 → 1,500", and every path recomputes. Or click a path and
+  use "Change this path" (e.g. "make the flat 250k"): the twin rewrites only
+  that path, and you can undo.
+- OPTIONAL: click "Cash", then "Net worth". At 28 cash drops by
   the 60,000 down payment, but net worth does not: the money became a home.
 
 [2:30 – 3:00]  WHY YOU CAN TRUST IT
@@ -126,6 +133,43 @@ C. IF SOMETHING GOES WRONG
 ---------------------------------------------------------------------
 D. QUESTIONS JUDGES WILL PROBABLY ASK (short answers)
 ---------------------------------------------------------------------
+Q: Is this really a "twin", or just a calculator?
+A: It starts from this person's data and learned habits (24 months of bank
+   history), and it stays alive: you can tell it what changed today ("I now earn
+   1,500") and it updates itself; you can change any path in a follow-up and
+   undo it; it answers questions with a confidence it computes, explains the
+   trade-offs, and marks clearly what it does not know (dotted lines, "?").
+
+Q: What kinds of variables does the model have?
+A: Two, exactly as UBS defines a twin (decisions vs external conditions).
+   IDIOSYNCRATIC = the person: their income, rent, spending habit, their
+   decisions (each path), and their personal luck (surprise expenses,
+   bonuses), learned from their own 24 months of bank history.
+   MACROECONOMIC = the economy: inflation vs pay, interest rates, markets,
+   recessions, house prices. One setting for EVERY path (the "The economy"
+   bar, presets = UBS scenarios S101-S110), so decisions are compared under
+   the same conditions. In one message the chat splits them: "master's, and a
+   recession in 2 years" -> the master's is a path, the recession is the economy.
+
+Q: Does it meet UBS's brief?
+A: All four MUSTs: fictional profile, working scenarios, before/after
+   comparison, transparent assumptions. Both BONUSes: a conversational AI,
+   and sensitivity & uncertainty. And the reporting template: "scenario
+   report (UBS template)" exports the 15 fields UBS lists.
+
+Q: Is the AI smart enough to follow a conversation?
+A: Yes, because it gets the context: the last messages, the person's current
+   numbers, and every path on screen with its results. So "have the kid at 35
+   instead" edits the right path, "what's my rent?" gets the real number, and
+   "no, I meant rent, not saving" removes the wrong path and fixes it.
+   (A first version sent each message alone, and it was clearly worse.
+   The model was fine; it just didn't have the context.)
+
+Q: What happens if I ask for something impossible (e.g. a 200k down payment
+   without the money)?
+A: It doesn't hide it: the card says "can't pay the down payment", the chart
+   shows cash going below zero, and "can I afford it?" is answered "No".
+
 Q: Is this a prediction?
 A: No. It is a simulation under assumptions you can see and change. It shows
    possible futures, not the future. The shaded band shows normal month-to-

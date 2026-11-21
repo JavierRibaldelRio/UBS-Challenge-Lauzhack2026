@@ -291,6 +291,21 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     expect(r.data.edit!.path.events.find((e) => e.type === 'study')!.start_month).toBe(12)
   }, 40000)
 
+  it('chat: splits a personal decision (path) from an economy condition (macro)', async () => {
+    const r = await chat("what if I do a master's and there's a recession in 2 years?")
+    show('macro split', r)
+    expect(r.data.new_paths.some((p) => p.events.some((e) => e.type === 'study'))).toBe(true)
+    expect(r.data.new_paths.some((p) => p.events.some((e) => e.type === 'income_change' || e.type === 'market_shock'))).toBe(false)
+    expect(r.data.macro_update?.preset === 'recession' || r.data.macro_update?.recession_start_month === 24).toBe(true)
+  }, 40000)
+  it('chat: "what if inflation hits 5%?" -> economy only, no new path', async () => {
+    const r = await chat('what if inflation goes to 5% and my pay only grows 1%?')
+    show('inflation', r)
+    expect(r.data.new_paths.length).toBe(0)
+    expect(r.data.macro_update?.inflation_pct).toBe(5)
+    expect(r.data.macro_update?.wage_growth_pct).toBe(1)
+  }, 40000)
+
   it('explain: Alexia demo, all numbers traced to the engine', async () => {
     const ps = presets(alexia, params)
     const specs = [ps.find((p) => p.id === 'work')!, ps.find((p) => p.id === 'master')!, ps.find((p) => p.id === 'abroad')!]

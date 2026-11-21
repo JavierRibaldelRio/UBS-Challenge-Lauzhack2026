@@ -5,6 +5,7 @@
 //   you        = typed by the user (or stated in the chat)
 //   assumption = not in the data, a labelled default (editable)
 //   missing    = nobody knows; default is "no change" and the UI asks you to set it
+import { BASE_MACRO, type Macro } from './macro'
 import type { Assumption, Household, Params, Profile, Regression, ScenarioSpec, Source, Status, TwinEvent } from './types'
 
 export type Plan = {
@@ -18,6 +19,7 @@ export type Plan = {
   contrib: Float64Array // cash -> investments transfers
   homeDown: Float64Array // own money paid into a home (down payment)
   homeValue: Float64Array // value of an owned home (counted in net worth, not in cash)
+  macroRisk: number // yearly chance of a random recession (economy), drawn per simulated future
   status: Status[]
   household: Household[]
   city: string[]
@@ -87,7 +89,9 @@ export function resolve(
   overrides: Overrides,
   horizonMonths: number,
   loanRateMedian: number,
+  macro: Macro = BASE_MACRO, // the economy (shared by all paths); everything else here is the person's own (idiosyncratic)
 ): Plan {
+  const shift = macro.rate_shift_pct / 100 // macro: added to default / existing loan and mortgage rates
   const H = horizonMonths
   const assumptions: Assumption[] = []
   const warnings: string[] = []
@@ -122,12 +126,13 @@ export function resolve(
   const startInvest = A('g.invest', 'Starting investments', profile.investments, 'CHF', 'data', 'investment_portfolio (synthetic-assets.csv)')
   const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `average of your ${profile.calib.months} ledger months, seasonality and bonus removed`)
   const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `std-dev of your ${profile.calib.months} ledger months`)
-  const invReturn = A('g.ret', 'Investment return (real, per year)', 0, '%', 'assumption', 'Not in the data (assets are a single snapshot). 0% = no growth. Edit to explore.') / 100
-  const invVol = A('g.vol', 'Investment volatility (per year)', 0, '%', 'assumption', 'Not in the data. 0% = no market noise. Edit to explore.') / 100
+  const invReturn = A('m.ret', 'Economy: investment return (real, per year)', macro.market_return_pct, '%', macro.market_return_pct ? 'macro' : 'assumption', macro.market_return_pct ? `set by the economy “${macro.name}”` : 'Not in the data (assets are a single snapshot). 0% = no growth. Choose an economy or edit.') / 100
+  const invVol = A('m.vol', 'Economy: market ups & downs (per year)', macro.market_vol_pct, '%', macro.market_vol_pct ? 'macro' : 'assumption', macro.market_vol_pct ? `set by the economy “${macro.name}”` : 'Not in the data. 0% = no market noise.') / 100
   profile.loans.forEach((l, i) => {
-    const interest = (l.principal * l.annual_rate) / 12
-    const pay = A(`g.loan${i}`, `Loan ${i + 1} monthly payment`, Math.round(interest), 'CHF/mo', 'assumption', `Data has principal ${Math.round(l.principal)} at ${(l.annual_rate * 100).toFixed(2)}% but payment 0 / not amortized. Default: interest only.`)
-    loans.push({ start: 0, principal: l.principal, annualRate: l.annual_rate, payment: pay, isNew: false })
+    const rateNow = l.annual_rate + shift
+    const interest = (l.principal * rateNow) / 12
+    const pay = A(`g.loan${i}`, `Loan ${i + 1} monthly payment`, Math.round(interest), 'CHF/mo', 'assumption', `Data has principal ${Math.round(l.principal)} at ${(l.annual_rate * 100).toFixed(2)}%${shift ? ` (+${macro.rate_shift_pct} points: economy)` : ''} but payment 0 / not amortized. Default: interest only.`)
+    loans.push({ start: 0, principal: l.principal, annualRate: rateNow, payment: pay, isNew: false })
   })
 
   // ---- events, in time order
@@ -193,7 +198,10 @@ export function resolve(
         for (let t = s; t < H; t++) {
           city[t] = label
           rent[t] = rentV
-          if (setIncome) income[t] = incV
+          if (setIncome) {
+            income[t] = incV
+            if (status[t] === 'student' || status[t] === 'unemployed') status[t] = 'employed' // earning abroad = working
+          }
         }
         oneOff[s] += move
         if (e.monthly_net_income_chf != null || !known) changeMonth ??= s
@@ -253,7 +261,7 @@ export function resolve(
           break
         }
         const downPct = A(`${k}.down`, `${e.label}: own money (down payment)`, e.down_payment_pct ?? 20, '%', e.down_payment_pct != null ? tag : 'assumption', e.down_payment_pct != null ? tagNote : 'Swiss lenders usually ask for at least 20% own money.')
-        const rate = A(`${k}.rate`, `${e.label}: mortgage interest`, e.annual_rate_pct ?? 2, '%/yr', e.annual_rate_pct != null ? tag : 'assumption', e.annual_rate_pct != null ? tagNote : 'Mortgage rates are not in the data. Illustrative value, please check.') / 100
+        const rate = A(`${k}.rate`, `${e.label}: mortgage interest`, e.annual_rate_pct ?? 2 + macro.rate_shift_pct, '%/yr', e.annual_rate_pct != null ? tag : 'assumption', e.annual_rate_pct != null ? tagNote : `Mortgage rates are not in the data. Illustrative 2%${shift ? ` + ${macro.rate_shift_pct} points (economy)` : ''}.`) / 100
         const upkeep = A(`${k}.upkeep`, `${e.label}: upkeep per year`, 1, '% of price', 'assumption', 'Rule of thumb for maintenance. Not in the data.')
         const mortgage = price * (1 - downPct / 100)
         homeDown[s] += price - mortgage
@@ -269,7 +277,7 @@ export function resolve(
       }
       case 'take_loan': {
         const principal = A(`${k}.principal`, `${e.label}: amount borrowed`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Amount not given.')
-        const rate = A(`${k}.rate`, `${e.label}: interest rate`, e.annual_rate_pct ?? loanRateMedian * 100, '%/yr', e.annual_rate_pct != null ? tag : 'data', e.annual_rate_pct != null ? tagNote : 'median rate of the 283 loans in synthetic-liabilities.csv') / 100
+        const rate = A(`${k}.rate`, `${e.label}: interest rate`, e.annual_rate_pct ?? (loanRateMedian + shift) * 100, '%/yr', e.annual_rate_pct != null ? tag : 'data', e.annual_rate_pct != null ? tagNote : `median rate of the 283 loans in synthetic-liabilities.csv${shift ? ` + ${macro.rate_shift_pct} points (economy)` : ''}`) / 100
         const term = A(`${k}.term`, `${e.label}: repayment period`, e.duration_months ?? 60, 'months', e.duration_months != null ? tag : 'assumption', e.duration_months != null ? tagNote : 'Not in data; 5 years assumed.')
         const r = rate / 12
         const pay = r === 0 ? principal / term : (principal * r) / (1 - Math.pow(1 + r, -term))
@@ -297,7 +305,42 @@ export function resolve(
     assumptions.push({ key: 'learned.delta', label: 'Spending response to the new situation', value: Math.round(dEnd), unit: 'CHF/mo', source: 'learned', note: `regression on 1,200 profiles (CV R² ${regO.selected_cv_r2.toFixed(2)}): how non-rent spending differs with income, status, household, age` })
   }
 
+  // ---- the ECONOMY (macroeconomic, shared by every path). The person's own variables above are idiosyncratic.
+  const macroNote = `economy “${macro.name}”${macro.catalog ? ` (UBS scenario ${macro.catalog})` : ''}: illustrative, not in the data`
+  const gap = (macro.inflation_pct - macro.wage_growth_pct) / 100
+  if (gap) {
+    // in constant francs: prices outrunning pay = everyday costs grow by the gap each year
+    for (let t = 0; t < H; t++) {
+      const f = Math.pow(1 + gap, t / 12)
+      rent[t] *= f
+      otherMu[t] *= f
+      otherSd[t] *= f
+      extra[t] *= f
+      if (oneOff[t] > 0) oneOff[t] *= f // costs like tuition rise too (UBS FAQ: never inflate some expenses but not others)
+    }
+    assumptions.push({ key: 'm.gap', label: 'Economy: prices rise faster than pay', value: Math.round(gap * 1000) / 10, unit: '%/yr', source: 'macro', note: `prices ${macro.inflation_pct}%/yr, pay ${macro.wage_growth_pct}%/yr · ${macroNote}` })
+  }
+  if (shift) assumptions.push({ key: 'm.rate', label: 'Economy: interest rates', value: macro.rate_shift_pct, unit: 'points', source: 'macro', note: `added to existing loans and default loan / mortgage rates (rates you set yourself stay) · ${macroNote}` })
+  if (macro.recession) {
+    const r = macro.recession
+    const working = (st: Status) => st === 'employed' || st === 'self_employed' || st === 'part_time'
+    for (let t = r.start_month; t < Math.min(H, r.start_month + r.months); t++) if (working(status[t])) income[t] *= 1 - r.income_drop_pct / 100
+    assumptions.push({ key: 'm.rec', label: `Economy: recession at ${Math.floor(ageAt(r.start_month))} (${r.months} months)`, value: -r.income_drop_pct, unit: '% pay', source: 'macro', note: `pay of working people falls for the recession · ${macroNote}`, month: r.start_month })
+  }
+  if (macro.crash) {
+    shocks.push({ month: Math.min(H - 1, macro.crash.month), drop: macro.crash.drop_pct / 100 })
+    assumptions.push({ key: 'm.crash', label: `Economy: markets fall at ${Math.floor(ageAt(macro.crash.month))}`, value: -macro.crash.drop_pct, unit: '%', source: 'macro', note: `investments only · ${macroNote}`, month: macro.crash.month })
+  }
+  if (macro.housing_drop && macro.housing_drop.month < H) {
+    const m0 = macro.housing_drop.month
+    const loss = homeValue[m0] * (macro.housing_drop.drop_pct / 100) // homes owned at that moment lose value; you still owe the mortgage
+    if (loss > 0) for (let t = m0; t < H; t++) homeValue[t] -= loss
+    assumptions.push({ key: 'm.house', label: `Economy: home values fall at ${Math.floor(ageAt(m0))}`, value: -macro.housing_drop.drop_pct, unit: '%', source: 'macro', note: `${loss > 0 ? 'hits net worth, not cash' : 'no home owned at that time on this path'} · ${macroNote}`, month: m0 })
+  }
+  if (macro.recession_risk_per_year_pct) assumptions.push({ key: 'm.risk', label: 'Economy: chance of a recession each year', value: macro.recession_risk_per_year_pct, unit: '%', source: 'macro', note: `in each simulated future a recession can start (pay −10% for 12 months, markets −20%), the same for every path · ${macroNote}` })
+
   return {
+    macroRisk: macro.recession_risk_per_year_pct / 100,
     months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, homeDown, homeValue, status, household, city, shocks, loans,
     startCash, startInvest, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
   }

@@ -11,6 +11,7 @@
 import { breakEven } from './analysis'
 import { resolve, type Overrides, type Plan } from './resolve'
 import { runPath, type SimResult } from './sim'
+import { BASE_MACRO, type Macro } from './macro'
 import type { Params, Profile, ScenarioSpec } from './types'
 
 export type Confidence = 'high' | 'medium' | 'low'
@@ -40,7 +41,7 @@ const endOf = (plan: Plan, params: Params) => {
 }
 
 /** Re-resolve a path with every data-based number pushed to the bad (or good) end of the peer range. */
-function atPeerEdge(p: ComparedPath, profile: Profile, params: Params, H: number, loanRate: number, edge: 'bad' | 'good') {
+function atPeerEdge(p: ComparedPath, profile: Profile, params: Params, H: number, loanRate: number, edge: 'bad' | 'good', macro: Macro) {
   const o: Overrides = { ...p.overrides }
   const tested: string[] = []
   for (const a of p.plan.assumptions) {
@@ -49,10 +50,10 @@ function atPeerEdge(p: ComparedPath, profile: Profile, params: Params, H: number
     o[a.key] = (edge === 'bad') === badIsLow ? a.range.lo : a.range.hi
     tested.push(a.label)
   }
-  return { plan: resolve(profile, params, p.spec, o, H, loanRate), tested }
+  return { plan: resolve(profile, params, p.spec, o, H, loanRate, macro), tested }
 }
 
-export function verdict(question: string, a: ComparedPath, b: ComparedPath, profile: Profile, params: Params, H: number, loanRate: number): Verdict {
+export function verdict(question: string, a: ComparedPath, b: ComparedPath, profile: Profile, params: Params, H: number, loanRate: number, macro: Macro = BASE_MACRO): Verdict {
   const [leader, other] = a.result.endNW.p50 >= b.result.endNW.p50 ? [a, b] : [b, a]
   const gap = leader.result.endNW.p50 - other.result.endNW.p50
 
@@ -85,8 +86,8 @@ export function verdict(question: string, a: ComparedPath, b: ComparedPath, prof
         : null
 
   // 2. data range: leader at the unlucky end of its peers, other at the lucky end
-  const lBad = atPeerEdge(leader, profile, params, H, loanRate, 'bad')
-  const oGood = atPeerEdge(other, profile, params, H, loanRate, 'good')
+  const lBad = atPeerEdge(leader, profile, params, H, loanRate, 'bad', macro)
+  const oGood = atPeerEdge(other, profile, params, H, loanRate, 'good', macro)
   const tested = [...new Set([...lBad.tested, ...oGood.tested])]
   const peerTest = tested.length
     ? { holds: endOf(lBad.plan, params) > endOf(oGood.plan, params), leaderLow: endOf(lBad.plan, params), otherHigh: endOf(oGood.plan, params), tested }
@@ -98,7 +99,7 @@ export function verdict(question: string, a: ComparedPath, b: ComparedPath, prof
   for (const p of [leader, other]) {
     for (const x of p.plan.assumptions.filter((y) => y.source === 'missing')) {
       const probe = x.unit.includes('%') ? x.value + 20 : x.value === 0 ? 1000 : x.value * 1.2
-      const moved = resolve(profile, params, p.spec, { ...p.overrides, [x.key]: probe }, H, loanRate)
+      const moved = resolve(profile, params, p.spec, { ...p.overrides, [x.key]: probe }, H, loanRate, macro)
       const diff = p === leader ? endOf(moved, params) - endOf(other.plan, params) : endOf(leader.plan, params) - endOf(moved, params)
       if (Math.abs(diff - base) > 1 && !unknowns.includes(x.label)) unknowns.push(x.label)
     }

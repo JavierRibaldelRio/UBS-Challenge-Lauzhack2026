@@ -5,6 +5,60 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
 
 ---
 
+## ★ What the model actually does, and why we call it a Financial Twin
+
+**The definition UBS gives** (`pre_docs/docs/scenario-modelling.md` §2): a twin evolves a financial state x<sub>t</sub> with x<sub>t+1</sub> = F(x<sub>t</sub>, a<sub>t</sub>, w<sub>t</sub>; θ), and *"must distinguish user-controlled decisions from external conditions."* Our model is exactly that, month by month:
+
+| Part | In plain words | Where it comes from | Certain / learned / assumed |
+|---|---|---|---|
+| **x<sub>t</sub>** the state | cash, investments, home, debts, income, rent, spending, job, household, goals | the person's rows in the 6 CSV files | data |
+| **F** the transition | the bookkeeping: cash + income − spending − costs − payments; net worth = assets − debts | formulas | **certain**, checked live |
+| **a<sub>t</sub>** decisions (idiosyncratic) | the life events of a path: study, job, move, home, kid, loan… | you (chat or buttons); missing amounts filled from the data | assumed, every number labelled |
+| **ε<sub>t</sub>** personal luck (idiosyncratic) | surprise expenses, December bonus, uncertainty about your usual spending | **learned** from 28,800 months (each person's own 24) | **predicted & tested**: 80% range caught 78.5% of real 2026 results |
+| **w<sub>t</sub>** the economy (macroeconomic) | inflation vs pay, interest rates, market returns, recessions, house prices | the economy you pick (presets = UBS scenarios S101–S110) or say in the chat | assumed, **shared by every path** |
+| **θ** parameters | seasonality, bonus odds, peer ranges, regressions | `ml/train.py` | learned |
+
+**Two kinds of variables (as the UBS presenter put it): idiosyncratic and macroeconomic.**
+- **Idiosyncratic = this person.** Their income, rent, spending habit, decisions, and personal luck. These differ per path and per person. One message can contain them ("I do a master's").
+- **Macroeconomic = the whole economy.** Inflation, rates, markets, recession, house prices. **One setting for every path** (the "🌍 The economy" bar), so decisions are always compared under the same conditions. The same message can contain them too ("…and there's a recession in 2 years"): the chat puts the decision in a path and the recession in the economy.
+- **In the Monte Carlo** each future draws **personal luck** (learned) and, with "Uncertain economy", **economy luck** (random recessions, ~1 in 10 years, the same for every path in that future).
+
+**Does anything actually *predict*?** Only the personal-luck part, and it predicts the *spread* of normal months, not life outcomes. It was tested properly: trained on 2025, predicted 2026, compared with reality for 1,200 people (calibration 10% → 9.3%, 50% → 49.9%, 90% → 87.9%; "A ends higher than B" statements on 19,980 pairs: said 99.8% → 99.9% true). Decision effects are **not** predicted, because the data contains no decisions. They are explicit, labelled assumptions, and unknowns are drawn dotted. Economy scenarios are stress tests, not forecasts. That matches UBS FAQ #18: *"Can we claim our model is accurate? Only to the extent supported by validation evidence."*
+
+**Why it is a twin and not a calculator** (UBS capabilities C01–C20, `ai-and-technology.md` §2):
+- **personalized:** it starts from *this* person's data and learns *their* spending habit (C01, C02);
+- **updates itself:** "I now earn 1,500" changes its state (C03, C14);
+- **reacts to decisions:** in plain words, including follow-ups and corrections (C04, C05, C07, C13);
+- **distinguishes decisions from external conditions:** paths vs the economy (§2 of scenario-modelling);
+- **constraints:** funding gaps, down payment from own cash, debt ≥ 0 (C08);
+- **compares paths fairly:** same luck, same economy (C09);
+- **uncertainty:** ranges, drivers, break-even, unknowns, economy (C10);
+- **goal tracking** (C11);
+- **explains itself:** answers, stories, "how did the twin get this?" (C12, C18);
+- **validated:** live checks, backtest, 47 + 38 tests (C15, C19);
+- **transparent:** every number tagged data / learned / you / assumption / unknown / economy (C16, C17);
+- **responsible:** no advice, "in this simulation", fictional (C20).
+
+### Checked against the UBS brief (the deck's "What success looks like after 24 hours")
+
+| UBS asks | Status | Where |
+|---|---|---|
+| MUST · Fictional client profile | ✅ 1,200 fictional people from UBS's data; Alexia by default | person line, profile picker |
+| MUST · One working scenario | ✅ 11 event types, any combination, in plain words; 7 ready-made paths | chat, `+` buttons |
+| MUST · Before / after comparison | ✅ baseline vs every path: cards, chart, "vs baseline", answer card | outcome cards, chart |
+| MUST · Transparent assumptions | ✅ every number has a source tag and a note, editable; unknowns marked and dotted; prompt visible | "The numbers behind", "how did the twin get this?" |
+| BONUS · Conversational AI | ✅ a chat that answers, acts, remembers context, updates itself, edits paths, checks its own numbers | chat |
+| BONUS · Sensitivity & uncertainty | ✅ Monte Carlo (personal + economy luck, calibrated on real data), drivers, break-even, peer-range robustness, unknown ranges, economy stress tests | chart bands, "what matters most", answer confidence, economy bar |
+| "Success is helping someone understand a decision" | ✅ direct answers with computed confidence, plain-English story, break-even ("pays off only if salary +24%") | answer card, story card |
+
+**Also from the guidelines:**
+- **Demo order** (`evaluation/demo-and-submission.md`): problem → initial state → intervention → calculation → comparison → trade-offs → validation. This is followed in `demo.txt`.
+- **Validation list** (`technical-validation.md`): cash identity, net worth identity, scenario isolation, boundary cases. Covered by the tests and the live checks.
+- **Reporting template** (`scenario-modelling.md` §20): the **"⬇ scenario report (UBS template)"** link exports all 15 fields for the selected path.
+- **FAQ rules:** inflation applied to *all* costs including one-offs; real vs nominal stated (constant 2025 francs); negative cash = funding gap; no silent currency conversion; "most money ≠ best" (answers mention cash risk).
+
+**Honest gaps:** taxes are not modelled (incomes are net, as in the data); there's no optimizer that finds the best plan for you (break-even is a 1-D version); no game or RL; the twin doesn't yet re-learn from new months of bank data (only from facts you tell it).
+
 ## 0. The one-minute version
 
 ```
@@ -274,9 +328,13 @@ A ~170-line Node server (`server.ts`) with no framework. It holds the API key an
 |---|---|---|
 | `GET /api/health` | – | which model, JSON mode, reasoning |
 | `GET /api/schema` | – | the exact JSON Schemas we demand |
-| `POST /api/parse` | question + person summary + city list + scenario catalog | `{ scenarios[], horizon_years, unsupported[], note }` |
+| **`POST /api/chat`** (used by the app) | the new message + **the last 12 chat messages + the twin's current STATE (income, rent, cash, spending, goals, "if nothing changes" results) + every PATH on screen (id, events, results) + selected/target path** | `{ reply, profile_update, new_paths[], edit {path_id, path, changes}, remove_path_ids[], horizon_years, unsupported[] }`: the twin talks **and** acts in one turn |
+| `POST /api/parse` | question + person summary + city list + scenario catalog | `{ scenarios[], horizon_years, unsupported[], note }` (older single-purpose endpoint, kept for tests and tools) |
 | `POST /api/explain` | `{ facts }` | `{ headline, explanation, caveat }` |
 | `POST /api/answer` | `{ facts }` from `answerFacts()` | `{ short_answer, reasoning, confidence_level, confidence_sentence }` |
+| `POST /api/edit` | follow-up text + the current path (events) + numbers the user set by hand (`fixed`) | `{ path (the complete updated path), changes[], unsupported[], note }` |
+
+`/api/parse` also returns `profile_update` (income, rent, cash, investments, usual spending: only what the user said), for **facts about today** ("I now earn 1,500"). They update the twin's state instead of creating a path.
 
 Both POST answers also return `prompt: { system, user, settings }` (exactly what was sent to the AI) and `ms` (time taken). The UI shows these in the **"see the prompt"** window.
 
@@ -317,6 +375,36 @@ Restart the backend after editing `.env`.
 - **New field in the JSON:** `schema.ts` (backend) + `types.ts` (frontend) + use it in `resolve.ts`.
 
 ---
+
+## 6b. The twin talks, remembers and updates itself
+
+### Why context matters (a real failure, fixed)
+The first chat version sent each message **alone**: no history, no list of paths, none of the person's numbers. So "have the kid at 35 *instead*" created a new path with only a kid; "where's the 1M income?" got "I can't invent a 1M income"; "what are my financials?" got "I can't read out your numbers"; "until I buy the house it should be 2K a month" (right after asking about rent) became a savings plan. **The model (DeepSeek) wasn't the problem; it was given no context.**
+
+Now every message goes to **`/api/chat`** with:
+- **HISTORY**: the last 12 messages (yours and the twin's), so "it", "that", "instead" can be resolved;
+- **STATE**: the twin's current numbers (after your updates), the monthly balance, goals, and the "if nothing changes" results, so it can answer "what's my rent?" or "explain my situation";
+- **PATHS**: every path on screen with its id, events and results, so it can **edit** or **remove** the right one;
+- the **selected** path and the **target** path (when you click "Change this path").
+
+One turn can do several things: `reply` (always: natural, short, answers questions with STATE/PATHS numbers, no canned slogans), `profile_update`, `new_paths`, `edit`, `remove_path_ids` (when you say it misunderstood), `horizon_years` (e.g. "until 40" at 20 → 25 years). The reply's numbers are checked: numbers from the data or from your message (also ÷12 / ×12) pass; anything else is shown as "ℹ calculated by the twin". Distress messages get care and Swiss help lines (143, 147, 144) first.
+
+**Tested** with the exact transcript (`pnpm test:live`, "chat:"): "just say hi and nothing else" → "Hi!"; "what are my financials?" → her income, rent, spending, cash and monthly gap; "kid at 35 instead" → edits that path, keeps the 1M and the mansion; "where's the 1M income" → adds it to that path; "rent should be 2K" → rent update, not saving; "I meant rent, not saving" → removes the wrong path and fixes the rent; explicit target edit → that path only.
+
+- **Chat (`components/Chat.tsx`):** everything you type goes into one conversation. Your messages appear on the right; the twin's replies on the left say what it did:
+  - "＋ Master's in Zurich: 🎓…" (click to select that path);
+  - "🧠 Updated what I know: income 1,200 → 1,500";
+  - "✏️ Changed Master's degree: ✓ flat price 600k → 500k".
+  For questions, the direct answer and its confidence badge appear in the same bubble. "how did the twin get this?" opens the explanation window.
+- **The twin updates itself (state updating):** facts about today ("I now earn 1,500", "my rent went up to 1,100", "I have 10k saved") become a `profile_update`. It is applied on top of the data in the order you said it (`applyUpdates` in `App.tsx`), and **every path recomputes from the new state**. A purple "The twin knows" strip shows what changed, with undo. Offline, simple keyword rules catch "I earn / I have / my rent is".
+- **Follow-ups on a path:** select a card, then use the "Change this path" bar (one-click ideas, "✏️ write your own change…", undo). "Write your own" puts the chat in **reply mode** ("✏️ Changing Master's degree"). The AI returns the complete updated path, keeping everything you didn't mention and keeping values you set by hand (`fixed`). The old version is stored for **undo**. Your hand-set profile numbers (`g.*`) are kept; event numbers are passed to the AI as `fixed`.
+- **"How did the twin get this?" window:** plain story first (your message, what the twin understood as a readable list of events, each follow-up and what changed). The exact instructions, the raw JSON and the settings sit in one folded "Technical details" section.
+
+## 6c. Showing what nobody knows (`lib/unknowns.ts`)
+
+When a path depends on an **unknown** number that actually changes it (e.g. a degree's salary premium, rent abroad, a moving cost):
+- the path's line turns **dotted from the month that number starts to matter**, a "?" marks the month, and the card shows "? unknowns from 22";
+- for the selected path, a **hatched band** shows how far the line could move if the unknown were different. The ranges are **illustrative**: ±20 points for %, ±25% for "kept as today" values, 0 to 20% of income for an unknown monthly cost, 0 to 3 months of income for an unknown one-off cost. A note under the chart says that and how to fix it (set the number, or say it in a follow-up).
 
 ## 7. The UI (`frontend/src/`)
 
@@ -368,7 +456,7 @@ Restart the backend after editing `.env`.
 | command | what it checks | needs |
 |---|---|---|
 | `cd frontend && pnpm test` | 41 tests: down-payment check (broke student can't pay, worker can; "can I afford" = no), answer confidence (clear case = high, unknown premium = not high, near-tie = low, goal 0% = high, 0%-return investing = tie, afford questions), suggestions fit every one of the 1,200 people, French/Swiss number formats, accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
-| `cd frontend && pnpm test:live` | 23 tests with the **real LLM**: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
+| `cd frontend && pnpm test:live` | 36 tests with the **real LLM** (all pass): 7 conversation-with-context cases from a real transcript; 23 earlier ones: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
 | `cd backend && pnpm typecheck` | backend types | nothing |
 | `cd frontend && pnpm build` | frontend types and production build | nothing |
 | `cd ml && uv run train.py` | re-trains and prints the data checks and backtest | uv |
@@ -378,6 +466,7 @@ Restart the backend after editing `.env`.
 ## 9. Running and troubleshooting
 
 - Everything at once: `node demo.mjs`, then open `http://localhost:5173/?demo`.
+- **For the real demo: `node demo.mjs --prod`**, then open `http://localhost:4173/?demo`. It builds once and serves the static build: about 120 MB of memory instead of about 700 MB for the dev server (the dev server re-processes the 830 KB `profiles.json`). Use it on laptops with little RAM.
 - Separately: `cd backend && pnpm dev` (auto-restarts on change) and `cd frontend && pnpm dev`.
 - **"AI offline" badge:** is the backend running? Is `LLM_API_KEY` set in `backend/.env`? Check `curl localhost:8000/api/health`.
 - **Port busy:** another dev server is running. Close it (or change `PORT` in `.env` and the proxy target in `frontend/vite.config.ts`).

@@ -7,6 +7,7 @@ import { checks, runPath, simulate } from '../lib/sim'
 import { offlineParse } from '../lib/fallback'
 import { verdict } from '../lib/answer'
 import { suggestQuestions } from '../lib/suggest'
+import { BASE_MACRO, MACRO_PRESETS } from '../lib/macro'
 import type { Params, Profile, ScenarioSpec, TwinEvent } from '../lib/types'
 
 const params: Params = JSON.parse(readFileSync('src/model/params.json', 'utf8'))
@@ -179,6 +180,43 @@ describe('suggested questions fit the person', () => {
       expect(s.length).toBeGreaterThan(0)
       expect(s.length).toBeLessThanOrEqual(3)
     }
+  })
+})
+
+describe('economy (macroeconomic) vs personal (idiosyncratic) variables', () => {
+  const eco = (id: string) => MACRO_PRESETS.find((m) => m.id === id)!
+  const workSpec = presets(alexia, params).find((p) => p.id === 'work')!.spec
+  const run = (spec: ScenarioSpec, m = BASE_MACRO) => simulate(resolve(alexia, params, spec, {}, 120, rate, m), params, alexia)
+  it("today's economy changes nothing (same results as before the economy existed)", () => {
+    expect(run(workSpec).endNW).toEqual(simulate(plan(alexia, workSpec), params, alexia).endNW)
+  })
+  it('high inflation (prices beat pay) lowers the result; a rate hike makes a mortgage cost more', () => {
+    expect(run(workSpec, eco('inflation')).endNW.p50).toBeLessThan(run(workSpec).endNW.p50)
+    const flat = { name: 'f', catalog_id: null, events: [makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_home', label: 'h', start_month: 60, amount_chf: 500000 })] }
+    expect(run(flat, eco('rates')).endNW.p50).toBeLessThan(run(flat).endNW.p50)
+  })
+  it('a recession cuts pay only for people who work, in the recession months', () => {
+    const p = resolve(alexia, params, workSpec, {}, 120, rate, eco('recession'))
+    expect(p.income[30]).toBeCloseTo(p.income[10] * 0.85, 6)
+    const quoPlan = resolve(alexia, params, quo, {}, 120, rate, eco('recession'))
+    expect(quoPlan.income[30]).toBe(alexia.income) // a student is not hit
+  })
+  it('a housing downturn lowers net worth but not cash', () => {
+    const flat = { name: 'f', catalog_id: null, events: [makeEvent({ type: 'start_job', label: 'j' }), makeEvent({ type: 'buy_home', label: 'h', start_month: 12, amount_chf: 500000 })] }
+    const a = run(flat), b = run(flat, eco('housing'))
+    expect(b.endNW.p50).toBeLessThan(a.endNW.p50 - 90000)
+    expect(Math.abs(b.endCash.p50 - a.endCash.p50)).toBeLessThan(1)
+  })
+  it('uncertain economy: random recessions are shared by all paths in the same future, and widen the range', () => {
+    const u = eco('uncertain')
+    const a = run(workSpec, u)
+    const base = run(workSpec)
+    expect(a.endNW.p90 - a.endNW.p10).toBeGreaterThan(base.endNW.p90 - base.endNW.p10)
+    // same seed + same economy -> reproducible
+    expect(run(workSpec, u).endNW).toEqual(a.endNW)
+  })
+  it('all accounting checks still pass in every economy', () => {
+    for (const m of MACRO_PRESETS) for (const c of checks(resolve(alexia, params, workSpec, {}, 120, rate, m), params, alexia)) expect(c.ok, `${m.id}: ${c.name}`).toBe(true)
   })
 })
 

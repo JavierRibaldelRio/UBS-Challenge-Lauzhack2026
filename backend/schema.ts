@@ -45,11 +45,57 @@ export const ScenarioSchema = z.object({
   events: z.array(EventSchema),
 })
 
+/** New facts about the person's situation TODAY (not future decisions): the twin updates itself with them. */
+export const ProfileUpdateSchema = z.object({
+  monthly_net_income_chf: num.describe('Current monthly net income, if the user says it changed'),
+  monthly_rent_chf: num.describe('Current monthly rent, if the user says it changed'),
+  cash_chf: num.describe('Current savings / cash, if the user says it'),
+  investments_chf: num.describe('Current investments, if the user says it'),
+  monthly_spending_chf: num.describe('Usual monthly spending WITHOUT rent, if the user says it'),
+  summary: z.string().describe('One short sentence: what changed'),
+})
+
 export const ParseSchema = z.object({
-  scenarios: z.array(ScenarioSchema).describe('1-3 alternative paths the user wants to explore'),
+  profile_update: ProfileUpdateSchema.nullable().describe('Facts about TODAY the user told you ("I now earn 1,500", "I have 15k saved"). null if none.'),
+  scenarios: z.array(ScenarioSchema).describe('1-3 alternative paths the user wants to explore (can be empty if the user only updated facts about today)'),
   horizon_years: int.describe('Only if the user asks for a specific horizon'),
   unsupported: z.array(z.string()).describe('Parts of the request this model cannot represent'),
   note: z.string().nullable().describe('One short sentence to the user if something was unclear, else null'),
+})
+
+/** Follow-up on ONE existing path: the full updated path + what changed. */
+export const EditSchema = z.object({
+  path: ScenarioSchema.describe('The COMPLETE updated path: all events, changed and unchanged'),
+  changes: z.array(z.string()).describe('Short plain-English list of what you changed, e.g. "flat price 600k -> 500k"'),
+  unsupported: z.array(z.string()),
+  note: z.string().nullable(),
+})
+
+/** The ECONOMY (macroeconomic variables, shared by every path). Null = keep as is. */
+export const MacroUpdateSchema = z.object({
+  preset: z.enum(['base', 'uncertain', 'inflation', 'rates', 'recession', 'housing', 'crisis']).nullable().describe('A ready-made economy, or null'),
+  inflation_pct: num, wage_growth_pct: num, rate_shift_pct: num, market_return_pct: num, market_vol_pct: num,
+  recession_start_month: int, recession_months: int, recession_income_drop_pct: num,
+  crash_month: int, crash_drop_pct: num, housing_drop_month: int, housing_drop_pct: num, recession_risk_per_year_pct: num,
+})
+
+/** One turn of the conversation with the twin: it can talk AND act (update today's facts, add / edit / remove paths). */
+export const TurnSchema = z.object({
+  reply: z.string().describe("What the twin says back, in the user's language. Natural, short (1-4 sentences). Answers questions directly using STATE / PATHS numbers."),
+  profile_update: ProfileUpdateSchema.nullable().describe('Facts about TODAY the user stated or corrected. null if none.'),
+  new_paths: z.array(ScenarioSchema).describe('New paths to add (0-3). Empty if the user is editing, asking or chatting.'),
+  edit: z
+    .object({
+      path_id: z.string().describe('id of the existing path to change (from PATHS)'),
+      path: ScenarioSchema.describe('The COMPLETE updated path: all events, changed and unchanged'),
+      changes: z.array(z.string()).describe('Plain-English list of what changed, e.g. "child: from now -> at 35"'),
+    })
+    .nullable()
+    .describe('Change ONE existing path (the user refers to it: "instead", "that path", "the kid", "make it…"). null if not editing.'),
+  remove_path_ids: z.array(z.string()).describe('ids of paths to delete (user says delete / that was wrong / I did not mean that)'),
+  macro_update: MacroUpdateSchema.nullable().describe('ECONOMY-WIDE conditions (inflation, interest rates, recession, market crash, house prices). Applies to EVERY path. null if not mentioned.'),
+  horizon_years: int.describe('Only if the user asks for a specific horizon, or needs one to see their ages (e.g. "until 40")'),
+  unsupported: z.array(z.string()).describe('Things the user wants that this model cannot represent (not: values you filled in)'),
 })
 
 export const ExplainSchema = z.object({
@@ -66,5 +112,7 @@ export const AnswerSchema = z.object({
 })
 
 export type ParseResult = z.infer<typeof ParseSchema>
+export type EditResult = z.infer<typeof EditSchema>
+export type TurnResult = z.infer<typeof TurnSchema>
 export type AnswerResult = z.infer<typeof AnswerSchema>
 export type ExplainResult = z.infer<typeof ExplainSchema>

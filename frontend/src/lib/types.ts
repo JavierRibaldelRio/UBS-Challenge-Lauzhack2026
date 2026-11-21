@@ -52,6 +52,7 @@ export type TurnResult = {
   new_paths: ScenarioSpec[]
   edit: { path_id: string; path: ScenarioSpec; changes: string[] } | null
   remove_path_ids: string[]
+  macro_update: import('./macro').MacroUpdate | null
   horizon_years: number | null
   unsupported: string[]
 }
@@ -136,7 +137,7 @@ export type Params = {
 }
 
 /** Where a number comes from. Shown as a coloured tag on every assumption. */
-export type Source = 'data' | 'learned' | 'you' | 'assumption' | 'missing'
+export type Source = 'data' | 'learned' | 'you' | 'assumption' | 'missing' | 'macro'
 
 export type Assumption = {
   key: string

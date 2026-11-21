@@ -6,7 +6,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import OpenAI from 'openai'
 import { z } from 'zod'
-import { AnswerSchema, ExplainSchema, ParseSchema } from './schema.ts'
+import { AnswerSchema, EditSchema, ExplainSchema, ParseSchema, TurnSchema } from './schema.ts'
 
 const PORT = Number(process.env.PORT ?? 8000)
 const BASE_URL = process.env.LLM_BASE_URL ?? 'https://api.together.ai/v1'
@@ -39,6 +39,8 @@ function strictSchema(node: any): any {
 const PARSE_JSON_SCHEMA = strictSchema(z.toJSONSchema(ParseSchema))
 const EXPLAIN_JSON_SCHEMA = strictSchema(z.toJSONSchema(ExplainSchema))
 const ANSWER_JSON_SCHEMA = strictSchema(z.toJSONSchema(AnswerSchema))
+const EDIT_JSON_SCHEMA = strictSchema(z.toJSONSchema(EditSchema))
+const TURN_JSON_SCHEMA = strictSchema(z.toJSONSchema(TurnSchema))
 
 const ANSWER_SYSTEM = `You answer a person's question about their simulated financial future, in plain, simple English (short sentences, no jargon).
 The simulation has already been run. You get its results as FACTS. The verdict and the confidence level were computed by the simulator.
@@ -50,6 +52,7 @@ STRICT RULES
 - Answer in the same language as the QUESTION.
 - confidence_level: copy the given "confidence" value exactly (high / medium / low). Do not change it. In confidence_sentence, state it and explain it with the main reason from confidence_reasons.
 - If unknown_inputs is not empty, mention that the answer depends on them.
+- If "economy" is not today's economy, mention that the answer assumes that economy for every path.
 - If a path buys a home and chance_not_enough_cash_for_down_payment_pct is above 0, say that the own money for the down payment is missing in that share of futures. That makes the purchase unaffordable there, whatever the final net worth.
 - Money that ends higher is not automatically the better life choice: if the paths differ in risk of running out of cash, say so.
 - The person and data are fictional.
@@ -57,35 +60,107 @@ Reply with JSON only (no prose, no code fences), matching this JSON Schema:
 ${JSON.stringify(ANSWER_JSON_SCHEMA)}`
 
 // ------------------------------------------------------------------ prompts
-function parseSystemPrompt(ctx: ParseContext) {
-  return `You translate a person's "what if" question into scenario JSON for a financial simulator.
-You DESCRIBE decisions. You NEVER invent money amounts.
-
-RULES
-- Use only these event types: start_job, study, relocate, income_change, household_change, recurring_expense, one_off, invest, market_shock, take_loan, buy_home.
+// Rules shared by "new question" and "change this path": how words become events.
+function eventRules(ctx: ParseContext) {
+  return `- Use only these event types: start_job, study, relocate, income_change, household_change, recurring_expense, one_off, invest, market_shock, take_loan, buy_home.
 - Any number the user did not state -> null. The simulator fills it from data and shows the source. Do not guess salaries, rents, tuition or costs.
 - Timing: months after the start (month 0 = ${ctx.start_date}, when ${ctx.name} is ${ctx.age}). "at 25" -> (25-${ctx.age})*12. "next year" -> 12. "now" -> 0.
-- If the user compares options ("A or B"), return one scenario per option (max 3). Do not add a "do nothing" scenario; the app already has one.
-- Combine events in one scenario when they happen together (e.g. study abroad = relocate + study).
 - study: after it ends the person starts a job automatically. A salary premium the degree brings ("salary 15% higher afterwards") goes in the study event's income_change_pct. NEVER add a separate income_change for it.
 - income_change: part-time 60% -> -40. Job loss -> -100 with duration_months. Job loss WITH benefits or partial pay ("70% unemployment benefits", "keep 80% of my salary") -> the remaining share: 70% -> -30, 80% -> -20.
 - one_off: positive amount_chf = a cost, negative = money received.
-- buy_home: amount_chf = the home price; down_payment_pct and annual_rate_pct (mortgage) only if stated. Do NOT also add a one_off or take_loan for the same purchase.
-- Several things in ONE life (e.g. "do a master's now, lose my job at 27 and buy a flat at 30") = ONE scenario with several events, in any order.
+- buy_home: amount_chf = the home price; down_payment_pct and annual_rate_pct (mortgage) only if stated. A stated down payment in CHF -> down_payment_pct = 100 * amount / price. Do NOT also add a one_off or take_loan for the same purchase.
 - "k" means thousand (25k = 25000), "m"/"million" = 1000000.
 - Amounts in another currency (EUR, GBP, USD...): do NOT convert. Leave the CHF field null and list it in "unsupported".
-- Write "name" and "label" in the SAME language the user wrote the question in. An English question gets English labels (default: English).
+- Write "name" and "label" in the SAME language the user wrote in. English input gets English labels (default: English).
 - relocate.city must be one of: ${ctx.cities.join(', ')}; otherwise "abroad: <country>".
-- Put anything you cannot represent (taxes, specific stocks, career probabilities...) in "unsupported".
+- Put anything you cannot represent (taxes, specific stocks, career probabilities...) in "unsupported".`
+}
+
+function parseSystemPrompt(ctx: ParseContext) {
+  return `You translate a person's message into JSON for a financial simulator ("financial twin").
+You DESCRIBE decisions and facts. You NEVER invent money amounts.
+
+The message can contain two kinds of things:
+A) FACTS ABOUT TODAY that make the twin's current state out of date ("I now earn 1,500 a month", "I have 15k saved", "my rent went up to 1,100"). Put them in profile_update (only the fields the user stated). These are not paths.
+B) WHAT-IFS / DECISIONS about the future ("what if I do a master's", "buy a flat at 28"). Put them in scenarios.
+If there is only A, scenarios is an empty list. If there is only B, profile_update is null.
+C) Neither (a greeting like "hey", thanks, small talk, or a question about the app): scenarios = [], profile_update = null, and "note" = a short friendly reply (1-2 sentences, in the user's language) that says what you can do, with one example for this person (e.g. "Hi! Ask me a what-if, like 'What if I do a master's?', or tell me what changed, like 'I now earn 1,500'.").
+
+RULES
+${eventRules(ctx)}
+- If the user compares options ("A or B"), return one scenario per option (max 3). Do not add a "do nothing" scenario; the app already has one.
+- Several things in ONE life (e.g. "do a master's now, lose my job at 27 and buy a flat at 30") = ONE scenario with several events, in any order.
+- Combine events in one scenario when they happen together (e.g. study abroad = relocate + study).
 - catalog_id: closest id from the catalog below, or null.
 
-PERSON (fictional): ${JSON.stringify(ctx.profile)}
+PERSON (fictional, current state): ${JSON.stringify(ctx.profile)}
 
 CATALOG (id: name):
 ${ctx.catalog.map((c) => `${c.id}: ${c.name}`).join('\n')}
 
 Reply with JSON only (no prose, no code fences), matching this JSON Schema:
 ${JSON.stringify(PARSE_JSON_SCHEMA)}`
+}
+
+function editSystemPrompt(ctx: ParseContext & { path: unknown; fixed: unknown }) {
+  return `You edit ONE existing path of a financial simulator ("financial twin") following the user's follow-up instruction
+("make the flat 500k", "start the master's a year later", "remove the job loss", "add a child at 30", "what if the salary premium is 20%").
+You DESCRIBE decisions. You NEVER invent money amounts.
+
+RULES
+- Return the COMPLETE updated path: keep every event the user did not ask to change, exactly as it is (same values, including nulls).
+- Change only what the instruction asks. Remove an event only if asked. Add new events if asked.
+- The values in FIXED were set by the user by hand. Keep them: put them into the matching event field (e.g. a salary premium of 20% -> the study event's income_change_pct = 20), unless the instruction changes them.
+- If you rename the path, keep it short (2-5 words).
+- "changes": one short line per change in plain everyday words, with old -> new values where possible (e.g. "salary premium after the degree: none -> +20%", "flat price: 600k -> 500k", "master's starts 1 year later (age 21)"). NEVER mention field names, JSON, null or month numbers.
+${eventRules(ctx)}
+
+PERSON (fictional, current state): ${JSON.stringify(ctx.profile)}
+
+CURRENT PATH:
+${JSON.stringify(ctx.path)}
+
+FIXED (set by hand by the user): ${JSON.stringify(ctx.fixed)}
+
+Reply with JSON only (no prose, no code fences), matching this JSON Schema:
+${JSON.stringify(EDIT_JSON_SCHEMA)}`
+}
+
+// ------------------------------------------------------------------ the conversation (the twin talks AND acts)
+type ChatContext = ParseContext & { history: { role: string; text: string }[]; state: unknown; paths: unknown[]; focus_path_id: string | null; target_path_id: string | null }
+function chatSystemPrompt(ctx: ChatContext) {
+  return `You are the "financial twin" of ${ctx.name}, a FICTIONAL person from UBS's synthetic data. You talk with the user (who plays ${ctx.name}) in a chat, and you can act on a financial simulator.
+You see the conversation so far, ${ctx.name}'s current STATE and the PATHS (possible futures) already on screen, with their results.
+
+WHAT YOU CAN DO IN ONE TURN (combine as needed):
+1. reply: always. Talk like a helpful, natural person. Answer questions directly ("what's my rent?", "explain my situation", "which path is best?") using the numbers in STATE / PATHS. Short: 1-4 sentences. No canned slogans; do not repeat the same suggestions you already gave in HISTORY. If the user asks for something specific ("just say hi"), do exactly that.
+2. profile_update: facts about TODAY the user states or corrects ("I now earn 1,500", "my rent is 2,000", "I have 10k saved"). Rent/income/savings "until X happens" are still facts about today (a later home purchase or job already changes them).
+3. new_paths: NEW what-ifs / decisions about the future. "A or B" = one path per option. Several things in one life = ONE path with several events.
+4. edit: when the user refers to an EXISTING path ("instead", "change it", "make the flat cheaper", "where is the 1M income?", "have the kid at 35", "assume I got a job" right after a path that lacks it). Return that path COMPLETE: keep everything not mentioned, fix what was missing or wrong. If target_path_id is set, the user is explicitly editing that path.
+5. remove_path_ids: when the user says a path was wrong / a misunderstanding / not what they meant ("I meant X, not Y", "not save", "that's wrong", "delete it"): REMOVE that path right away (do not ask), and do the right thing instead.
+6. macro_update: the ECONOMY. Every message can contain two kinds of variables:
+   - IDIOSYNCRATIC = about this person (their job, studies, moves, home, kids, income, spending, personal luck) -> paths / profile_update.
+   - MACROECONOMIC = about the whole economy (inflation, prices vs wages, interest/mortgage rates, recession, job market, stock market crash, house prices). These are NOT events in a path: put them in macro_update, they apply to EVERY path so decisions stay comparable.
+   Use a preset when it fits (inflation, rates, recession, housing, crisis, uncertain, base = back to normal), or set numbers the user gave. Timing in months from now ("in 2027" -> months from the start date). Example: "what if I do a master's and there's a recession in 2 years?" -> new_paths: master's; macro_update: recession_start_month 24.
+7. horizon_years: if the user mentions ages beyond the current horizon (e.g. "until 40" at age 20 needs >= 20 years; use the furthest age mentioned + 5, max 40).
+
+USE THE CONTEXT. Resolve "it", "that", "instead", "the kid", "the house" from HISTORY and PATHS. If you misunderstood before (the user corrects you), fix it: remove or edit the wrong path; do not argue.
+NEVER INVENT MONEY: in events, any amount the user did not state stays null (the simulator fills it from data and labels it). You may convert units the user gave (1M a year -> 83,333 a month; "2K" -> 2000). Treat stated incomes as net and say so in reply if relevant.
+In reply, only use numbers from STATE, PATHS, HISTORY or the user's message. Never make up results for new or edited paths (they are simulated after your turn; the app shows them).
+The person is fictional; you are not a financial adviser: no "you should". If the user expresses distress or self-harm, respond with care and give Swiss help lines (143 Die Dargebotene Hand / La Main Tendue, 147 for young people, 144 emergency) before anything else.
+
+EVENT RULES
+${eventRules(ctx)}
+
+STATE (today, after the user's updates): ${JSON.stringify(ctx.state)}
+
+PATHS ON SCREEN (id, name, events, results): ${JSON.stringify(ctx.paths)}
+Selected path: ${ctx.focus_path_id ?? 'none'}. target_path_id: ${ctx.target_path_id ?? 'none'}
+
+CATALOG (closest scenario idea, for catalog_id): ${ctx.catalog.map((c) => `${c.id} ${c.name}`).join('; ')}
+
+Reply with JSON only (no prose, no code fences), matching this JSON Schema:
+${JSON.stringify(TURN_JSON_SCHEMA)}`
 }
 
 const EXPLAIN_SYSTEM = `You explain financial simulation results to a non-expert, in plain, simple English (short sentences, no jargon).
@@ -95,6 +170,7 @@ STRICT RULES
 - Say "in this simulation" / "under these assumptions". Never promise outcomes. Never give advice like "you should".
 - Mention the risk of running out of cash if it is above 0%.
 - If a break-even value is given, explain it in one sentence.
+- If "economy" is not today's economy, say in one sentence which economy all paths were simulated in (it is a shared macroeconomic assumption).
 - If a path buys a home: say that cash drops by the down payment while net worth does not. If chance_not_enough_cash_for_down_payment_pct is above 0, say clearly that the own money for the down payment is missing in that share of futures (a bank would not lend).
 - The person and data are fictional.
 Reply with JSON only (no prose, no code fences), matching this JSON Schema:
@@ -168,10 +244,20 @@ const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {})
   const t0 = Date.now()
   try {
-    if (url === '/api/health') {
-      return send(res, 200, { ok: true, llm: client ? { base_url: BASE_URL, model: MODEL, json_mode: JSON_MODE, reasoning: REASONING } : null })
+    if (url === '/api/shutdown' && req.method === 'POST') {
+      // only from this machine: lets a newer copy of the API replace this one (see start())
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? '')
+      if (!local) return send(res, 403, { ok: false })
+      send(res, 200, { ok: true })
+      console.log('[shutdown] replaced by a newer copy')
+      server.close()
+      setTimeout(() => process.exit(0), 100)
+      return
     }
-    if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA, answer: ANSWER_JSON_SCHEMA })
+    if (url === '/api/health') {
+      return send(res, 200, { ok: true, app: 'financial-twin', pid: process.pid, llm: client ? { base_url: BASE_URL, model: MODEL, json_mode: JSON_MODE, reasoning: REASONING } : null })
+    }
+    if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, edit: EDIT_JSON_SCHEMA, chat: TURN_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA, answer: ANSWER_JSON_SCHEMA })
     if (url === '/api/parse' && req.method === 'POST') {
       const ctx = (await readJson(req)) as ParseContext
       const system = parseSystemPrompt(ctx)
@@ -186,6 +272,21 @@ const server = createServer(async (req, res) => {
       const data = await callJson(ExplainSchema, EXPLAIN_JSON_SCHEMA, 'explanation', EXPLAIN_SYSTEM, user)
       console.log(`[explain] ${Date.now() - t0}ms`)
       return send(res, 200, { ok: true, model: MODEL, data, prompt: { system: EXPLAIN_SYSTEM, user, settings: callSettings('explanation') }, ms: Date.now() - t0 })
+    }
+    if (url === '/api/chat' && req.method === 'POST') {
+      const ctx = (await readJson(req)) as ChatContext
+      const system = chatSystemPrompt(ctx)
+      const messages = [...(ctx.history ?? []).slice(-12).map((m) => `${m.role === 'user' ? 'USER' : 'TWIN'}: ${m.text}`), `USER: ${ctx.text}`].join('\n')
+      const data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `HISTORY (oldest first; the last line is the new message):\n${messages}`)
+      console.log(`[chat] ${Date.now() - t0}ms "${ctx.text.slice(0, 50)}" -> new ${data.new_paths.length}, edit ${data.edit ? 1 : 0}, remove ${data.remove_path_ids.length}, update ${data.profile_update ? 1 : 0}`)
+      return send(res, 200, { ok: true, model: MODEL, data, prompt: { system, user: messages, settings: callSettings('turn') }, ms: Date.now() - t0 })
+    }
+    if (url === '/api/edit' && req.method === 'POST') {
+      const ctx = await readJson(req)
+      const system = editSystemPrompt(ctx)
+      const data = await callJson(EditSchema, EDIT_JSON_SCHEMA, 'edit', system, ctx.text)
+      console.log(`[edit] ${Date.now() - t0}ms "${String(ctx.text).slice(0, 60)}" -> ${data.changes.length} change(s)`)
+      return send(res, 200, { ok: true, model: MODEL, data, prompt: { system, user: ctx.text, settings: callSettings('edit') }, ms: Date.now() - t0 })
     }
     if (url === '/api/answer' && req.method === 'POST') {
       const { facts } = await readJson(req)
@@ -202,7 +303,28 @@ const server = createServer(async (req, res) => {
   }
 })
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Financial Twin API on http://localhost:${PORT}`)
-  console.log(client ? `LLM: ${MODEL} @ ${BASE_URL} (json mode: ${JSON_MODE}, reasoning: ${REASONING})` : 'LLM: none (no LLM_API_KEY) -> frontend uses offline fallback')
+// Start listening. If the port is taken by an OLDER copy of this API (e.g. one left running in another terminal),
+// ask it to shut down and take over. If something else holds the port, explain clearly instead of crashing.
+let tries = 0
+function start() {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Financial Twin API on http://localhost:${PORT}`)
+    console.log(client ? `LLM: ${MODEL} @ ${BASE_URL} (json mode: ${JSON_MODE}, reasoning: ${REASONING})` : 'LLM: none (no LLM_API_KEY) -> frontend uses offline fallback')
+  })
+}
+server.on('error', async (e: NodeJS.ErrnoException) => {
+  if (e.code !== 'EADDRINUSE' || tries++ > 5) {
+    console.error(`[startup] ${e.message}`)
+    process.exit(1)
+  }
+  const old = await fetch(`http://127.0.0.1:${PORT}/api/health`).then((r) => r.json()).catch(() => null)
+  if (old?.app === 'financial-twin') {
+    console.log(`[startup] an older Financial Twin API is running on port ${PORT}: asking it to stop and taking over…`)
+    await fetch(`http://127.0.0.1:${PORT}/api/shutdown`, { method: 'POST' }).catch(() => {})
+    setTimeout(start, 700)
+  } else {
+    console.error(`[startup] port ${PORT} is used by another program (not the Financial Twin). Close it, or set PORT=8001 in backend/.env and the proxy target in frontend/vite.config.ts.`)
+    process.exit(1)
+  }
 })
+start()

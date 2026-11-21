@@ -9,6 +9,7 @@ export const SOURCE: Record<Source, { label: string; help: string }> = {
   you: { label: 'you', help: 'Set by you (typed, edited, or said in the question).' },
   assumption: { label: 'assumption', help: 'Not in the data. A labelled default you can change.' },
   missing: { label: 'unknown', help: 'Nobody knows this. We use "no change". Click to set it.' },
+  macro: { label: 'economy', help: 'Shared by every path: set by the economy you choose (macroeconomic, not in the data).' },
 }
 
 export function SourceChip({ s }: { s: Source }) {
@@ -21,8 +22,9 @@ export function SourceChip({ s }: { s: Source }) {
 
 /** The numbers behind one path. Every one is editable; edits recompute instantly. */
 export function AssumptionList({ items, overrides, onChange }: { items: Assumption[]; overrides: Record<string, number>; onChange: (key: string, v: number | null) => void }) {
-  const own = items.filter((a) => !a.key.startsWith('g.'))
+  const own = items.filter((a) => !a.key.startsWith('g.') && !a.key.startsWith('m.'))
   const prof = items.filter((a) => a.key.startsWith('g.'))
+  const eco = items.filter((a) => a.key.startsWith('m.'))
   const [showProfile, setShowProfile] = useState(false)
   return (
     <div className="alist">
@@ -30,6 +32,14 @@ export function AssumptionList({ items, overrides, onChange }: { items: Assumpti
       {own.map((a) => (
         <Row key={a.key} a={a} overridden={overrides[a.key] != null} onChange={(v) => onChange(a.key, v)} />
       ))}
+      {eco.length > 0 && (
+        <>
+          <div className="alist-sub">🌍 The economy (same for every path)</div>
+          {eco.map((a) => (
+            <Row key={a.key} a={a} overridden={false} onChange={(v) => onChange(a.key, v)} />
+          ))}
+        </>
+      )}
       <button className="link-btn" onClick={() => setShowProfile((x) => !x)}>
         {showProfile ? 'hide' : 'show'} the person’s own numbers ({prof.length})
       </button>

@@ -57,6 +57,7 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
   const muShift = rand ? plan.muSe * normal(rand) : 0
   const retM = (plan.invReturn + knobs.retShift) / 12
   const volM = plan.invVol / Math.sqrt(12)
+  let recUntil = -1 // random recession (economy) running until this month
 
   for (let t = 0; t < H; t++) {
     // always draw the same 4 numbers per month (keeps paths aligned across branches)
@@ -65,9 +66,19 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
     const uSize = rand ? rand() : 0.5
     const zRet = rand ? normal(rand) : 0
 
+    // economy luck: only drawn when the economy is uncertain, so today's-economy results stay identical
+    let recStarts = false
+    if (rand && plan.macroRisk > 0) {
+      const uMacro = rand()
+      if (t % 12 === 0 && t >= recUntil && uMacro < plan.macroRisk) {
+        recUntil = t + 12
+        recStarts = true
+      }
+    }
     const moy = t % 12
     const st = plan.status[t]
     let inc = plan.income[t] * knobs.income
+    if (t < recUntil && (st === 'employed' || st === 'self_employed' || st === 'part_time')) inc *= 0.9
     if (knobs.incomeFrom && t >= knobs.incomeFrom.month) inc *= knobs.incomeFrom.scale
     let bonus = 0
     const b = params.bonus[st]
@@ -105,6 +116,7 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
     v = (v + contrib) * (1 + r)
     const shock = plan.shocks.find((s) => s.month === t)
     if (shock) v *= 1 - shock.drop
+    if (recStarts) v *= 0.8 // markets fall when a random recession starts
     const d = debt.reduce((a, x) => a + x, 0)
     cash[t] = c
     nw[t] = c + v + plan.homeValue[t] - d

@@ -117,13 +117,15 @@ baseline, and explain the trade-offs with transparent assumptions. Full brief: [
 
 A twin you can **talk to**, whose every number is **traceable**:
 
-1. You ask *"What if I do a master's, or start working?"* (or click a button).
+1. You **chat** with the twin: ask *"What if I do a master's, or start working?"*, tell it what changed (*"I now earn 1,500"*), or change a path (*"have the kid at 35 instead"*). It sees the conversation, your current numbers and every path on screen, so it understands follow-ups.
 2. An LLM turns the words into **scenario JSON** — it describes the decision, it never invents money.
 3. Every blank is filled **from the data** and tagged with where it came from (`DATA` / `LEARNED` / `YOU` / `ASSUMPTION` / `UNKNOWN`).
 4. A **Monte Carlo engine** (exact accounting formulas + randomness *learned* from the 28,800-month ledger) simulates 500 futures per path.
 5. You see bands, risk of running out of cash, goal chances, **what matters most**, and a **break-even** ("the master pays off only if salary is +24%").
 6. An LLM writes a plain-English paragraph from the computed facts only — and the app **checks every number** in it against the engine.
 7. A question gets a **direct answer** ("No — 0% chance of reaching your goal"), with a **confidence level computed by the simulator** (paired futures + real peer ranges + unknowns), backed by a test on ~20,000 pairs of real people.
+
+**How it maps to UBS's brief** (all 4 MUSTs and both BONUSes): see [DEV_NOTES.md → "What the model actually does"](DEV_NOTES.md), and [diagram.html](diagram.html) for the visual version. The model separates **idiosyncratic** variables (the person: decisions + learned personal luck) from **macroeconomic** ones (the economy: inflation, rates, recession, markets, house prices, shared by every path).
 
 ---
 
@@ -165,7 +167,8 @@ The trained model is already committed (`frontend/src/model/*.json`), so Python 
 ### 1.3 Start
 
 ```bash
-node demo.mjs
+node demo.mjs          # development (auto-reload), http://localhost:5173/?demo
+node demo.mjs --prod   # for the real demo: built + served statically (~120 MB RAM), http://localhost:4173/?demo
 ```
 
 Open **http://localhost:5173/?demo** — this loads the challenge example (Alexia: *start working* as baseline vs *master's* vs *move abroad*).
@@ -187,7 +190,7 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 
 ```bash
 cd frontend && pnpm test                     # 41 validation tests (accounting identities, edge cases, home purchase, number checker…)
-cd frontend && pnpm test:live                # 23 tests with the REAL LLM (incl. 10 very complex sentences + answers) (backend must be running with a key)
+cd frontend && pnpm test:live                # 36 tests with the REAL LLM (incl. 10 very complex sentences + answers, and multi-turn conversation) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 cd ml && uv sync --frozen && uv run train.py # re-train from pre_docs/Data -> rewrites frontend/src/model/*.json (~5 s, deterministic)
 curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow

@@ -88,7 +88,7 @@
   <h1>How the Financial Twin works,<br />from your words to a verified answer</h1>
   <p class="lead">A fictional person, their real (synthetic) bank history, and a twin you can talk to. You describe a decision in plain words; the twin turns it into a plan, simulates 500 possible futures, answers your question with a confidence it can justify, and checks every number it tells you.</p>
   <nav class="toc">
-    <a href="#big">1 · Big picture</a><a href="#layers">2 · Three layers</a><a href="#data">3 · The data</a><a href="#learn">4 · What it learns</a><a href="#month">5 · One month</a><a href="#futures">6 · 500 futures</a><a href="#words">7 · Words ⇄ numbers</a><a href="#answer">8 · Answers &amp; confidence</a><a href="#unknown">9 · Unknowns</a><a href="#twin">10 · A living twin</a><a href="#trust">11 · Trust</a><a href="#safe">12 · Never breaks</a><a href="#code">13 · Where it lives</a>
+    <a href="#big">1 · Big picture</a><a href="#layers">2 · Three layers</a><a href="#vars">2b · Person vs economy</a><a href="#data">3 · The data</a><a href="#learn">4 · What it learns</a><a href="#month">5 · One month</a><a href="#futures">6 · 500 futures</a><a href="#words">7 · Words ⇄ numbers</a><a href="#answer">8 · Answers &amp; confidence</a><a href="#unknown">9 · Unknowns</a><a href="#twin">10 · A living twin</a><a href="#trust">11 · Trust</a><a href="#safe">12 · Never breaks</a><a href="#brief">✓ UBS brief</a><a href="#code">13 · Where it lives</a>
   </nav>
 </header>
 
@@ -225,6 +225,29 @@
       <p class="small">“Do a master’s”, “buy a flat” are applied as explicit changes to the plan. Nobody in the data does a master’s, so no model could honestly <i>predict</i> its effect. Instead every number is labelled, editable, and unknowns are shown as unknown (§9).</p>
     </div>
   </div>
+</section>
+
+<!-- =============================================================== 2b variables -->
+<section class="card sec" id="vars">
+  <h2><span class="num">2b</span> Two kinds of variables: the person and the economy</h2>
+  <p class="muted small">UBS defines a twin as x<sub>t+1</sub> = F(x<sub>t</sub>, a<sub>t</sub>, w<sub>t</sub>; θ) and asks it to “distinguish user-controlled decisions from external conditions”.</p>
+  <div class="grid2">
+    <div class="tile layer" style="--c: #e11d48">
+      <span class="pill">IDIOSYNCRATIC · per person, per path</span>
+      <h3>👤 The person</h3>
+      <p class="small">Income, rent, usual spending (learned from their own 24 months), their decisions (study, job, move, home, kid, loan…) and their personal luck (surprise expenses, December bonus). Each path is one set of decisions.</p>
+    </div>
+    <div class="tile layer" style="--c: #0e7490">
+      <span class="pill">MACROECONOMIC · shared by every path</span>
+      <h3>🌍 The economy</h3>
+      <p class="small">Inflation vs pay, interest rates, market returns, recessions, house prices. One setting for every path, so decisions are compared fairly. Presets follow UBS’s scenarios (S101 inflation, S103 rate hike, S104 recession, S108 housing, S110 crisis) plus an “uncertain economy” with random recessions.</p>
+    </div>
+  </div>
+  <div class="chat">
+    <div class="b me">what if I do a master’s and there’s a recession in 2 years?</div>
+    <div class="b tw">＋ Master’s degree (a path: idiosyncratic) · 🌍 Economy for every path: recession at 22 (macroeconomic)</div>
+  </div>
+  <p class="small muted">In the Monte Carlo, each simulated future draws <b>personal luck</b> (learned from data) and, in an uncertain economy, <b>economy luck</b>: a recession in future #17 hits every path in future #17.</p>
 </section>
 
 <!-- =============================================================== 3 data -->
@@ -397,7 +420,7 @@
   <div class="grid3">
     <div class="tile"><h3>✓ Accounting, live</h3><p class="small">Cash adds up every month; moving money between pockets never changes net worth; debt never negative; same seed → same result. Checked on every change.</p></div>
     <div class="tile"><h3>✓ Better than a simple average</h3><p class="small">Typical miss CHF 2,281 vs 2,445; cash-crunch prediction score 0.0012 vs 0.0025 (lower is better).</p></div>
-    <div class="tile"><h3>✓ Tests</h3><p class="small">41 automatic tests (UBS’s validation list: zero income, higher tuition, loan payoff…) + 36 tests against the real AI, including a real messy conversation.</p></div>
+    <div class="tile"><h3>✓ Tests</h3><p class="small">47 automatic tests (UBS’s validation list: zero income, higher tuition, loan payoff…) + 38 tests against the real AI, including a real messy conversation and the person-vs-economy split. All 47 automatic tests pass.</p></div>
   </div>
 </section>
 
@@ -409,6 +432,21 @@
     <div class="tile"><h3>📶 Wi-Fi down?</h3><p class="small">Every successful AI answer is cached in the browser and replayed for the same question.</p></div>
     <div class="tile"><h3>🧾 Bad AI output?</h3><p class="small">Strict JSON schema, validation, one automatic repair attempt, then the fallback. Numbers in text are always checked.</p></div>
   </div>
+</section>
+
+<!-- =============================================================== 12b brief -->
+<section class="card sec" id="brief">
+  <h2><span class="num">✓</span> Checked against UBS’s brief</h2>
+  <div class="scroll"><table style="min-width:600px">
+    <tr><th>UBS asks</th><th></th><th>How</th></tr>
+    <tr><td><b>MUST</b> · Fictional client profile</td><td>✅</td><td>1,200 fictional people from UBS’s data; their own learned spending habit</td></tr>
+    <tr><td><b>MUST</b> · One working scenario</td><td>✅</td><td>11 event types, combined freely, in plain words or one click</td></tr>
+    <tr><td><b>MUST</b> · Before / after comparison</td><td>✅</td><td>baseline vs every path: cards, chart, answer card</td></tr>
+    <tr><td><b>MUST</b> · Transparent assumptions</td><td>✅</td><td>every number tagged and editable; unknowns dotted; the AI’s prompt visible; scenario report in UBS’s template</td></tr>
+    <tr><td><b>BONUS</b> · Conversational AI</td><td>✅</td><td>a chat that answers, acts, remembers, edits, and checks its numbers</td></tr>
+    <tr><td><b>BONUS</b> · Sensitivity &amp; uncertainty</td><td>✅</td><td>calibrated Monte Carlo (personal + economy luck), what matters most, break-even, peer ranges, economy stress tests</td></tr>
+    <tr><td>“Help someone understand a decision”</td><td>✅</td><td>direct answers with a computed confidence and a plain-English story</td></tr>
+  </table></div>
 </section>
 
 <!-- =============================================================== 13 code -->
