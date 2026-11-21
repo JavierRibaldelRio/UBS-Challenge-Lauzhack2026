@@ -1,0 +1,297 @@
+// Turns "profile + list of events" into a month-by-month PLAN.
+// Every number used gets an Assumption record saying where it came from:
+//   data       = read from the challenge CSVs (or a median of them)
+//   learned    = fitted by ml/train.py from the 24-month ledger
+//   you        = typed by the user (or stated in the chat)
+//   assumption = not in the data, a labelled default (editable)
+//   missing    = nobody knows; default is "no change" and the UI asks you to set it
+import type { Assumption, Household, Params, Profile, Regression, ScenarioSpec, Source, Status, TwinEvent } from './types'
+
+export type Plan = {
+  months: number
+  income: Float64Array
+  rent: Float64Array
+  otherMu: Float64Array // expected non-rent spending
+  otherSd: Float64Array // month-to-month spending std-dev
+  extra: Float64Array // recurring extra costs
+  oneOff: Float64Array // single costs (>0) / money in (<0), incl. tuition
+  contrib: Float64Array // cash -> investments transfers
+  status: Status[]
+  household: Household[]
+  city: string[]
+  shocks: { month: number; drop: number }[]
+  loans: { start: number; principal: number; annualRate: number; payment: number; isNew: boolean }[]
+  startCash: number
+  startInvest: number
+  muSe: number // standard error of the personal spending level (parameter uncertainty)
+  invReturn: number // expected real annual return
+  invVol: number // annual volatility
+  /** month from which the decision changes income (used for break-even) */
+  changeMonth: number | null
+  assumptions: Assumption[]
+  warnings: string[]
+}
+
+export type Overrides = Record<string, number>
+
+export const BAND = (age: number) => `${Math.floor(age / 5) * 5}-${Math.floor(age / 5) * 5 + 4}`
+
+export function regPredict(reg: Regression, x: { income: number; rent: number; age: number; household: string; status: string }) {
+  let y = 0
+  reg.features.forEach((f, i) => {
+    let v = 0
+    if (f === 'intercept') v = 1
+    else if (f === 'income') v = x.income
+    else if (f === 'sqrt_income') v = Math.sqrt(Math.max(0, x.income))
+    else if (f === 'rent') v = x.rent
+    else if (f === 'age') v = x.age
+    else if (f.startsWith('household=')) v = x.household === f.slice(10) ? 1 : 0
+    else if (f.startsWith('status=')) v = x.status === f.slice(7) ? 1 : 0
+    y += reg.coefficients[i] * v
+  })
+  return y
+}
+
+export function incomeAnchor(params: Params, status: Status, age: number) {
+  const s = params.anchors.income_by_status[status]
+  const b = s.by_age_band[BAND(Math.floor(age))]
+  if (b) return { value: b.median, note: `median of ${b.n} ${status} profiles aged ${BAND(Math.floor(age))} (synthetic-profiles.csv)` }
+  return { value: s.all.median, note: `median of all ${s.all.n} ${status} profiles (synthetic-profiles.csv)` }
+}
+
+export function rentAnchor(params: Params, city: string, household: Household) {
+  const c = params.anchors.rent_by_city[city]
+  if (!c) return null
+  const h = c.by_household[household]
+  if (h) return { value: h.median, note: `median rent of ${h.n} ${household} households in ${city} (synthetic-profiles.csv)` }
+  return { value: c.all.median, note: `median rent of ${c.all.n} households in ${city} (synthetic-profiles.csv)` }
+}
+
+export const cities = (params: Params) => Object.keys(params.anchors.rent_by_city).sort()
+
+export function medianLoanRate(profiles: Profile[]) {
+  const r = profiles.flatMap((p) => p.loans.map((l) => l.annual_rate)).sort((a, b) => a - b)
+  return r.length ? r[Math.floor(r.length / 2)] : 0.05
+}
+
+export function resolve(
+  profile: Profile,
+  params: Params,
+  spec: ScenarioSpec,
+  overrides: Overrides,
+  horizonMonths: number,
+  loanRateMedian: number,
+): Plan {
+  const H = horizonMonths
+  const assumptions: Assumption[] = []
+  const warnings: string[] = []
+  const A = (key: string, label: string, value: number, unit: string, source: Source, note: string) => {
+    const o = overrides[key]
+    const v = o ?? value
+    assumptions.push({ key, label, value: v, unit, source: o != null ? 'you' : source, note })
+    return v
+  }
+  const fill = <T>(v: T) => Array.from({ length: H }, () => v)
+
+  const income = new Float64Array(H).fill(profile.income)
+  const rent = new Float64Array(H).fill(profile.rent)
+  const status: Status[] = fill(profile.status)
+  const household: Household[] = fill(profile.household)
+  const city: string[] = fill(profile.city)
+  const extra = new Float64Array(H)
+  const oneOff = new Float64Array(H)
+  const contrib = new Float64Array(H)
+  const shocks: Plan['shocks'] = []
+  const loans: Plan['loans'] = []
+  let changeMonth: number | null = null
+  const ageAt = (t: number) => profile.age + t / 12
+  const clampM = (m: number | null | undefined) => Math.max(0, Math.min(H - 1, Math.round(m ?? 0)))
+  const endOf = (s: number, d: number | null) => (d == null ? H : Math.max(s + 1, Math.min(H, s + Math.round(d))))
+
+  // ---- global, profile-level numbers
+  const startCash = A('g.cash', 'Starting cash', profile.cash, 'CHF', 'data', `opening_cash_chf, ${profile.as_of} (synthetic-profiles.csv)`)
+  const startInvest = A('g.invest', 'Starting investments', profile.investments, 'CHF', 'data', 'investment_portfolio (synthetic-assets.csv)')
+  const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `average of your ${profile.calib.months} ledger months, seasonality and bonus removed`)
+  const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `std-dev of your ${profile.calib.months} ledger months`)
+  const invReturn = A('g.ret', 'Investment return (real, per year)', 0, '%', 'assumption', 'Not in the data (assets are a single snapshot). 0% = no growth. Edit to explore.') / 100
+  const invVol = A('g.vol', 'Investment volatility (per year)', 0, '%', 'assumption', 'Not in the data. 0% = no market noise. Edit to explore.') / 100
+  profile.loans.forEach((l, i) => {
+    const interest = (l.principal * l.annual_rate) / 12
+    const pay = A(`g.loan${i}`, `Loan ${i + 1} monthly payment`, Math.round(interest), 'CHF/mo', 'assumption', `Data has principal ${Math.round(l.principal)} at ${(l.annual_rate * 100).toFixed(2)}% but payment 0 / not amortized. Default: interest only.`)
+    loans.push({ start: 0, principal: l.principal, annualRate: l.annual_rate, payment: pay, isNew: false })
+  })
+
+  // ---- events, in time order
+  const events = [...spec.events].map((e, i) => ({ e, i })).sort((a, b) => (a.e.start_month ?? 0) - (b.e.start_month ?? 0))
+  for (const { e, i } of events) {
+    applyEvent(e, `e${i}`, clampM(e.start_month))
+  }
+
+  function applyEvent(e: TwinEvent, k: string, s: number) {
+    const tag: Source = e._source ? 'assumption' : 'you'
+    const tagNote = e._source ?? 'from your request'
+    switch (e.type) {
+      case 'start_job': {
+        const anc = incomeAnchor(params, 'employed', ageAt(s))
+        const inc = A(`${k}.income`, `${e.label}: net salary`, e.monthly_net_income_chf ?? anc.value, 'CHF/mo', e.monthly_net_income_chf != null ? tag : 'data', e.monthly_net_income_chf != null ? tagNote : anc.note)
+        for (let t = s; t < H; t++) {
+          status[t] = 'employed'
+          income[t] = inc
+        }
+        changeMonth ??= s
+        break
+      }
+      case 'study': {
+        const sa = profile.study_assumption
+        const durDefault = (sa?.study_duration_years ?? params.anchors.study.duration_years_median) * 12
+        const tuiDefault = sa?.annual_tuition_chf ?? params.anchors.study.annual_tuition_chf_median
+        const studyNote = sa ? `this profile's row in scenario-assumptions.csv (S001)` : `median of scenario-assumptions.csv (S001)`
+        const dur = A(`${k}.dur`, `${e.label}: duration`, e.duration_months ?? durDefault, 'months', e.duration_months != null ? tag : 'data', e.duration_months != null ? tagNote : studyNote)
+        const tuition = A(`${k}.tuition`, `${e.label}: tuition per year`, e.annual_tuition_chf ?? tuiDefault, 'CHF/yr', e.annual_tuition_chf != null ? tag : 'data', e.annual_tuition_chf != null ? tagNote : `${studyNote}; paid per semester`)
+        const studInc = profile.status === 'student' ? { value: profile.income, note: 'your current student income (synthetic-profiles.csv)' } : incomeAnchor(params, 'student', ageAt(s))
+        const incDuring = A(`${k}.incDuring`, `${e.label}: income while studying`, e.monthly_net_income_chf ?? studInc.value, 'CHF/mo', e.monthly_net_income_chf != null ? tag : 'data', e.monthly_net_income_chf != null ? tagNote : studInc.note)
+        const end = Math.min(H, s + Math.round(dur))
+        for (let t = s; t < end; t++) {
+          status[t] = 'student'
+          income[t] = incDuring
+        }
+        for (let t = s; t < end; t += 6) oneOff[t] += tuition / 2
+        if (end < H) {
+          const anc = incomeAnchor(params, 'employed', ageAt(end))
+          const after = A(`${k}.after`, `${e.label}: salary after (no premium)`, anc.value, 'CHF/mo', 'data', anc.note)
+          const premium = A(`${k}.premium`, `${e.label}: salary premium from degree`, e.income_change_pct ?? 0, '%', e.income_change_pct != null ? tag : 'missing', e.income_change_pct != null ? tagNote : 'The data has no education field, so the degree premium is unknown. 0% = same pay. See the break-even line.')
+          for (let t = end; t < H; t++) {
+            status[t] = 'employed'
+            income[t] = after * (1 + premium / 100)
+          }
+          changeMonth ??= end
+        }
+        break
+      }
+      case 'relocate': {
+        const target = (e.city ?? '').trim()
+        const known = params.anchors.rent_by_city[target] ? target : null
+        const label = known ?? (target || 'abroad')
+        const ra = known ? rentAnchor(params, known, household[s]) : null
+        const rentV = A(`${k}.rent`, `${e.label}: rent in ${label}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra ? ra.note : `No data for ${label}. Default keeps your current rent - please set it.`)
+        const incV = A(`${k}.income`, `${e.label}: net income in ${label}`, e.monthly_net_income_chf ?? income[s], 'CHF/mo', e.monthly_net_income_chf != null ? tag : known ? 'data' : 'missing', e.monthly_net_income_chf != null ? tagNote : known ? 'income kept: the synthetic data shows no reliable city effect on income' : `No data for ${label}. Default keeps your current income - please set it.`)
+        const move = A(`${k}.move`, `${e.label}: moving cost`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Moving costs are not in the data. 0 by default.')
+        // income only changes if someone actually set it (else later phases, e.g. post-study salary, are kept)
+        const setIncome = e.monthly_net_income_chf != null || overrides[`${k}.income`] != null
+        for (let t = s; t < H; t++) {
+          city[t] = label
+          rent[t] = rentV
+          if (setIncome) income[t] = incV
+        }
+        oneOff[s] += move
+        if (e.monthly_net_income_chf != null || !known) changeMonth ??= s
+        break
+      }
+      case 'income_change': {
+        const end = endOf(s, e.duration_months)
+        const base = income[s]
+        const byPct = e.monthly_net_income_chf == null
+        const pctV = byPct ? A(`${k}.pct`, `${e.label}: income change`, e.income_change_pct ?? 0, '%', e.income_change_pct != null ? tag : 'missing', e.income_change_pct != null ? tagNote : 'Size of the change not given.') : 0
+        const newInc = byPct ? base * (1 + pctV / 100) : A(`${k}.income`, `${e.label}: new income`, e.monthly_net_income_chf!, 'CHF/mo', tag, tagNote)
+        for (let t = s; t < end; t++) {
+          income[t] = byPct ? income[t] * (1 + pctV / 100) : newInc
+          if (income[t] <= 0) status[t] = 'unemployed'
+        }
+        changeMonth ??= s
+        break
+      }
+      case 'household_change': {
+        const h = e.household_type ?? 'family'
+        for (let t = s; t < H; t++) household[t] = h
+        const ra = rentAnchor(params, city[s], h)
+        const rentV = A(`${k}.rent`, `${e.label}: rent as ${h}`, e.monthly_amount_chf ?? ra?.value ?? rent[s], 'CHF/mo', e.monthly_amount_chf != null ? tag : ra ? 'data' : 'missing', e.monthly_amount_chf != null ? tagNote : ra?.note ?? 'no rent data for this city')
+        for (let t = s; t < H; t++) rent[t] = rentV
+        break
+      }
+      case 'recurring_expense': {
+        const end = endOf(s, e.duration_months)
+        const amt = A(`${k}.amt`, `${e.label}: monthly cost`, e.monthly_amount_chf ?? 0, 'CHF/mo', e.monthly_amount_chf != null ? tag : 'missing', e.monthly_amount_chf != null ? tagNote : 'Amount not given.')
+        for (let t = s; t < end; t++) extra[t] += amt
+        break
+      }
+      case 'one_off': {
+        const amt = A(`${k}.amt`, `${e.label}: amount (+cost / -money in)`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Amount not given.')
+        oneOff[s] += amt
+        break
+      }
+      case 'invest': {
+        const end = endOf(s, e.duration_months)
+        if (e.monthly_amount_chf != null || e.amount_chf == null) {
+          const m = A(`${k}.monthly`, `${e.label}: invested per month`, e.monthly_amount_chf ?? 0, 'CHF/mo', e.monthly_amount_chf != null ? tag : 'missing', e.monthly_amount_chf != null ? tagNote : 'Amount not given.')
+          for (let t = s; t < end; t++) contrib[t] += m
+        }
+        if (e.amount_chf != null) contrib[s] += A(`${k}.lump`, `${e.label}: lump sum invested`, e.amount_chf, 'CHF', tag, tagNote)
+        break
+      }
+      case 'market_shock': {
+        const d = A(`${k}.drop`, `${e.label}: investment drop`, e.drop_pct ?? 30, '%', e.drop_pct != null ? tag : 'assumption', e.drop_pct != null ? tagNote : 'Illustrative size, not from data.')
+        shocks.push({ month: s, drop: d / 100 })
+        if (startInvest <= 0 && !spec.events.some((x) => x.type === 'invest')) warnings.push('A market shock only affects investments, and this profile has none.')
+        break
+      }
+      case 'take_loan': {
+        const principal = A(`${k}.principal`, `${e.label}: amount borrowed`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Amount not given.')
+        const rate = A(`${k}.rate`, `${e.label}: interest rate`, e.annual_rate_pct ?? loanRateMedian * 100, '%/yr', e.annual_rate_pct != null ? tag : 'data', e.annual_rate_pct != null ? tagNote : 'median rate of the 283 loans in synthetic-liabilities.csv') / 100
+        const term = A(`${k}.term`, `${e.label}: repayment period`, e.duration_months ?? 60, 'months', e.duration_months != null ? tag : 'assumption', e.duration_months != null ? tagNote : 'Not in data; 5 years assumed.')
+        const r = rate / 12
+        const pay = r === 0 ? principal / term : (principal * r) / (1 - Math.pow(1 + r, -term))
+        loans.push({ start: s, principal, annualRate: rate, payment: pay, isNew: true })
+        break
+      }
+    }
+  }
+
+  // ---- learned spending response to a changed situation (regression delta, personal offset kept)
+  const regO = params.regressions.other_spending
+  const regV = params.regressions.spending_volatility
+  const x0 = { income: profile.income, rent: profile.rent, age: profile.age, household: profile.household, status: profile.status }
+  const f0 = regPredict(regO, x0)
+  const v0 = Math.max(50, regPredict(regV, x0))
+  const otherMu = new Float64Array(H)
+  const otherSd = new Float64Array(H)
+  for (let t = 0; t < H; t++) {
+    const x = { income: income[t], rent: rent[t], age: ageAt(t), household: household[t], status: status[t] }
+    otherMu[t] = Math.max(0, otherBase + regPredict(regO, x) - f0)
+    otherSd[t] = sdBase * Math.min(4, Math.max(0.25, Math.max(50, regPredict(regV, x)) / v0))
+  }
+  const dEnd = otherMu[H - 1] - otherBase
+  if (spec.events.length && Math.abs(dEnd) >= 1) {
+    assumptions.push({ key: 'learned.delta', label: 'Spending response to the new situation', value: Math.round(dEnd), unit: 'CHF/mo', source: 'learned', note: `regression on 1,200 profiles (CV R² ${regO.selected_cv_r2.toFixed(2)}): how non-rent spending differs with income, status, household, age` })
+  }
+
+  return {
+    months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, status, household, city, shocks, loans,
+    startCash, startInvest, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
+  }
+}
+
+// ---------------------------------------------------------------- presets (no LLM needed)
+const ev = (p: Partial<TwinEvent> & Pick<TwinEvent, 'type' | 'label'>): TwinEvent => ({
+  start_month: 0, duration_months: null, monthly_net_income_chf: null, income_change_pct: null, monthly_amount_chf: null,
+  amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, ...p,
+})
+
+export function presets(profile: Profile, params: Params): { id: string; label: string; spec: ScenarioSpec }[] {
+  const out: { id: string; label: string; spec: ScenarioSpec }[] = []
+  if (profile.status !== 'employed') out.push({ id: 'work', label: 'Start working', spec: { name: 'Start working', catalog_id: 'S001', events: [ev({ type: 'start_job', label: 'Start working' })] } })
+  out.push({ id: 'master', label: "Master's degree", spec: { name: "Master's degree", catalog_id: 'S001', events: [ev({ type: 'study', label: "Master's" })] } })
+  const dest = profile.city === 'Zurich' ? 'Geneva' : 'Zurich'
+  if (params.anchors.rent_by_city[dest]) out.push({ id: 'move', label: `Move to ${dest}`, spec: { name: `Move to ${dest}`, catalog_id: null, events: [ev({ type: 'relocate', label: `Move to ${dest}`, city: dest, start_month: 12 }), ...(profile.status !== 'employed' ? [ev({ type: 'start_job', label: 'Job', start_month: 12 })] : [])] } })
+  out.push({
+    id: 'abroad', label: 'Move abroad', spec: {
+      name: 'Move abroad', catalog_id: null,
+      events: [ev({ type: 'relocate', label: 'Move abroad', city: 'abroad', monthly_net_income_chf: 3700, amount_chf: 6500, _source: 'UBS starter-kit illustrative value (scenario_config.json)' })],
+    },
+  })
+  if (profile.income > 0) out.push({ id: 'jobloss', label: 'Lose income 6 months', spec: { name: 'Income gap 6 months', catalog_id: null, events: [ev({ type: 'income_change', label: 'Income gap', start_month: 12, duration_months: 6, income_change_pct: -100, _source: 'preset: 6 months without income' })] } })
+  out.push({ id: 'invest', label: 'Invest CHF 500/mo', spec: { name: 'Invest 500/mo', catalog_id: null, events: [ev({ type: 'invest', label: 'Invest', monthly_amount_chf: 500, _source: 'preset amount' })] } })
+  if (profile.investments > 0) out.push({ id: 'crash', label: 'Market crash −30%', spec: { name: 'Market crash', catalog_id: null, events: [ev({ type: 'market_shock', label: 'Crash', start_month: 24, drop_pct: 30, _source: 'illustrative stress test' })] } })
+  return out
+}
+
+export { ev as makeEvent }

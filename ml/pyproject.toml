@@ -1,0 +1,9 @@
+[project]
+name = "financial-twin-ml"
+version = "0.1.0"
+description = "Calibrates the Financial Twin cash-flow model from the synthetic challenge data"
+requires-python = "==3.13.*"
+dependencies = [
+    "numpy==2.5.5",
+    "pandas==3.1.1",
+]

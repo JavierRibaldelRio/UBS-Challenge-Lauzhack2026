@@ -108,7 +108,209 @@ You are encouraged to use existing libraries and APIs, you may use existing code
 ## Sponsor chosen: UBS
 ### Challenge
 
+**AI Financial Twin** — "One choice, many possible futures. Don't predict the future, make it explorable."
+Build a fictional person's financial state, let a user change a life decision, recompute, compare against a
+baseline, and explain the trade-offs with transparent assumptions. Full brief: [`pre_docs/`](pre_docs/README.md)
+(rubric: [`pre_docs/evaluation/`](pre_docs/evaluation/)).
 
+### Idea:
 
-### Idea: 
+A twin you can **talk to**, whose every number is **traceable**:
+
+1. You ask *"What if I do a master's, or start working?"* (or click a button).
+2. An LLM turns the words into **scenario JSON** — it describes the decision, it never invents money.
+3. Every blank is filled **from the data** and tagged with where it came from (`DATA` / `LEARNED` / `YOU` / `ASSUMPTION` / `UNKNOWN`).
+4. A **Monte Carlo engine** (exact accounting formulas + randomness *learned* from the 28,800-month ledger) simulates 500 futures per path.
+5. You see bands, risk of running out of cash, goal chances, **what matters most**, and a **break-even** ("the master pays off only if salary is +24%").
+6. An LLM writes a plain-English paragraph from the computed facts only — and the app **checks every number** in it against the engine.
+
+---
+
+# Financial Twin — project documentation
+
+## 1. Run the demo
+
+### 1.1 Install the tools (once per laptop)
+
+Everything is pinned: Node `26.13.1`, pnpm `11.28.13`, uv `0.13.9` (in [`mise.toml`](mise.toml)), Python `3.13` + numpy/pandas
+(in [`ml/uv.lock`](ml/uv.lock)), all JS packages at exact versions (in each `pnpm-lock.yaml`).
+
+**Easiest: use [mise](https://mise.jdx.dev)** (it installs the exact Node/pnpm/uv versions for this folder):
+
+```bash
+# Linux / macOS
+curl https://mise.run | sh            # then restart the terminal (or follow the printed "activate" line)
+# Windows (PowerShell)
+winget install jdx.mise                # then restart the terminal
+
+git clone <this repo> && cd UBS-Challenge-Lauzhack2026
+mise trust && mise install             # installs node 26.13.1, pnpm 11.28.13, uv 0.13.9
+```
+
+**Without mise:** install [Node 26.13.1](https://nodejs.org), then `npm i -g pnpm@11.28.13`, and
+[uv 0.13.9](https://docs.astral.sh/uv/getting-started/installation/) (only needed to retrain the model).
+
+### 1.2 Install the project
+
+```bash
+cd frontend && pnpm install --frozen-lockfile && cd ..
+cd backend  && pnpm install --frozen-lockfile && cd ..
+cp backend/.env.example backend/.env   # Windows: copy backend\.env.example backend\.env
+```
+
+Edit `backend/.env` and paste the Together AI key into `LLM_API_KEY=`. Nothing else is required.
+The trained model is already committed (`frontend/src/model/*.json`), so Python is **not** needed to run the demo.
+
+### 1.3 Start
+
+```bash
+node demo.mjs
+```
+
+Open **http://localhost:5173/?demo** — this loads the challenge example (Alexia: *start working* as baseline vs *master's* vs *move abroad*).
+Other people on the same Wi-Fi can open `http://<your-ip>:5173`.
+
+Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && pnpm dev`.
+
+### 1.4 It never breaks (by design)
+
+| If… | then… |
+|---|---|
+| no API key / no internet / LLM down | "Explore" uses offline keyword rules, the explanation uses a template. Badge says *AI offline*. Presets always work. |
+| LLM returns bad JSON | backend validates with zod, asks the LLM to fix it once, then falls back. |
+| the model rejects `json_schema` | set `LLM_JSON_MODE=json_object` (or `none`) in `backend/.env`. |
+| network dies mid-demo | every successful LLM answer is cached in the browser and replayed for the same question. **Rehearse your demo questions once.** |
+| Python breaks | not needed at demo time — model files are bundled into the frontend. |
+
+### 1.5 Other commands
+
+```bash
+cd frontend && pnpm test                     # 31 validation tests (accounting identities, edge cases, backtest sanity, number checker)
+cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
+cd ml && uv sync --frozen && uv run train.py # re-train from pre_docs/Data -> rewrites frontend/src/model/*.json (~5 s, deterministic)
+curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow
+```
+
+LLM settings (`backend/.env`): `LLM_BASE_URL` (default Together `https://api.together.xyz/v1`), `LLM_MODEL`
+(default `meta-llama/Llama-3.3-70B-Instruct-Turbo`), `LLM_JSON_MODE`, `LLM_TIMEOUT_MS`. Any OpenAI-compatible server works
+(OpenAI, Together, Groq, Ollama `http://localhost:11434/v1`, LM Studio, vLLM).
+
+---
+
+## 2. How it works (simple English)
+
+```
+ "What if I do a master's      ┌───────────┐  scenario JSON   ┌──────────────┐  month-by-month plan
+  or start working?"  ───────► │ LLM #1    │ ───────────────► │  RESOLVER    │  + every number tagged
+  (or a preset button)         │ (words →  │  (no money       │ fills blanks │    DATA/LEARNED/YOU/
+                               │  JSON)    │   invented)      │ from data    │    ASSUMPTION/UNKNOWN
+                               └───────────┘                  └──────┬───────┘
+                                                                     ▼
+ ┌──────────────┐  facts only   ┌───────────────────────────────────────────────────────┐
+ │ LLM #2       │ ◄──────────── │ ENGINE  = exact formulas (cash, investments, debt)    │
+ │ (numbers →   │               │         + randomness learned by ml/train.py           │
+ │  paragraph)  │               │ 500 paths per choice, same random numbers for all     │
+ └──────┬───────┘               │ → bands, risk, goals, drivers, break-even, checks     │
+        ▼                       └───────────────────────────────────────────────────────┘
+ number checker: every number in the paragraph must exist in the engine output ✓
+```
+
+### 2.1 Formulas vs. trained model — who does what?
+
+We **do not** let a model replace the accounting. The data has **no examples of decisions** (nobody in it does a master's or moves),
+so a model trained to predict "what if" would only repeat averages. Instead:
+
+| Part | Method | Why | Where it runs |
+|---|---|---|---|
+| Cash, investments, debt, net worth | **Formulas** (`cash[t+1] = cash[t] + income − spending − costs − transfers − loan payments`) | must be exact; judges test it | browser, [`sim.ts`](frontend/src/lib/sim.ts) |
+| Month-to-month spending surprises | **Learned**: real distribution of 28,800 monthly surprises (skewed, not a bell curve) | this is what the data *can* teach | trained in [`train.py`](ml/train.py), used in the browser |
+| December bonus | **Learned**: 54% of employed people get one, median 61% of a monthly income | real pattern in the ledger | same |
+| Feb/Aug spending spikes | **Learned** seasonality per job status (only statistically clear effects, \|t\|>3) | real pattern | same |
+| How spending changes when your situation changes | **Learned** regression (income, rent, status, household, age) | gives the "learned spending response" | same |
+| Your usual spending | **Learned** from *your own* 24 ledger months (+ its uncertainty) | the twin is calibrated to the person | same |
+| Defaults (salary, rent by city, tuition) | **Data medians** (e.g. "median of 69 employed people aged 20-24") | nothing made up | resolver, [`resolve.ts`](frontend/src/lib/resolve.ts) |
+| Things not in the data (degree premium, abroad salary, investment return) | **UNKNOWN / ASSUMPTION**, editable | honest | shown as red/orange tags |
+
+**Monte Carlo** = run the same choice 500 times with different (learned) random months → the shaded band (80% of paths),
+"cash below zero in X% of paths", "goal reached in X% of paths". All choices use the **same** random numbers, so differences come from the
+decision, not luck. Fixed seed → same result every time.
+
+### 2.2 Is it right? (verifiable)
+
+- **Backtest** (in `train.py`): fit on 2025 only, simulate 2026 for all 1,200 profiles, compare with the real 2026 ledger:
+  the 80% band contained **78.5%** of real outcomes (target 80), the 50% band **49.8%** (target 50). Typical error CHF 2,281 vs 2,445 for a naive average;
+  cash-crunch prediction (Brier) 0.0012 vs 0.0025.
+- **Live checks** in the UI for the selected path: cash identity, net worth = assets − debts (transfers don't change it), debt never negative, reproducible seed.
+- **Tests** (`pnpm test`): the boundary cases from [`technical-validation.md`](pre_docs/evaluation/technical-validation.md) (zero income, higher tuition, loan payoff, transfers…).
+- **Data checks**: the source ledger itself has 0 identity / 0 continuity violations.
+
+### 2.3 The LLM contract
+
+**LLM #1 — `POST /api/parse`** must return (strict JSON Schema generated from [`backend/schema.ts`](backend/schema.ts)):
+
+```jsonc
+{
+  "scenarios": [                       // 1-3 paths the user wants to compare
+    { "name": "Master in Zurich", "catalog_id": "S001",   // closest of the 120 catalog ideas, or null
+      "events": [
+        { "type": "study",             // start_job | study | relocate | income_change | household_change |
+                                       // recurring_expense | one_off | invest | market_shock | take_loan
+          "label": "Master", "start_month": 0, "duration_months": 24,
+          "monthly_net_income_chf": null, "income_change_pct": null, "monthly_amount_chf": null,
+          "amount_chf": null, "annual_tuition_chf": null, "city": null, "household_type": null,
+          "annual_rate_pct": null, "drop_pct": null }
+      ] }
+  ],
+  "horizon_years": null,
+  "unsupported": ["taxes"],            // what we cannot model -> shown to the user
+  "note": null
+}
+```
+Rule: **any number the user did not say is `null`** → the resolver fills it from data and labels it. Months are counted from the start date (age 20 for Alexia: "at 25" → 60).
+
+**LLM #2 — `POST /api/explain`** gets only the computed `facts` (medians, ranges, risks, goals, drivers, break-even) and returns
+`{ headline, explanation, caveat }`. The frontend then checks every number in the text against the facts (`✓ all N numbers traced to the engine`).
+
+### 2.4 Repo layout
+
+```
+pre_docs/          challenge material + synthetic data (given)
+ml/                train.py (numpy/pandas, uv-pinned) -> learns behaviour + backtest
+backend/           server.ts: OpenAI-compatible LLM gateway (parse / explain), schema.ts = JSON contract
+frontend/          React + Vite app
+  src/model/       trained artifacts (params.json, profiles.json) — generated by ml/train.py, committed
+  src/lib/         resolve.ts (data → plan), sim.ts (engine + checks), analysis.ts (drivers, break-even, facts, number check),
+                   fallback.ts (offline parser), api.ts (calls + cache)
+  src/components/  chart, path cards with editable assumption pills, panels
+demo.mjs           starts backend + frontend
+mise.toml          pinned toolchain
+```
+
+### 2.5 Who works on what next
+
+- **ML (Sebastián, Joshua)** — `ml/train.py`: calibrate investment return/volatility from public index data (see `pre_docs/resources_2/data/financial-markets-data.md`) instead of 0%; try a better spending model (e.g. gradient boosting) and keep it only if the backtest gets better; add a backtest plot.
+- **Backend (Javier)** — `backend/`: test Together models for JSON reliability (`LLM_JSON_MODE`), tune prompts in `server.ts`, add a few-shot example per event type.
+- **Frontend (Cagan)** — polish the demo flow, add more presets from the 120-scenario catalog, mobile layout.
+- **Everyone** — rehearse the 3-minute demo below with the real API key (answers get cached).
+
+### 2.6 Suggested 3-minute demo
+
+1. *(20 s)* Problem: "Alexia, 20, Lausanne, CHF 8k. Work, master, or abroad?" → click **▶ Alexia demo**.
+2. *(40 s)* Chart: 3 futures with bands. Status quo: her real ledger runs out of cash in month 9 (switch to **Cash** — the black dots are the real data inside our band).
+3. *(40 s)* Click *Master's degree* → its pills: tuition **DATA** (her row in scenario-assumptions.csv), salary **DATA** (median of 69 peers), premium **UNKNOWN**. Break-even: "+24% salary needed". Edit premium to 30% → everything recomputes.
+4. *(40 s)* Type: *"What if I move to Zurich and have a child at 28?"* → new path appears, explanation updates, "✓ all numbers traced to the engine".
+5. *(40 s)* "Can you trust it?": backtest 78.5% in an 80% band, live accounting checks, every number has a source. "Don't predict the future — make it explorable."
+
+### 2.7 Limitations (say them before the judges do)
+
+- Synthetic data: incomes don't depend on age (≈ CHF 8k net at every age), spending barely depends on income — so "start working at 20" looks very rich. The salary pill is editable.
+- No education/abroad data → degree premium and abroad numbers are UNKNOWN (we show break-even instead of guessing).
+- Constant 2025 CHF (no inflation); net income (taxes already inside); investment return 0% unless set.
+- The band shows month-to-month variability, not uncertainty about the assumptions (that's the drivers panel). Not a forecast, not advice.
+
+### 2.8 What we built vs. reused (LauzHack rule)
+
+- **Reused:** challenge data, docs and the starter-kit modelling convention (`pre_docs/`, by Stefania Stan / UBS); open-source libraries
+  (React, Vite, Recharts, zod, openai SDK, numpy, pandas, vitest); the "move abroad" preset numbers come from the starter kit's `scenario_config.json`.
+- **Built during the event:** everything in `ml/`, `backend/`, `frontend/`, `demo.mjs`.
 

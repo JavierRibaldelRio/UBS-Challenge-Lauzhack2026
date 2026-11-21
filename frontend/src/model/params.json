@@ -1,0 +1,1806 @@
+{
+ "version": 1,
+ "seed": 20260,
+ "units": "CHF per month, constant 2025 francs (no inflation), months indexed from each profile's as_of_date",
+ "source": {
+  "files": [
+   "synthetic-profiles.csv",
+   "synthetic-cash-balances.csv",
+   "synthetic-assets.csv",
+   "synthetic-liabilities.csv",
+   "synthetic-goals.csv",
+   "scenario-assumptions.csv"
+  ],
+  "profile_months": 28800,
+  "profiles": 1200,
+  "period": "2025-01 to 2026-12",
+  "income_convention": "reference_monthly_net_income_chf treated as constant net income; spending = income - net_transactions"
+ },
+ "data_checks": {
+  "rows": 28800,
+  "identity_violations": 0,
+  "continuity_violations": 0,
+  "negative_months": 772,
+  "negative_flag_mismatch": 0
+ },
+ "season": {
+  "employed": [
+   0.0,
+   0.0935,
+   -0.015,
+   -0.0176,
+   -0.0181,
+   -0.0215,
+   -0.017,
+   0.0801,
+   -0.0208,
+   -0.0184,
+   -0.0174,
+   -0.0199
+  ],
+  "self_employed": [
+   0.0,
+   0.1803,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.1999,
+   0.0,
+   0.0,
+   0.0,
+   -0.8042
+  ],
+  "part_time": [
+   0.0,
+   0.0881,
+   -0.0232,
+   0.0,
+   -0.0264,
+   0.0,
+   0.0,
+   0.1043,
+   0.0,
+   -0.0364,
+   0.0,
+   -0.0309
+  ],
+  "student": [
+   -0.063,
+   0.3355,
+   -0.0584,
+   -0.0597,
+   -0.047,
+   -0.0915,
+   -0.0821,
+   0.0,
+   0.1726,
+   -0.0739,
+   -0.0611,
+   0.0
+  ],
+  "unemployed": [
+   0.0,
+   0.0747,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0947,
+   0.0,
+   0.0,
+   -0.0396,
+   0.0
+  ],
+  "retired": [
+   0.0,
+   0.0941,
+   0.0,
+   -0.025,
+   0.0,
+   0.0,
+   -0.0236,
+   0.08,
+   -0.0254,
+   0.0,
+   -0.0234,
+   -0.0242
+  ]
+ },
+ "bonus": {
+  "employed": {
+   "probability": 0.5374,
+   "size_quantiles": [
+    0.1614,
+    0.2859,
+    0.3221,
+    0.368,
+    0.4089,
+    0.4436,
+    0.4776,
+    0.5131,
+    0.5422,
+    0.5791,
+    0.6069,
+    0.6568,
+    0.6958,
+    0.7302,
+    0.7725,
+    0.805,
+    0.8553,
+    0.8952,
+    0.9395,
+    0.9983,
+    1.1267
+   ],
+   "n_decembers": 1364,
+   "false_positive_rate_other_months": 0.0
+  }
+ },
+ "shock_quantiles": [
+  -3.618,
+  -2.22,
+  -2.009,
+  -1.865,
+  -1.779,
+  -1.715,
+  -1.652,
+  -1.6,
+  -1.555,
+  -1.508,
+  -1.469,
+  -1.431,
+  -1.399,
+  -1.365,
+  -1.335,
+  -1.302,
+  -1.273,
+  -1.246,
+  -1.223,
+  -1.203,
+  -1.179,
+  -1.156,
+  -1.131,
+  -1.112,
+  -1.091,
+  -1.069,
+  -1.05,
+  -1.031,
+  -1.012,
+  -0.994,
+  -0.978,
+  -0.959,
+  -0.942,
+  -0.925,
+  -0.91,
+  -0.894,
+  -0.88,
+  -0.864,
+  -0.851,
+  -0.835,
+  -0.819,
+  -0.805,
+  -0.788,
+  -0.771,
+  -0.754,
+  -0.739,
+  -0.725,
+  -0.712,
+  -0.698,
+  -0.684,
+  -0.671,
+  -0.659,
+  -0.646,
+  -0.632,
+  -0.62,
+  -0.609,
+  -0.596,
+  -0.582,
+  -0.566,
+  -0.553,
+  -0.539,
+  -0.527,
+  -0.514,
+  -0.502,
+  -0.49,
+  -0.477,
+  -0.464,
+  -0.452,
+  -0.439,
+  -0.428,
+  -0.416,
+  -0.404,
+  -0.392,
+  -0.38,
+  -0.368,
+  -0.355,
+  -0.342,
+  -0.33,
+  -0.317,
+  -0.307,
+  -0.295,
+  -0.284,
+  -0.273,
+  -0.261,
+  -0.249,
+  -0.238,
+  -0.224,
+  -0.211,
+  -0.198,
+  -0.185,
+  -0.173,
+  -0.161,
+  -0.149,
+  -0.138,
+  -0.127,
+  -0.113,
+  -0.1,
+  -0.087,
+  -0.075,
+  -0.063,
+  -0.049,
+  -0.035,
+  -0.025,
+  -0.01,
+  0.001,
+  0.013,
+  0.026,
+  0.038,
+  0.051,
+  0.063,
+  0.076,
+  0.084,
+  0.096,
+  0.105,
+  0.114,
+  0.122,
+  0.129,
+  0.137,
+  0.144,
+  0.153,
+  0.161,
+  0.17,
+  0.179,
+  0.189,
+  0.199,
+  0.208,
+  0.218,
+  0.23,
+  0.241,
+  0.254,
+  0.267,
+  0.282,
+  0.295,
+  0.308,
+  0.323,
+  0.338,
+  0.354,
+  0.368,
+  0.382,
+  0.398,
+  0.411,
+  0.426,
+  0.443,
+  0.457,
+  0.474,
+  0.489,
+  0.505,
+  0.52,
+  0.536,
+  0.552,
+  0.566,
+  0.583,
+  0.601,
+  0.617,
+  0.635,
+  0.654,
+  0.673,
+  0.691,
+  0.71,
+  0.73,
+  0.75,
+  0.768,
+  0.789,
+  0.808,
+  0.826,
+  0.843,
+  0.865,
+  0.89,
+  0.912,
+  0.936,
+  0.961,
+  0.984,
+  1.014,
+  1.038,
+  1.063,
+  1.094,
+  1.121,
+  1.152,
+  1.181,
+  1.212,
+  1.249,
+  1.283,
+  1.318,
+  1.354,
+  1.395,
+  1.441,
+  1.492,
+  1.553,
+  1.613,
+  1.672,
+  1.76,
+  1.824,
+  1.919,
+  2.016,
+  2.119,
+  2.256,
+  2.391,
+  2.587,
+  2.807,
+  3.078,
+  4.133
+ ],
+ "shock_autocorr_lag1": -0.0482,
+ "regressions": {
+  "other_spending": {
+   "target": "mean monthly non-rent spending (CHF)",
+   "form": "linear",
+   "features": [
+    "intercept",
+    "income",
+    "rent",
+    "age",
+    "household=couple",
+    "household=family",
+    "household=shared_housing",
+    "status=self_employed",
+    "status=part_time",
+    "status=student",
+    "status=unemployed",
+    "status=retired"
+   ],
+   "coefficients": [
+    1356.656039,
+    -0.0006,
+    0.082772,
+    0.511357,
+    -55.346232,
+    -56.385256,
+    54.691678,
+    -1.310542,
+    -3.867011,
+    85.405732,
+    -12.435903,
+    47.693105
+   ],
+   "cv_r2": {
+    "linear": 0.0488,
+    "linear+sqrt_income": 0.0442
+   },
+   "selected_cv_r2": 0.0488,
+   "n_profiles": 1200
+  },
+  "spending_volatility": {
+   "target": "std-dev of monthly non-rent spending (CHF)",
+   "form": "linear",
+   "features": [
+    "intercept",
+    "income",
+    "rent",
+    "age",
+    "household=couple",
+    "household=family",
+    "household=shared_housing",
+    "status=self_employed",
+    "status=part_time",
+    "status=student",
+    "status=unemployed",
+    "status=retired"
+   ],
+   "coefficients": [
+    30.588062,
+    0.060521,
+    -0.00732,
+    0.723454,
+    13.724511,
+    3.064222,
+    -0.553345,
+    1313.797741,
+    127.762582,
+    314.911221,
+    343.307818,
+    216.199436
+   ],
+   "cv_r2": {
+    "linear": 0.8013,
+    "linear+sqrt_income": 0.8012
+   },
+   "selected_cv_r2": 0.8013,
+   "n_profiles": 1200
+  }
+ },
+ "anchors": {
+  "income_by_status": {
+   "employed": {
+    "all": {
+     "median": 7738.47,
+     "n": 682
+    },
+    "by_age_band": {
+     "15-19": {
+      "median": 8837.56,
+      "n": 21
+     },
+     "20-24": {
+      "median": 8069.78,
+      "n": 69
+     },
+     "25-29": {
+      "median": 7875.17,
+      "n": 57
+     },
+     "30-34": {
+      "median": 7241.41,
+      "n": 74
+     },
+     "35-39": {
+      "median": 7741.92,
+      "n": 75
+     },
+     "40-44": {
+      "median": 7342.26,
+      "n": 74
+     },
+     "45-49": {
+      "median": 8441.14,
+      "n": 81
+     },
+     "50-54": {
+      "median": 7722.72,
+      "n": 60
+     },
+     "55-59": {
+      "median": 7679.09,
+      "n": 75
+     },
+     "60-64": {
+      "median": 7741.1,
+      "n": 71
+     },
+     "65-69": {
+      "median": 6074.15,
+      "n": 25
+     }
+    }
+   },
+   "self_employed": {
+    "all": {
+     "median": 7269.76,
+     "n": 106
+    },
+    "by_age_band": {
+     "20-24": {
+      "median": 8102.78,
+      "n": 11
+     },
+     "25-29": {
+      "median": 4807.54,
+      "n": 13
+     },
+     "30-34": {
+      "median": 5437.59,
+      "n": 15
+     },
+     "35-39": {
+      "median": 8151.66,
+      "n": 11
+     },
+     "40-44": {
+      "median": 5279.25,
+      "n": 11
+     },
+     "45-49": {
+      "median": 8355.47,
+      "n": 10
+     },
+     "50-54": {
+      "median": 8876.58,
+      "n": 12
+     },
+     "55-59": {
+      "median": 5581.37,
+      "n": 7
+     },
+     "60-64": {
+      "median": 9241.37,
+      "n": 6
+     },
+     "65-69": {
+      "median": 7940.88,
+      "n": 8
+     }
+    }
+   },
+   "part_time": {
+    "all": {
+     "median": 4313.23,
+     "n": 120
+    },
+    "by_age_band": {
+     "20-24": {
+      "median": 3984.1,
+      "n": 8
+     },
+     "25-29": {
+      "median": 4405.84,
+      "n": 12
+     },
+     "30-34": {
+      "median": 4301.76,
+      "n": 16
+     },
+     "35-39": {
+      "median": 4257.26,
+      "n": 9
+     },
+     "40-44": {
+      "median": 4239.07,
+      "n": 15
+     },
+     "45-49": {
+      "median": 4900.91,
+      "n": 18
+     },
+     "50-54": {
+      "median": 3989.55,
+      "n": 10
+     },
+     "55-59": {
+      "median": 4075.79,
+      "n": 9
+     },
+     "60-64": {
+      "median": 3983.98,
+      "n": 15
+     },
+     "65-69": {
+      "median": 3958.05,
+      "n": 6
+     }
+    }
+   },
+   "student": {
+    "all": {
+     "median": 1200.0,
+     "n": 39
+    },
+    "by_age_band": {
+     "20-24": {
+      "median": 1150.18,
+      "n": 19
+     },
+     "25-29": {
+      "median": 1419.61,
+      "n": 8
+     }
+    }
+   },
+   "unemployed": {
+    "all": {
+     "median": 533.09,
+     "n": 37
+    },
+    "by_age_band": {
+     "20-24": {
+      "median": 531.59,
+      "n": 5
+     },
+     "35-39": {
+      "median": 693.1,
+      "n": 5
+     },
+     "55-59": {
+      "median": 578.59,
+      "n": 5
+     },
+     "60-64": {
+      "median": 767.62,
+      "n": 5
+     }
+    }
+   },
+   "retired": {
+    "all": {
+     "median": 3834.75,
+     "n": 216
+    },
+    "by_age_band": {
+     "65-69": {
+      "median": 3919.93,
+      "n": 55
+     },
+     "70-74": {
+      "median": 3770.22,
+      "n": 105
+     },
+     "75-79": {
+      "median": 3921.26,
+      "n": 56
+     }
+    }
+   }
+  },
+  "rent_by_city": {
+   "Basel": {
+    "all": {
+     "median": 2036.43,
+     "n": 103
+    },
+    "by_household": {
+     "couple": {
+      "median": 2546.53,
+      "n": 29
+     },
+     "family": {
+      "median": 2507.87,
+      "n": 23
+     },
+     "shared_housing": {
+      "median": 1196.48,
+      "n": 15
+     },
+     "single": {
+      "median": 1807.51,
+      "n": 36
+     }
+    }
+   },
+   "Bern": {
+    "all": {
+     "median": 1948.62,
+     "n": 81
+    },
+    "by_household": {
+     "couple": {
+      "median": 2530.95,
+      "n": 26
+     },
+     "family": {
+      "median": 2553.51,
+      "n": 16
+     },
+     "shared_housing": {
+      "median": 1152.89,
+      "n": 9
+     },
+     "single": {
+      "median": 1708.45,
+      "n": 30
+     }
+    }
+   },
+   "Biel": {
+    "all": {
+     "median": 1930.81,
+     "n": 100
+    },
+    "by_household": {
+     "couple": {
+      "median": 2206.72,
+      "n": 40
+     },
+     "family": {
+      "median": 2415.23,
+      "n": 15
+     },
+     "shared_housing": {
+      "median": 1156.47,
+      "n": 12
+     },
+     "single": {
+      "median": 1674.75,
+      "n": 33
+     }
+    }
+   },
+   "Fribourg": {
+    "all": {
+     "median": 1744.12,
+     "n": 103
+    },
+    "by_household": {
+     "couple": {
+      "median": 2175.09,
+      "n": 35
+     },
+     "family": {
+      "median": 2160.73,
+      "n": 19
+     },
+     "shared_housing": {
+      "median": 1132.28,
+      "n": 5
+     },
+     "single": {
+      "median": 1536.01,
+      "n": 44
+     }
+    }
+   },
+   "Geneva": {
+    "all": {
+     "median": 2318.33,
+     "n": 104
+    },
+    "by_household": {
+     "couple": {
+      "median": 2761.43,
+      "n": 28
+     },
+     "family": {
+      "median": 2805.2,
+      "n": 22
+     },
+     "shared_housing": {
+      "median": 1633.88,
+      "n": 10
+     },
+     "single": {
+      "median": 2016.24,
+      "n": 44
+     }
+    }
+   },
+   "Lausanne": {
+    "all": {
+     "median": 1961.84,
+     "n": 96
+    },
+    "by_household": {
+     "couple": {
+      "median": 2499.93,
+      "n": 27
+     },
+     "family": {
+      "median": 2494.82,
+      "n": 16
+     },
+     "shared_housing": {
+      "median": 1091.89,
+      "n": 12
+     },
+     "single": {
+      "median": 1593.38,
+      "n": 41
+     }
+    }
+   },
+   "Lucerne": {
+    "all": {
+     "median": 2043.07,
+     "n": 100
+    },
+    "by_household": {
+     "couple": {
+      "median": 2465.15,
+      "n": 25
+     },
+     "family": {
+      "median": 2758.91,
+      "n": 16
+     },
+     "shared_housing": {
+      "median": 1197.05,
+      "n": 15
+     },
+     "single": {
+      "median": 1903.25,
+      "n": 44
+     }
+    }
+   },
+   "Lugano": {
+    "all": {
+     "median": 1978.78,
+     "n": 104
+    },
+    "by_household": {
+     "couple": {
+      "median": 2437.41,
+      "n": 32
+     },
+     "family": {
+      "median": 2286.02,
+      "n": 26
+     },
+     "shared_housing": {
+      "median": 1153.41,
+      "n": 13
+     },
+     "single": {
+      "median": 1576.73,
+      "n": 33
+     }
+    }
+   },
+   "Neuchatel": {
+    "all": {
+     "median": 1823.74,
+     "n": 118
+    },
+    "by_household": {
+     "couple": {
+      "median": 2363.11,
+      "n": 32
+     },
+     "family": {
+      "median": 2298.8,
+      "n": 24
+     },
+     "shared_housing": {
+      "median": 1066.34,
+      "n": 8
+     },
+     "single": {
+      "median": 1571.82,
+      "n": 54
+     }
+    }
+   },
+   "St Gallen": {
+    "all": {
+     "median": 1662.88,
+     "n": 111
+    },
+    "by_household": {
+     "couple": {
+      "median": 2310.17,
+      "n": 24
+     },
+     "family": {
+      "median": 2135.99,
+      "n": 31
+     },
+     "shared_housing": {
+      "median": 922.15,
+      "n": 13
+     },
+     "single": {
+      "median": 1375.14,
+      "n": 43
+     }
+    }
+   },
+   "Winterthur": {
+    "all": {
+     "median": 1887.99,
+     "n": 79
+    },
+    "by_household": {
+     "couple": {
+      "median": 2871.26,
+      "n": 19
+     },
+     "family": {
+      "median": 2234.27,
+      "n": 18
+     },
+     "shared_housing": {
+      "median": 1115.82,
+      "n": 12
+     },
+     "single": {
+      "median": 1623.0,
+      "n": 30
+     }
+    }
+   },
+   "Zurich": {
+    "all": {
+     "median": 2258.81,
+     "n": 101
+    },
+    "by_household": {
+     "couple": {
+      "median": 2871.02,
+      "n": 32
+     },
+     "family": {
+      "median": 3061.12,
+      "n": 14
+     },
+     "shared_housing": {
+      "median": 1214.81,
+      "n": 15
+     },
+     "single": {
+      "median": 1927.33,
+      "n": 40
+     }
+    }
+   }
+  },
+  "city_canton": {
+   "Basel": "BS",
+   "Bern": "BE",
+   "Biel": "BE",
+   "Fribourg": "FR",
+   "Geneva": "GE",
+   "Lausanne": "VD",
+   "Lucerne": "LU",
+   "Lugano": "TI",
+   "Neuchatel": "NE",
+   "St Gallen": "SG",
+   "Winterthur": "ZH",
+   "Zurich": "ZH"
+  },
+  "study": {
+   "annual_tuition_chf_values": [
+    1200.0,
+    2500.0,
+    4800.0,
+    8000.0
+   ],
+   "annual_tuition_chf_median": 4800.0,
+   "duration_years_median": 2.0,
+   "source": "scenario-assumptions.csv (S001, synthetic_assumption, not in ledger)"
+  }
+ },
+ "backtest": {
+  "method": "fit on 2025 (12 months), Monte Carlo 2026 from real Dec-2025 cash, compare with real 2026 ledger",
+  "profiles": 1200,
+  "paths_per_profile": 1000,
+  "coverage_80_year_end": 0.785,
+  "coverage_50_year_end": 0.4983,
+  "coverage_80_all_months": 0.7342,
+  "median_abs_error_year_end_chf": 2281.07,
+  "median_abs_error_naive_chf": 2444.58,
+  "brier_negative_cash_model": 0.0012,
+  "brier_negative_cash_naive": 0.0025,
+  "naive_definition": "Dec-2025 cash + 12 x average 2025 monthly net flow, no uncertainty"
+ },
+ "catalog": [
+  {
+   "id": "S001",
+   "category": "Education & skills",
+   "name": "Full-time master’s",
+   "baseline": "Start work now",
+   "intervention": "Enroll for two years"
+  },
+  {
+   "id": "S002",
+   "category": "Education & skills",
+   "name": "Part-time master’s",
+   "baseline": "Full-time work",
+   "intervention": "Work 60% while studying"
+  },
+  {
+   "id": "S003",
+   "category": "Education & skills",
+   "name": "Scholarship award",
+   "baseline": "Tuition self-funded",
+   "intervention": "Receive grant"
+  },
+  {
+   "id": "S004",
+   "category": "Education & skills",
+   "name": "Tuition increase",
+   "baseline": "Published tuition",
+   "intervention": "Tuition rises"
+  },
+  {
+   "id": "S005",
+   "category": "Education & skills",
+   "name": "Internship year",
+   "baseline": "Continue studies",
+   "intervention": "Paid internship year"
+  },
+  {
+   "id": "S006",
+   "category": "Education & skills",
+   "name": "Bootcamp reskilling",
+   "baseline": "Stay in role",
+   "intervention": "Pay for bootcamp"
+  },
+  {
+   "id": "S007",
+   "category": "Education & skills",
+   "name": "Doctoral track",
+   "baseline": "Industry role",
+   "intervention": "Funded doctoral program"
+  },
+  {
+   "id": "S008",
+   "category": "Education & skills",
+   "name": "Study abroad",
+   "baseline": "Local degree",
+   "intervention": "Overseas semester"
+  },
+  {
+   "id": "S009",
+   "category": "Education & skills",
+   "name": "Student loan",
+   "baseline": "Pay tuition from savings",
+   "intervention": "Borrow for tuition"
+  },
+  {
+   "id": "S010",
+   "category": "Education & skills",
+   "name": "Delayed graduation",
+   "baseline": "Graduate on schedule",
+   "intervention": "Graduate one year later"
+  },
+  {
+   "id": "S011",
+   "category": "Career & employment",
+   "name": "Early job start",
+   "baseline": "Master’s pathway",
+   "intervention": "Accept full-time job"
+  },
+  {
+   "id": "S012",
+   "category": "Career & employment",
+   "name": "Salary negotiation",
+   "baseline": "Accept offer",
+   "intervention": "Negotiate salary"
+  },
+  {
+   "id": "S013",
+   "category": "Career & employment",
+   "name": "Promotion",
+   "baseline": "Remain in role",
+   "intervention": "Promotion after two years"
+  },
+  {
+   "id": "S014",
+   "category": "Career & employment",
+   "name": "Unemployment gap",
+   "baseline": "Continuous work",
+   "intervention": "Six-month job gap"
+  },
+  {
+   "id": "S015",
+   "category": "Career & employment",
+   "name": "Freelancing",
+   "baseline": "Salaried employment",
+   "intervention": "Freelance income and costs"
+  },
+  {
+   "id": "S016",
+   "category": "Career & employment",
+   "name": "Career switch",
+   "baseline": "Current profession",
+   "intervention": "Switch field"
+  },
+  {
+   "id": "S017",
+   "category": "Career & employment",
+   "name": "Four-day week",
+   "baseline": "Full-time employment",
+   "intervention": "Reduce hours to 80%"
+  },
+  {
+   "id": "S018",
+   "category": "Career & employment",
+   "name": "Equity compensation",
+   "baseline": "Cash-only offer",
+   "intervention": "Take equity-heavy offer"
+  },
+  {
+   "id": "S019",
+   "category": "Career & employment",
+   "name": "Contract work",
+   "baseline": "Permanent role",
+   "intervention": "Fixed-term contract"
+  },
+  {
+   "id": "S020",
+   "category": "Career & employment",
+   "name": "Second income",
+   "baseline": "Single job",
+   "intervention": "Add part-time work"
+  },
+  {
+   "id": "S021",
+   "category": "Relocation & geography",
+   "name": "Move to Zurich",
+   "baseline": "Stay Lausanne",
+   "intervention": "Relocate to Zurich"
+  },
+  {
+   "id": "S022",
+   "category": "Relocation & geography",
+   "name": "Move to Geneva",
+   "baseline": "Stay Lausanne",
+   "intervention": "Relocate to Geneva"
+  },
+  {
+   "id": "S023",
+   "category": "Relocation & geography",
+   "name": "Move to Berlin",
+   "baseline": "Stay Switzerland",
+   "intervention": "Relocate to Berlin"
+  },
+  {
+   "id": "S024",
+   "category": "Relocation & geography",
+   "name": "Move to London",
+   "baseline": "Stay Switzerland",
+   "intervention": "Relocate to London"
+  },
+  {
+   "id": "S025",
+   "category": "Relocation & geography",
+   "name": "Move to Singapore",
+   "baseline": "Stay Switzerland",
+   "intervention": "Relocate to Singapore"
+  },
+  {
+   "id": "S026",
+   "category": "Relocation & geography",
+   "name": "Remote work abroad",
+   "baseline": "Local work",
+   "intervention": "Remote cross-border work"
+  },
+  {
+   "id": "S027",
+   "category": "Relocation & geography",
+   "name": "Return migration",
+   "baseline": "Remain abroad",
+   "intervention": "Return to Switzerland"
+  },
+  {
+   "id": "S028",
+   "category": "Relocation & geography",
+   "name": "Currency depreciation",
+   "baseline": "Stable FX assumption",
+   "intervention": "CHF weakens against expenses currency"
+  },
+  {
+   "id": "S029",
+   "category": "Relocation & geography",
+   "name": "Dual-currency income",
+   "baseline": "Single-currency salary",
+   "intervention": "Receive income in two currencies"
+  },
+  {
+   "id": "S030",
+   "category": "Relocation & geography",
+   "name": "High relocation cost",
+   "baseline": "Low relocation cost",
+   "intervention": "Higher moving deposit and fees"
+  },
+  {
+   "id": "S031",
+   "category": "Housing & property",
+   "name": "Rent alone",
+   "baseline": "Shared accommodation",
+   "intervention": "Rent own flat"
+  },
+  {
+   "id": "S032",
+   "category": "Housing & property",
+   "name": "Move in with flatmates",
+   "baseline": "Rent alone",
+   "intervention": "Share housing"
+  },
+  {
+   "id": "S033",
+   "category": "Housing & property",
+   "name": "Buy starter home",
+   "baseline": "Continue renting",
+   "intervention": "Buy with mortgage"
+  },
+  {
+   "id": "S034",
+   "category": "Housing & property",
+   "name": "Higher down payment",
+   "baseline": "Minimum down payment",
+   "intervention": "Increase equity contribution"
+  },
+  {
+   "id": "S035",
+   "category": "Housing & property",
+   "name": "Mortgage rate reset",
+   "baseline": "Fixed initial rate",
+   "intervention": "Higher renewal rate"
+  },
+  {
+   "id": "S036",
+   "category": "Housing & property",
+   "name": "Home renovation",
+   "baseline": "No renovation",
+   "intervention": "Fund renovation"
+  },
+  {
+   "id": "S037",
+   "category": "Housing & property",
+   "name": "Rent increase",
+   "baseline": "Stable rent",
+   "intervention": "Annual rent rises"
+  },
+  {
+   "id": "S038",
+   "category": "Housing & property",
+   "name": "Buy later",
+   "baseline": "Buy now",
+   "intervention": "Delay purchase five years"
+  },
+  {
+   "id": "S039",
+   "category": "Housing & property",
+   "name": "Property price decline",
+   "baseline": "Flat home price",
+   "intervention": "Home value drops"
+  },
+  {
+   "id": "S040",
+   "category": "Housing & property",
+   "name": "Unexpected maintenance",
+   "baseline": "Normal upkeep",
+   "intervention": "Major repair bill"
+  },
+  {
+   "id": "S041",
+   "category": "Spending & lifestyle",
+   "name": "Budget reduction",
+   "baseline": "Current spending",
+   "intervention": "Reduce discretionary costs"
+  },
+  {
+   "id": "S042",
+   "category": "Spending & lifestyle",
+   "name": "Car purchase",
+   "baseline": "Public transport",
+   "intervention": "Buy and maintain car"
+  },
+  {
+   "id": "S043",
+   "category": "Spending & lifestyle",
+   "name": "Public transport switch",
+   "baseline": "Car ownership",
+   "intervention": "Sell car and use transit"
+  },
+  {
+   "id": "S044",
+   "category": "Spending & lifestyle",
+   "name": "Travel sabbatical",
+   "baseline": "Continue working",
+   "intervention": "Six-month unpaid travel"
+  },
+  {
+   "id": "S045",
+   "category": "Spending & lifestyle",
+   "name": "Subscription audit",
+   "baseline": "Keep subscriptions",
+   "intervention": "Cancel recurring services"
+  },
+  {
+   "id": "S046",
+   "category": "Spending & lifestyle",
+   "name": "Lifestyle inflation",
+   "baseline": "Flat real spending",
+   "intervention": "Spending rises with salary"
+  },
+  {
+   "id": "S047",
+   "category": "Spending & lifestyle",
+   "name": "Large purchase",
+   "baseline": "No purchase",
+   "intervention": "Buy expensive equipment"
+  },
+  {
+   "id": "S048",
+   "category": "Spending & lifestyle",
+   "name": "Emergency expense",
+   "baseline": "No shock",
+   "intervention": "Unexpected CHF expense"
+  },
+  {
+   "id": "S049",
+   "category": "Spending & lifestyle",
+   "name": "Shared household",
+   "baseline": "Live alone",
+   "intervention": "Combine selected household costs"
+  },
+  {
+   "id": "S050",
+   "category": "Spending & lifestyle",
+   "name": "Energy cost spike",
+   "baseline": "Normal utilities",
+   "intervention": "Utility costs double"
+  },
+  {
+   "id": "S051",
+   "category": "Savings & liquidity",
+   "name": "Emergency fund target",
+   "baseline": "No reserve rule",
+   "intervention": "Maintain six-month buffer"
+  },
+  {
+   "id": "S052",
+   "category": "Savings & liquidity",
+   "name": "Automated saving",
+   "baseline": "Ad hoc saving",
+   "intervention": "Automatic monthly transfers"
+  },
+  {
+   "id": "S053",
+   "category": "Savings & liquidity",
+   "name": "Savings rate increase",
+   "baseline": "Current savings rate",
+   "intervention": "Increase savings rate"
+  },
+  {
+   "id": "S054",
+   "category": "Savings & liquidity",
+   "name": "Short-term cash goal",
+   "baseline": "No dedicated goal",
+   "intervention": "Save for near-term purchase"
+  },
+  {
+   "id": "S055",
+   "category": "Savings & liquidity",
+   "name": "Liquidity lockup",
+   "baseline": "Liquid savings",
+   "intervention": "Move funds to restricted account"
+  },
+  {
+   "id": "S056",
+   "category": "Savings & liquidity",
+   "name": "Interest on deposits",
+   "baseline": "Zero cash interest",
+   "intervention": "Positive cash interest"
+  },
+  {
+   "id": "S057",
+   "category": "Savings & liquidity",
+   "name": "Unexpected windfall",
+   "baseline": "No windfall",
+   "intervention": "Receive inheritance-like synthetic gift"
+  },
+  {
+   "id": "S058",
+   "category": "Savings & liquidity",
+   "name": "Income interruption",
+   "baseline": "Normal cash inflows",
+   "intervention": "Temporary income freeze"
+  },
+  {
+   "id": "S059",
+   "category": "Savings & liquidity",
+   "name": "Buffer depletion",
+   "baseline": "No special expense",
+   "intervention": "Use buffer for urgent need"
+  },
+  {
+   "id": "S060",
+   "category": "Savings & liquidity",
+   "name": "Multiple goals",
+   "baseline": "Single savings goal",
+   "intervention": "Fund two competing goals"
+  },
+  {
+   "id": "S061",
+   "category": "Investments & allocation",
+   "name": "Start investing",
+   "baseline": "Cash only",
+   "intervention": "Invest monthly"
+  },
+  {
+   "id": "S062",
+   "category": "Investments & allocation",
+   "name": "Higher equity share",
+   "baseline": "Balanced allocation",
+   "intervention": "Increase equities"
+  },
+  {
+   "id": "S063",
+   "category": "Investments & allocation",
+   "name": "Bond allocation",
+   "baseline": "Equities only",
+   "intervention": "Add bonds"
+  },
+  {
+   "id": "S064",
+   "category": "Investments & allocation",
+   "name": "Fee reduction",
+   "baseline": "High-fee portfolio",
+   "intervention": "Lower investment fees"
+  },
+  {
+   "id": "S065",
+   "category": "Investments & allocation",
+   "name": "Market drawdown",
+   "baseline": "No drawdown",
+   "intervention": "One-time negative return"
+  },
+  {
+   "id": "S066",
+   "category": "Investments & allocation",
+   "name": "Recovery sequence",
+   "baseline": "Immediate recovery",
+   "intervention": "Delayed recovery"
+  },
+  {
+   "id": "S067",
+   "category": "Investments & allocation",
+   "name": "Contribution holiday",
+   "baseline": "Continue investing",
+   "intervention": "Pause contributions"
+  },
+  {
+   "id": "S068",
+   "category": "Investments & allocation",
+   "name": "Rebalancing rule",
+   "baseline": "No rebalancing",
+   "intervention": "Annual rebalancing"
+  },
+  {
+   "id": "S069",
+   "category": "Investments & allocation",
+   "name": "Concentrated holding",
+   "baseline": "Diversified assets",
+   "intervention": "Concentrate in one asset"
+  },
+  {
+   "id": "S070",
+   "category": "Investments & allocation",
+   "name": "Currency exposure",
+   "baseline": "Domestic assets",
+   "intervention": "Foreign-currency assets"
+  },
+  {
+   "id": "S071",
+   "category": "Debt & credit",
+   "name": "Student loan repayment",
+   "baseline": "No student loan",
+   "intervention": "Repay education debt"
+  },
+  {
+   "id": "S072",
+   "category": "Debt & credit",
+   "name": "Credit-card balance",
+   "baseline": "Pay in full",
+   "intervention": "Carry revolving debt"
+  },
+  {
+   "id": "S073",
+   "category": "Debt & credit",
+   "name": "Refinance loan",
+   "baseline": "Keep existing loan",
+   "intervention": "Refinance at new rate"
+  },
+  {
+   "id": "S074",
+   "category": "Debt & credit",
+   "name": "Early repayment",
+   "baseline": "Scheduled repayment",
+   "intervention": "Accelerate principal payments"
+  },
+  {
+   "id": "S075",
+   "category": "Debt & credit",
+   "name": "Interest rate shock",
+   "baseline": "Stable rate",
+   "intervention": "Floating rate increases"
+  },
+  {
+   "id": "S076",
+   "category": "Debt & credit",
+   "name": "Debt consolidation",
+   "baseline": "Multiple loans",
+   "intervention": "Consolidate obligations"
+  },
+  {
+   "id": "S077",
+   "category": "Debt & credit",
+   "name": "New personal loan",
+   "baseline": "Cash-funded expense",
+   "intervention": "Finance expense with loan"
+  },
+  {
+   "id": "S078",
+   "category": "Debt & credit",
+   "name": "Missed payment",
+   "baseline": "On-time payments",
+   "intervention": "Miss one installment"
+  },
+  {
+   "id": "S079",
+   "category": "Debt & credit",
+   "name": "Borrowing cap",
+   "baseline": "Unconstrained borrowing",
+   "intervention": "Introduce debt limit"
+  },
+  {
+   "id": "S080",
+   "category": "Debt & credit",
+   "name": "Variable amortization",
+   "baseline": "Fixed payment",
+   "intervention": "Flexible principal schedule"
+  },
+  {
+   "id": "S081",
+   "category": "Family & life events",
+   "name": "Partner cohabitation",
+   "baseline": "Separate households",
+   "intervention": "Share household"
+  },
+  {
+   "id": "S082",
+   "category": "Family & life events",
+   "name": "Childcare costs",
+   "baseline": "No dependents",
+   "intervention": "Add childcare expenses"
+  },
+  {
+   "id": "S083",
+   "category": "Family & life events",
+   "name": "Parental leave",
+   "baseline": "Continue working",
+   "intervention": "Take paid/unpaid leave"
+  },
+  {
+   "id": "S084",
+   "category": "Family & life events",
+   "name": "Family support",
+   "baseline": "No transfers",
+   "intervention": "Support family member"
+  },
+  {
+   "id": "S085",
+   "category": "Family & life events",
+   "name": "Marriage costs",
+   "baseline": "No ceremony cost",
+   "intervention": "Pay one-time celebration"
+  },
+  {
+   "id": "S086",
+   "category": "Family & life events",
+   "name": "Caregiving break",
+   "baseline": "Continuous work",
+   "intervention": "Reduce work for caregiving"
+  },
+  {
+   "id": "S087",
+   "category": "Family & life events",
+   "name": "Divorce scenario",
+   "baseline": "Joint household",
+   "intervention": "Separate finances"
+  },
+  {
+   "id": "S088",
+   "category": "Family & life events",
+   "name": "Dependent education",
+   "baseline": "No dependent tuition",
+   "intervention": "Fund education costs"
+  },
+  {
+   "id": "S089",
+   "category": "Family & life events",
+   "name": "Insurance claim",
+   "baseline": "No insured event",
+   "intervention": "Model claim and deductible"
+  },
+  {
+   "id": "S090",
+   "category": "Family & life events",
+   "name": "Disability interruption",
+   "baseline": "Continuous earnings",
+   "intervention": "Temporary inability to work"
+  },
+  {
+   "id": "S091",
+   "category": "Retirement & pensions",
+   "name": "Retire at 60",
+   "baseline": "Retire at 65",
+   "intervention": "Stop working earlier"
+  },
+  {
+   "id": "S092",
+   "category": "Retirement & pensions",
+   "name": "Retire at 67",
+   "baseline": "Retire at 65",
+   "intervention": "Work longer"
+  },
+  {
+   "id": "S093",
+   "category": "Retirement & pensions",
+   "name": "Pension contribution increase",
+   "baseline": "Current contributions",
+   "intervention": "Higher pension savings"
+  },
+  {
+   "id": "S094",
+   "category": "Retirement & pensions",
+   "name": "Career gap effect",
+   "baseline": "Continuous contributions",
+   "intervention": "Contribution interruption"
+  },
+  {
+   "id": "S095",
+   "category": "Retirement & pensions",
+   "name": "Retirement relocation",
+   "baseline": "Stay in Switzerland",
+   "intervention": "Retire abroad"
+  },
+  {
+   "id": "S096",
+   "category": "Retirement & pensions",
+   "name": "Inflation in retirement",
+   "baseline": "Base inflation",
+   "intervention": "Higher retirement inflation"
+  },
+  {
+   "id": "S097",
+   "category": "Retirement & pensions",
+   "name": "Withdrawal strategy",
+   "baseline": "Fixed withdrawals",
+   "intervention": "Dynamic withdrawals"
+  },
+  {
+   "id": "S098",
+   "category": "Retirement & pensions",
+   "name": "Longer lifespan",
+   "baseline": "Base horizon",
+   "intervention": "Extend planning horizon"
+  },
+  {
+   "id": "S099",
+   "category": "Retirement & pensions",
+   "name": "Pension lump sum",
+   "baseline": "Periodic pension",
+   "intervention": "Take allowed lump-sum option"
+  },
+  {
+   "id": "S100",
+   "category": "Retirement & pensions",
+   "name": "Healthcare costs later",
+   "baseline": "Base healthcare",
+   "intervention": "Higher later-life expenses"
+  },
+  {
+   "id": "S101",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "High inflation",
+   "baseline": "Base inflation",
+   "intervention": "Inflation spike"
+  },
+  {
+   "id": "S102",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Deflation episode",
+   "baseline": "Base prices",
+   "intervention": "Prices decline"
+  },
+  {
+   "id": "S103",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Rate hike",
+   "baseline": "Base interest rates",
+   "intervention": "Rates increase"
+  },
+  {
+   "id": "S104",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Recession",
+   "baseline": "Normal employment",
+   "intervention": "Lower income and job risk"
+  },
+  {
+   "id": "S105",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "FX volatility",
+   "baseline": "Stable exchange rate",
+   "intervention": "Volatile FX path"
+  },
+  {
+   "id": "S106",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Energy shock",
+   "baseline": "Stable energy cost",
+   "intervention": "Energy prices jump"
+  },
+  {
+   "id": "S107",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Tax policy change",
+   "baseline": "Current synthetic tax rule",
+   "intervention": "Higher marginal tax"
+  },
+  {
+   "id": "S108",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Housing downturn",
+   "baseline": "Stable property value",
+   "intervention": "Housing values decline"
+  },
+  {
+   "id": "S109",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Market liquidity shock",
+   "baseline": "Normal trading",
+   "intervention": "Withdrawal friction"
+  },
+  {
+   "id": "S110",
+   "category": "Macroeconomic & systemic shocks",
+   "name": "Compound crisis",
+   "baseline": "Single shock",
+   "intervention": "Job loss plus market drop"
+  },
+  {
+   "id": "S111",
+   "category": "Entrepreneurship & innovation",
+   "name": "Start a business",
+   "baseline": "Salaried employment",
+   "intervention": "Launch startup"
+  },
+  {
+   "id": "S112",
+   "category": "Entrepreneurship & innovation",
+   "name": "Side project",
+   "baseline": "No side income",
+   "intervention": "Monetize side project"
+  },
+  {
+   "id": "S113",
+   "category": "Entrepreneurship & innovation",
+   "name": "Seed funding",
+   "baseline": "Bootstrap",
+   "intervention": "Receive equity funding"
+  },
+  {
+   "id": "S114",
+   "category": "Entrepreneurship & innovation",
+   "name": "Startup failure",
+   "baseline": "Business succeeds",
+   "intervention": "Close business after loss"
+  },
+  {
+   "id": "S115",
+   "category": "Entrepreneurship & innovation",
+   "name": "Revenue delay",
+   "baseline": "Revenue on schedule",
+   "intervention": "Delay launch revenues"
+  },
+  {
+   "id": "S116",
+   "category": "Entrepreneurship & innovation",
+   "name": "Hire employee",
+   "baseline": "Founder only",
+   "intervention": "Hire first staff member"
+  },
+  {
+   "id": "S117",
+   "category": "Entrepreneurship & innovation",
+   "name": "Equity dilution",
+   "baseline": "Keep ownership",
+   "intervention": "Issue new shares"
+  },
+  {
+   "id": "S118",
+   "category": "Entrepreneurship & innovation",
+   "name": "Founder salary",
+   "baseline": "Market salary",
+   "intervention": "Lower founder salary"
+  },
+  {
+   "id": "S119",
+   "category": "Entrepreneurship & innovation",
+   "name": "Business loan",
+   "baseline": "Equity-only funding",
+   "intervention": "Add business debt"
+  },
+  {
+   "id": "S120",
+   "category": "Entrepreneurship & innovation",
+   "name": "Exit event",
+   "baseline": "Operate indefinitely",
+   "intervention": "Sell venture"
+  }
+ ]
+}

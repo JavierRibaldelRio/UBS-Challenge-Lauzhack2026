@@ -1,0 +1,5 @@
+# Pinned toolchain. Run `mise install` once in the repo root.
+[tools]
+node = "26.13.1"
+pnpm = "11.28.13"
+uv = "0.13.9"
