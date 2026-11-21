@@ -1,3 +1,4 @@
+# https://docs.google.com/document/d/1Nwf3SoaL9csPrZBiiXJPQGaQfBoytl8wBbCtf3ApGYI/edit?usp=sharing
 # AI Financial Twin — LauzHack 2026
 
 **One choice. Many possible futures.**  
