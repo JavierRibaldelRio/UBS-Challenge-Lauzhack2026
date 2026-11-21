@@ -1,0 +1,258 @@
+FINANCIAL TWIN · 3-MINUTE DEMO SCRIPT
+UBS × LauzHack 2026 · "Don't predict the future. Make it explorable."
+=====================================================================
+
+How to read this file
+- "DO:" means click or type something on screen.
+- "SAY:" is the sentence to say out loud. Say it word for word if you are nervous.
+- "THEY SEE:" is what appears on screen, so you know it worked.
+- Times are cumulative. Total is 3:00. Q&A (1 minute) follows.
+- All numbers below were checked against the app. If a number on screen is
+  slightly different (the AI text changes wording each time), read the screen.
+
+
+---------------------------------------------------------------------
+A. TEN MINUTES BEFORE (checklist)
+---------------------------------------------------------------------
+1. In the repo folder run:   node demo.mjs
+   Wait until you see "Financial Twin API on http://localhost:8000"
+   and "VITE ... ready".
+2. Open http://localhost:5173 in the browser you will present with.
+3. Top right must show a GREEN dot and "AI on".
+   If it says "AI offline": check backend/.env has LLM_API_KEY, restart step 1.
+4. Rehearse the whole script ONCE in this same browser. This stores the AI
+   answers in the browser, so they replay even if the Wi-Fi dies.
+   Do NOT clear browser data or switch to a private window after this.
+5. Press F5 (reload). You must see the start screen:
+   "If nothing changes, Alexia's cash runs out at age 20."
+6. Zoom so the cards and the chart fit on one screen (Ctrl + / Ctrl -, about 110%).
+   Full screen: F11. Turn off notifications. Close other tabs.
+7. Backup: have a screen recording of a full run on a USB stick or phone.
+   (Slides are not allowed, but images and videos are allowed as backup.)
+
+
+---------------------------------------------------------------------
+B. THE SCRIPT (3:00)
+---------------------------------------------------------------------
+
+[0:00 – 0:25]  THE PROBLEM
+- DO: nothing. Start screen is open (Alexia).
+- SAY: "This is Alexia. She is fictional: 20 years old, a student in Lausanne,
+  with 8,000 francs saved. She has UBS's question: should she start working,
+  do a master's, or move abroad?"
+- SAY: "First, what happens if nothing changes."
+- DO: point at the big red sentence.
+- SAY: "Her cash runs out at age 20. The black dots on the chart are her real
+  bank balance from UBS's data. Our simulation follows them."
+- THEY SEE: the big sentence, one grey card, the chart line with black dots.
+
+[0:25 – 1:05]  THREE FUTURES
+- DO: click "▶ Demo" (top right).
+- THEY SEE: four cards. Start working ≈ CHF 745k, Master's degree ≈ CHF 557k
+  (−189k), Move abroad ≈ CHF 178k, If nothing changes ≈ CHF −116k.
+- SAY: "Each card is one possible life. Each line on the chart is the middle of
+  500 simulated futures. The shaded band shows where 8 out of 10 of them land."
+- SAY: "If Alexia starts working now, she ends at about 745,000 francs at 30.
+  With a master's, about 557,000, so 189,000 less."
+- DO: point at the paragraph under the chart.
+- SAY: "This paragraph is written by an AI. But the AI never calculates
+  anything. It only receives our computed numbers, and the app checks every
+  number it writes. Here: all numbers checked."
+
+[1:05 – 1:50]  WHY: EVERY NUMBER HAS A SOURCE
+- DO: scroll to "The numbers behind Master's degree" (it is already open).
+- SAY: "Why is the master's lower? Every number shows where it comes from.
+  Tuition, 8,000 a year: from UBS's data for Alexia. Her salary afterwards:
+  the median of 69 people her age in the data."
+- DO: point at the red row "salary premium from degree: 0 %, unknown".
+- SAY: "But how much more a master's pays, the data simply does not say.
+  So we don't guess. We compute the break-even: the master's only catches up
+  if it raises her salary by 24 percent."
+- DO: click "0 % ✎", type 30, press Enter.
+- THEY SEE: the Master's card jumps to ≈ CHF 795k, about +50k vs Start working.
+- SAY: "If you believe a master's adds 30 percent, it now wins by about
+  50,000 francs. Everything recalculates instantly."
+
+[1:50 – 2:30]  JUST ASK
+- DO: scroll up. Click the example question
+  "Work now, lose my job for 6 months at 25, then buy a flat for 600k at 28".
+  (Or type it into the box and press Explore.)
+- THEY SEE: after 1–3 seconds a new card: "job now · no income for 6 months
+  at 25 · buy a home for 600k at 28", about CHF 689k.
+- SAY: "You can also just ask in plain words. One sentence became one path
+  with three life events. The AI only described the events. Every amount it
+  was not told, like the mortgage rate, is filled in by the app and labelled
+  'assumption' or 'unknown'. With one click you can see the exact prompt."
+- DO: in the chart header click "Cash", then "Net worth".
+- SAY: "Here is cash versus net worth. At 28 she buys the flat: her cash drops
+  by the 120,000 down payment, but her net worth does not. The money became
+  part of a home."
+
+[2:30 – 3:00]  WHY YOU CAN TRUST IT
+- DO: scroll down, click "Can you trust this?".
+- SAY: "Three reasons to trust it. One: the accounting is checked live,
+  5 out of 5. Two: we trained our model only on 2025 and predicted 2026 for
+  all 1,200 people. Our 8-in-10 range caught 78.5 percent of what really
+  happened. Three: every number has a source, and the AI's numbers are
+  verified."
+- SAY: "We don't predict the future. We make it explorable. Thank you."
+
+IF YOU ARE RUNNING LATE: skip the Cash/Net worth toggle in [1:50 – 2:30].
+
+
+---------------------------------------------------------------------
+C. IF SOMETHING GOES WRONG
+---------------------------------------------------------------------
+- Badge says "AI offline":
+  Keep going. The "+" buttons and ▶ Demo never need the AI. Typed questions
+  use simple keyword rules. SAY: "The AI is offline, so the app falls back
+  to rules. That is by design: the maths never depends on the AI."
+- A question gives a strange path:
+  Remove it with the × on its card. Click the example question instead
+  (its answer is cached from your rehearsal).
+- The explanation text sounds odd:
+  Click "rewrite" under the paragraph.
+- Page frozen or blank:
+  Press F5. Everything runs on your laptop; nothing is lost except the paths.
+  Click ▶ Demo to get back to the main state.
+- Wi-Fi is dead:
+  Rehearsed questions replay from the browser cache. Otherwise use a phone
+  hotspot, or show the backup recording.
+
+
+---------------------------------------------------------------------
+D. QUESTIONS JUDGES WILL PROBABLY ASK (short answers)
+---------------------------------------------------------------------
+Q: Is this a prediction?
+A: No. It is a simulation under assumptions you can see and change. It shows
+   possible futures, not the future. The shaded band shows normal month-to-
+   month ups and downs, learned from the data.
+
+Q: Which assumptions affect the result most?
+A: Open "What matters most". For the master's, income matters most (±83k for
+   a 10% change), then other spending (±15k) and rent (±11k). The biggest
+   unknown is the degree's salary premium; that's why we show the break-even
+   (24%).
+
+Q: How does a decision change the financial state?
+A: A decision is a list of life events (job, study, move, home...). The app
+   turns it into a month-by-month plan: income, rent, costs, debt, home value.
+   Then exact accounting runs every month: new cash = old cash + money in −
+   money out.
+
+Q: How did you verify the calculations?
+A: Four ways. 29 automated tests, including UBS's own validation list (zero
+   income, higher tuition, loan payoff, transfers). Live checks on screen
+   (cash adds up, net worth = assets − debts, debt never negative, same seed =
+   same result). A backtest on real 2026 data. And we checked UBS's ledger
+   itself: zero accounting errors in 28,800 rows.
+
+Q: What happens if a constraint is broken, for example cash goes negative?
+A: We never hide it. The card says "cash runs out at 20", and we show in how
+   many of the 500 futures it happens and how low it goes. This matches the
+   data's own "requires financing" flag. We don't secretly borrow money.
+
+Q: Where is the AI? Where is the machine learning?
+A: Three places. 1) Machine learning on 28,800 months of data: seasonal
+   spending (February and August are expensive), the December bonus (54% of
+   employed people, about 61% of a month's pay), the real pattern of surprise
+   expenses, each person's normal spending, and how spending changes when life
+   changes. 2) Monte Carlo uses that to simulate 500 futures per path.
+   3) An LLM turns words into events, and numbers into words.
+
+Q: Why didn't you train a model to predict outcomes directly?
+A: Nobody in the data does a master's or moves abroad, so no model can learn
+   "what if" from it. It would only repeat averages and break the accounting.
+   So we learned how months behave, and kept the money maths exact.
+
+Q: How do you stop the AI from inventing numbers?
+A: Four guards. A strict JSON format. A rule: any amount the user did not say
+   must be empty, and the app fills it from data with a label. The explanation
+   AI only sees our computed facts. And the app checks every number in its
+   text. "See the prompt" shows exactly what the AI was told.
+
+Q: What if the AI is down?
+A: The app still works: keyword rules for questions, a template for the
+   explanation, and cached answers. The buttons never need the AI.
+
+Q: Why does "start working" end so rich (745k)?
+A: That comes from UBS's synthetic data: employed people earn about 8,000
+   net a month at every age, and spending barely rises with income. We label
+   it "from data", say it openly, and the salary can be edited in one click.
+
+Q: Is any of this real data?
+A: No. All people are fictional, from UBS's synthetic dataset. No real client
+   data is used anywhere.
+
+Q: How did you measure uncertainty, and is it honest?
+A: 500 simulated futures per path with a fixed seed, and every path uses the
+   same random months, so differences come from the decision, not luck. We
+   tested it: trained on 2025, predicted 2026 for 1,200 people. The 8-in-10
+   range caught 78.5% (ideal 80%), the middle half caught 49.8% (ideal 50%).
+
+Q: Why is the shaded band so thin?
+A: Monthly surprises average out over 10 years. Uncertainty about the big
+   assumptions (salary, premium, rent) is shown separately, in "What matters
+   most" and the break-even. We keep those two kinds of uncertainty apart on
+   purpose.
+
+Q: What about taxes and inflation?
+A: Income in the data is already after tax. Values are in 2025 francs, so
+   there is no inflation. Things we cannot model (for example new tax rules)
+   are listed by the AI under "Not modelled".
+
+Q: What's the difference between cash and net worth?
+A: Cash is money in the bank. Net worth is cash + investments + home − debts.
+   For Alexia today they are the same. When she buys a flat, cash drops but
+   net worth does not, because the money became a home.
+
+Q: Can it handle several decisions at once? Other people?
+A: Yes. One sentence can hold several events ("master's now, job loss at 25,
+   flat at 28"). "A or B" creates separate paths, up to 3 per question.
+   The dropdown has all 1,200 fictional people from the data.
+
+Q: Which AI model do you use?
+A: DeepSeek V4.1 Flash on Together AI, with reasoning switched off and
+   temperature 0. It answers in about 1–2 seconds. Any OpenAI-compatible
+   model works; it is one line in a config file.
+
+Q: What did you build and what did you reuse?
+A: Reused: UBS's synthetic data and challenge documents, and open-source
+   libraries (React, Recharts, numpy, pandas). Built during the hackathon:
+   the trained model, the simulation engine, the AI gateway and the whole app.
+
+Q: What's the impact? Who would use this?
+A: Anyone facing a big life decision can test it before making it, and see
+   clearly what is known, what is assumed, and what is unknown. An advisor
+   could use it in a conversation with a client. It is a tool to understand
+   choices, not financial advice.
+
+Q: What would you do next?
+A: Real market data for investment growth, a proper tax and mortgage module,
+   more of UBS's 120 scenario ideas as buttons, and letting a person load
+   their own numbers privately on their own device.
+
+
+---------------------------------------------------------------------
+E. NUMBERS TO REMEMBER
+---------------------------------------------------------------------
+- Alexia: 20, Lausanne, student, CHF 8,000 saved, earns CHF 1,200/month,
+  rent CHF 900/month.
+- If nothing changes: cash runs out at 20 (her real ledger goes negative in
+  month 9); about CHF −116k at 30.
+- Start working ≈ CHF 745k · Master's ≈ CHF 557k (−189k) · Move abroad ≈ CHF 178k.
+- Master's break-even: +24% salary. With +30%: ≈ CHF 795k (≈ +50k vs working).
+- "Work now, job loss at 25, flat for 600k at 28": ≈ CHF 689k.
+  Down payment 120k: cash 549k → 434k, net worth stays ≈ 550k.
+- Data: 1,200 people × 24 months = 28,800 months; 0 accounting errors.
+- Backtest: 78.5% inside the 80% range, 49.8% inside the 50% range.
+- 500 futures per path · AI answers in ~1–3 s · 29 automated tests + 13 live AI tests.
+
+
+---------------------------------------------------------------------
+F. WORDS TO USE / WORDS TO AVOID
+---------------------------------------------------------------------
+USE:   "simulation", "possible futures", "under these assumptions",
+       "in this simulation", "from the data", "unknown", "break-even".
+AVOID: "predict", "will happen", "she should", "we recommend", "best choice",
+       "guaranteed". (UBS explicitly asks for no forecasts and no advice.)

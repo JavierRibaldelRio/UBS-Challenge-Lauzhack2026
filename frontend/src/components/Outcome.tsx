@@ -4,6 +4,7 @@ import type { SimResult } from '../lib/sim'
 /** One card per path: the headline result in plain words. Doubles as the chart legend. */
 export function OutcomeCard(p: {
   name: string
+  summary: string
   color: string
   result: SimResult
   baseline: { name: string; result: SimResult }
@@ -31,6 +32,7 @@ export function OutcomeCard(p: {
           </span>
         )}
       </div>
+      <div className="outcome-summary">{p.summary}</div>
       <div className="outcome-big">{chfk(r.endNW.p50)}</div>
       <div className="outcome-sub">net worth at {p.endAge}</div>
       <div className={`outcome-diff ${p.isBaseline ? '' : diff >= 0 ? 'pos' : 'neg'}`}>

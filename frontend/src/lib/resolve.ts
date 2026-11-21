@@ -301,8 +301,10 @@ const ev = (p: Partial<TwinEvent> & Pick<TwinEvent, 'type' | 'label'>): TwinEven
   amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, down_payment_pct: null, ...p,
 })
 
-export function presets(profile: Profile, params: Params): { id: string; label: string; spec: ScenarioSpec }[] {
-  const out: { id: string; label: string; spec: ScenarioSpec }[] = []
+export type Preset = { id: string; label: string; desc: string; spec: ScenarioSpec }
+
+export function presets(profile: Profile, params: Params): Preset[] {
+  const out: Omit<Preset, 'desc'>[] = []
   const working = profile.status === 'employed' || profile.status === 'self_employed'
   const late = profile.status === 'retired' || profile.age >= 60
   if (!working && !late) out.push({ id: 'work', label: 'Start working', spec: { name: 'Start working', catalog_id: 'S001', events: [ev({ type: 'start_job', label: 'Start working' })] } })
@@ -318,7 +320,41 @@ export function presets(profile: Profile, params: Params): { id: string; label: 
   if (profile.income > 0) out.push({ id: 'jobloss', label: 'Lose income 6 months', spec: { name: 'Income gap 6 months', catalog_id: null, events: [ev({ type: 'income_change', label: 'Income gap', start_month: 12, duration_months: 6, income_change_pct: -100, _source: 'preset: 6 months without income' })] } })
   out.push({ id: 'invest', label: 'Invest CHF 500/mo', spec: { name: 'Invest 500/mo', catalog_id: null, events: [ev({ type: 'invest', label: 'Invest', monthly_amount_chf: 500, _source: 'preset amount' })] } })
   if (profile.investments > 0) out.push({ id: 'crash', label: 'Market crash −30%', spec: { name: 'Market crash', catalog_id: null, events: [ev({ type: 'market_shock', label: 'Crash', start_month: 24, drop_pct: 30, _source: 'illustrative stress test' })] } })
-  return out
+  const studyYears = profile.study_assumption?.study_duration_years ?? params.anchors.study.duration_years_median
+  const desc: Record<string, string> = {
+    work: 'Start a full-time job now. Salary = median salary of employed people of the same age in the data.',
+    master: `Study for ${studyYears} years (tuition from the data), keep the current student income, then start a job at the median salary. The extra salary a degree brings is unknown, so it starts at 0%.`,
+    move: `In 12 months, move to ${dest}: rent becomes the median rent there (data)${profile.status !== 'employed' ? ', and start a job' : ''}.`,
+    abroad: 'Move abroad now: income CHF 3,700 a month and a CHF 6,500 moving cost (numbers from the UBS starter kit). Rent abroad is unknown, so it stays the same.',
+    jobloss: 'No income for 6 months, starting in 12 months. Everything else stays the same.',
+    invest: 'Move CHF 500 a month from cash into investments. Growth is 0% unless you change it.',
+    crash: 'Investments lose 30% of their value in 24 months (a stress test).',
+  }
+  return out.map((p) => ({ ...p, desc: desc[p.id] ?? p.spec.name }))
+}
+
+/** One short line describing what a path does, e.g. "study 24 months from 20, then a job · buy a home at 28". */
+export function describeSpec(spec: ScenarioSpec, age0: number): string {
+  if (!spec.events.length) return 'today’s numbers, nothing changes'
+  const at = (m: number | null) => (m ? `at ${Math.floor(age0 + m / 12)}` : 'now')
+  const k = (n: number) => (Math.abs(n) >= 1000 ? `${Math.round(n / 1000)}k` : `${Math.round(n)}`)
+  const one = (e: TwinEvent) => {
+    const d = e.duration_months
+    switch (e.type) {
+      case 'start_job': return `job ${at(e.start_month)}${e.monthly_net_income_chf ? ` (${k(e.monthly_net_income_chf)}/mo)` : ''}`
+      case 'study': return `study ${d ? `${d} months` : ''} ${at(e.start_month)}, then a job`.replace('  ', ' ')
+      case 'relocate': return `${!e.city || /^abroad$/i.test(e.city.trim()) ? 'move abroad' : `move to ${e.city.replace(/^abroad:\s*/i, '')}`} ${at(e.start_month)}`
+      case 'income_change': return e.income_change_pct === -100 ? `no income ${d ? `for ${d} months ` : ''}${at(e.start_month)}` : `income ${e.income_change_pct != null ? `${e.income_change_pct > 0 ? '+' : ''}${e.income_change_pct}%` : 'changes'} ${at(e.start_month)}`
+      case 'household_change': return `${e.household_type === 'family' ? 'a child' : e.household_type === 'couple' ? 'move in together' : (e.household_type ?? 'new household').replace('_', ' ')} ${at(e.start_month)}`
+      case 'recurring_expense': return `${e.label.toLowerCase()}${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''} ${at(e.start_month)}`
+      case 'one_off': return `${e.amount_chf != null && e.amount_chf < 0 ? 'receive' : 'pay'} ${e.amount_chf ? k(Math.abs(e.amount_chf)) : ''} (${e.label.toLowerCase()}) ${at(e.start_month)}`
+      case 'invest': return `invest${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''}${e.amount_chf ? ` ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
+      case 'market_shock': return `markets −${e.drop_pct ?? 30}% ${at(e.start_month)}`
+      case 'take_loan': return `borrow ${e.amount_chf ? k(e.amount_chf) : ''} ${at(e.start_month)}`
+      case 'buy_home': return `buy a home${e.amount_chf ? ` for ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
+    }
+  }
+  return [...spec.events].sort((a, b) => (a.start_month ?? 0) - (b.start_month ?? 0)).map(one).join(' · ')
 }
 
 export { ev as makeEvent }

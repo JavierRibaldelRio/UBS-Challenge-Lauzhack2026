@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ProjectionChart } from './components/Chart'
 import { AssumptionList, Drivers } from './components/Details'
+import { HowMade, type HowMadeContent } from './components/HowMade'
 import { OutcomeCard } from './components/Outcome'
 import { TrustDetails, TrustSummary } from './components/Trust'
 import { breakEven, buildFacts, drivers, templateExplanation, verifyNumbers } from './lib/analysis'
 import { apiExplain, apiHealth, apiParse } from './lib/api'
 import { offlineParse } from './lib/fallback'
 import { chf, chfk } from './lib/fmt'
-import { cities, medianLoanRate, presets, resolve, type Overrides } from './lib/resolve'
+import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Preset } from './lib/resolve'
 import { checks, simulate } from './lib/sim'
-import type { ExplainResult, Params, Profile, ScenarioSpec } from './lib/types'
+import type { ExplainResult, Origin, Params, Profile, PromptInfo, ScenarioSpec } from './lib/types'
 import paramsJson from './model/params.json'
 import profilesJson from './model/profiles.json'
 
 const COLORS = ['#64748b', '#2563eb', '#e11d48', '#059669', '#7c3aed', '#d97706', '#0891b2']
-type PathState = { id: string; spec: ScenarioSpec; overrides: Overrides; color: string }
-const TODAY = (): PathState => ({ id: 'today', spec: { name: 'If nothing changes', catalog_id: null, events: [] }, overrides: {}, color: COLORS[0] })
+type PathState = { id: string; spec: ScenarioSpec; overrides: Overrides; color: string; origin: Origin }
+const TODAY = (): PathState => ({ id: 'today', spec: { name: 'If nothing changes', catalog_id: null, events: [] }, overrides: {}, color: COLORS[0], origin: { kind: 'today' } })
+const fromPreset = (p: Preset): Origin => ({ kind: 'preset', button: p.label, desc: p.desc })
 const EXAMPLES = ["Master's in Zurich, or start working at 22 for 6,000 a month?", 'Work now, lose my job for 6 months at 25, then buy a flat for 600k at 28', 'What if I have a baby at 28?']
 
-type Explain = { status: 'loading' | 'ai' | 'offline'; data: ExplainResult; model?: string; cached?: boolean; error?: string; verify?: { total: number; unmatched: string[] } }
+type Explain = { status: 'loading' | 'ai' | 'offline'; data: ExplainResult; model?: string; cached?: boolean; error?: string; verify?: { total: number; unmatched: string[] }; prompt?: PromptInfo; ms?: number }
 
 // Model artifacts are bundled (built by ml/train.py) -> no runtime fetch that could fail during a demo.
 export default function App() {
@@ -39,6 +41,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const [note, setNote] = useState<{ text: string; unsupported: string[]; by: string } | null>(null)
   const [llm, setLlm] = useState<{ model: string } | null | undefined>(undefined)
   const [explain, setExplain] = useState<Explain | null>(null)
+  const [howMade, setHowMade] = useState<HowMadeContent | null>(null)
   const nextId = useRef(1)
   const loanRate = useMemo(() => medianLoanRate(profiles), [profiles])
   const cityList = useMemo(() => cities(params), [params])
@@ -56,10 +59,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     setNote(null)
     setExplain(null)
   }
-  const addPaths = useCallback((specs: ScenarioSpec[]) => {
+  const addPaths = useCallback((specs: ScenarioSpec[], origin: Origin) => {
     const added = specs.map((spec) => {
       const n = nextId.current++
-      return { id: `p${n}`, spec, overrides: {}, color: COLORS[((n - 1) % (COLORS.length - 1)) + 1] }
+      return { id: `p${n}`, spec, overrides: {}, color: COLORS[((n - 1) % (COLORS.length - 1)) + 1], origin }
     })
     setPaths((ps) => [...ps, ...added])
     if (added.length) setFocusId(added[added.length - 1].id)
@@ -69,7 +72,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const loadDemo = useCallback(() => {
     const alexia = profiles.find((p) => p.id === 'P00001')!
     const ps = presets(alexia, params)
-    const pick = (id: string, i: number): PathState => ({ id: `d${i}`, spec: ps.find((p) => p.id === id)!.spec, overrides: {}, color: COLORS[i] })
+    const pick = (id: string, i: number): PathState => {
+      const p = ps.find((x) => x.id === id)!
+      return { id: `d${i}`, spec: p.spec, overrides: {}, color: COLORS[i], origin: fromPreset(p) }
+    }
     setYears(10)
     reset('P00001', [TODAY(), pick('work', 1), pick('master', 2), pick('abroad', 3)], 'd1', 'd2')
   }, [profiles, params])
@@ -101,7 +107,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     const id = ++explainSeq.current
     const r = await apiExplain(f)
     if (id !== explainSeq.current) return // a newer request was sent meanwhile: drop this stale answer
-    if (r.ok) setExplain({ status: 'ai', data: r.data, model: r.model, cached: r.cached, verify: verifyNumbers(`${r.data.headline} ${r.data.explanation} ${r.data.caveat}`, f) })
+    if (r.ok) setExplain({ status: 'ai', data: r.data, model: r.model, cached: r.cached, prompt: r.prompt, ms: r.ms, verify: verifyNumbers(`${r.data.headline} ${r.data.explanation} ${r.data.caveat}`, f) })
     else setExplain({ status: 'offline', data: templateExplanation(f), error: r.error })
   }, [])
   useEffect(() => {
@@ -129,7 +135,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     let res = r.ok ? r.data : offlineParse(text, profile, cityList)
     if (r.ok && !res.scenarios.length) res = offlineParse(text, profile, cityList)
     if (res.horizon_years) setYears(Math.max(1, Math.min(40, res.horizon_years)))
-    addPaths(res.scenarios)
+    addPaths(res.scenarios, r.ok ? { kind: 'ai', question: text, model: r.model, ms: r.ms, cached: r.cached, prompt: r.prompt, answer: res } : { kind: 'offline', question: text, reason: r.error, answer: res })
     setNote({ text: res.note ?? (res.scenarios.length ? '' : 'Nothing to add.'), unsupported: res.unsupported, by: r.ok ? 'AI' : 'offline rules' })
     setAsking(false)
     setQuestion('')
@@ -205,17 +211,29 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               {asking ? <span className="spinner" /> : 'Explore'}
             </button>
           </form>
-          <div className="chips">
-            {quick.map((p) => (
-              <button key={p.id} className="chip" onClick={() => addPaths([p.spec])}>
-                + {p.label}
-              </button>
-            ))}
-            {EXAMPLES.map((q) => (
-              <button key={q} className="chip chip-ask" onClick={() => ask(q)} disabled={asking}>
-                “{q}”
-              </button>
-            ))}
+          <div className="chip-group">
+            <span className="chip-label">
+              Add a ready-made path <span className="muted">· instant, no AI · hover to see what it does</span>
+            </span>
+            <div className="chips">
+              {quick.map((p) => (
+                <button key={p.id} className="chip" title={p.desc} onClick={() => addPaths([p.spec], fromPreset(p))}>
+                  + {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="chip-group">
+            <span className="chip-label">
+              Or try a question <span className="muted">· the AI turns it into a path</span>
+            </span>
+            <div className="chips">
+              {EXAMPLES.map((q) => (
+                <button key={q} className="chip chip-ask" onClick={() => ask(q)} disabled={asking}>
+                  “{q}”
+                </button>
+              ))}
+            </div>
           </div>
           {note && (note.text || note.unsupported.length > 0) && (
             <p className="note small">
@@ -230,6 +248,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             <OutcomeCard
               key={c.id}
               name={c.name}
+              summary={describeSpec(c.spec, profile.age)}
               color={c.color}
               result={c.result}
               baseline={baseline}
@@ -300,6 +319,11 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               {explain.status === 'ai' && <span className="muted">written by AI ({explain.model?.split('/').pop()}){explain.cached ? ', cached' : ''}</span>}
               {explain.status === 'offline' && <span className="muted">written by a template (AI offline)</span>}
               {explain.status === 'ai' && explain.verify && (explain.verify.unmatched.length ? <span className="neg">⚠ {explain.verify.unmatched.length} number(s) not found in the model: {explain.verify.unmatched.join(', ')}</span> : <span className="ok">✓ all {explain.verify.total} numbers checked against the model</span>)}
+              {explain.status !== 'loading' && (
+                <button className="link-btn" onClick={() => setHowMade({ what: 'explanation', prompt: explain.prompt, answer: explain.data, model: explain.model, ms: explain.ms, offline: explain.status === 'offline', verify: explain.verify })}>
+                  see the prompt
+                </button>
+              )}
               <button className="link-btn" onClick={() => runExplain(facts)}>
                 rewrite
               </button>
@@ -315,6 +339,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
             </h2>
             <span className="muted small">every number has a source · click any value to change it</span>
           </summary>
+          <p className="made-by small">
+            <span className="muted">What it does:</span> {describeSpec(focus.spec, profile.age)}.{' '}
+            <span className="muted">Made by:</span>{' '}
+            {focus.origin.kind === 'today' ? 'the data, unchanged' : focus.origin.kind === 'preset' ? `the “+ ${focus.origin.button}” button (no AI)` : focus.origin.kind === 'ai' ? `AI, from your question “${focus.origin.question}”` : `offline keyword rules, from “${focus.origin.question}”`}{' '}
+            · <button className="link-btn" onClick={() => setHowMade({ what: 'path', name: focus.name, origin: focus.origin, spec: focus.spec })}>{focus.origin.kind === 'ai' ? 'see the prompt' : 'see how'}</button>
+          </p>
           {focus.plan.warnings.map((w) => (
             <p key={w} className="warn small">
               ⚠ {w}
@@ -342,6 +372,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
           </summary>
           <TrustDetails params={params} checks={liveChecks} focusName={focus.name} />
         </details>
+
+        <HowMade content={howMade} onClose={() => setHowMade(null)} />
 
         <footer className="muted small">
           Fictional people and synthetic data (UBS × LauzHack 2026 challenge). Results depend on the assumptions shown. Not a forecast, not financial advice.

@@ -1,12 +1,12 @@
 // Calls to the backend (/api is proxied by Vite to :8000). Never throws: on any failure it returns
 // {ok:false} and the caller uses the offline fallback. Successful answers are cached in localStorage
 // so a demo question that worked once keeps working even if the network dies.
-import type { ExplainResult, ParseResult } from './types'
+import type { ExplainResult, ParseResult, PromptInfo } from './types'
 
-type Ok<T> = { ok: true; data: T; model: string; cached?: boolean }
+type Ok<T> = { ok: true; data: T; model: string; cached?: boolean; prompt?: PromptInfo; ms?: number }
 type Fail = { ok: false; error: string }
 
-const CACHE_PREFIX = 'twin-cache-v1:'
+const CACHE_PREFIX = 'twin-cache-v2:'
 const cacheGet = <T,>(key: string): T | null => {
   try {
     const v = localStorage.getItem(CACHE_PREFIX + key)

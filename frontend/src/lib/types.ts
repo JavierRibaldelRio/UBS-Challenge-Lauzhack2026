@@ -39,6 +39,14 @@ export type TwinEvent = {
 export type ScenarioSpec = { name: string; catalog_id: string | null; events: TwinEvent[] }
 export type ParseResult = { scenarios: ScenarioSpec[]; horizon_years: number | null; unsupported: string[]; note: string | null }
 export type ExplainResult = { headline: string; explanation: string; caveat: string }
+/** exactly what was sent to the LLM (returned by the backend so the UI can show it) */
+export type PromptInfo = { system: string; user: string; settings: Record<string, unknown> }
+/** where a path came from (shown in "how this path was made") */
+export type Origin =
+  | { kind: 'today' }
+  | { kind: 'preset'; button: string; desc: string }
+  | { kind: 'ai'; question: string; model: string; ms?: number; cached?: boolean; prompt?: PromptInfo; answer: ParseResult }
+  | { kind: 'offline'; question: string; reason: string; answer: ParseResult }
 
 export type Profile = {
   id: string
