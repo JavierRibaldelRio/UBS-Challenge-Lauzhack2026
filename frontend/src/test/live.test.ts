@@ -307,6 +307,14 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     show('claimed but not applied', r)
     expect(r.data.edits.some((e) => e.path_id === 'd3' && e.path.events.some((x) => x.type === 'buy_home'))).toBe(true)
   }, 40000)
+  it('chat: "add a goal: 50k saved by 30" -> a new goal (no path)', async () => {
+    const r = await chat('add a goal: i want 50k saved by 30 for a car')
+    console.log('goal ->', JSON.stringify(r.data.new_goals), r.data.reply)
+    expect(r.data.new_goals.length).toBe(1)
+    expect(r.data.new_goals[0].target_chf).toBe(50000)
+    expect(r.data.new_goals[0].by_month).toBe(120)
+    expect(r.data.new_paths.length).toBe(0)
+  }, 40000)
   it('chat: splits a personal decision (path) from an economy condition (macro)', async () => {
     const r = await chat("what if I do a master's and there's a recession in 2 years?")
     show('macro split', r)

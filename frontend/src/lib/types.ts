@@ -54,6 +54,8 @@ export type TurnResult = {
   new_paths: ScenarioSpec[]
   edits: { path_id: string; path: ScenarioSpec; changes: string[] }[]
   remove_path_ids: string[]
+  new_goals: { name: string; target_chf: number; by_month: number }[]
+  remove_goals: string[]
   macro_update: import('./macro').MacroUpdate | null
   horizon_years: number | null
   unsupported: string[]

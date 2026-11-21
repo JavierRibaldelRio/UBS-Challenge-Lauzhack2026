@@ -75,7 +75,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const [profileId, setProfileId] = useState('P00001')
   const [updates, setUpdates] = useState<TwinUpdate[]>([])
   const dataProfile = profiles.find((p) => p.id === profileId) ?? profiles[0]
-  const profile = useMemo(() => applyUpdates(dataProfile, updates), [dataProfile, updates])
+  // goals the person adds / removes in the chat (on top of the goals in the data)
+  const [goalEdits, setGoalEdits] = useState<{ added: Profile['goals']; removed: string[] }>({ added: [], removed: [] })
+  const profile = useMemo(() => {
+    const p = applyUpdates(dataProfile, updates)
+    return { ...p, goals: [...p.goals.filter((g) => !goalEdits.removed.includes(g.name)), ...goalEdits.added.filter((g) => !goalEdits.removed.includes(g.name))] }
+  }, [dataProfile, updates, goalEdits])
   const [years, setYears] = useState(10)
   const [macro, setMacro] = useState<Macro>(BASE_MACRO) // the economy: shared by every path
   const H = years * 12
@@ -126,6 +131,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     setProfileId(id)
     setMacro(BASE_MACRO)
     setUpdates([])
+    setGoalEdits({ added: [], removed: [] })
     setPaths(next)
     setBaselineId(base)
     setFocusId(focus)
@@ -313,6 +319,21 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       setUpdates((us) => [...us, { id: updId.current++, said: text, update: u }])
       if (ch.length) lines.push({ text: `🧠 Updated what I know: ${ch.join(', ')}. Every path now starts from this.` })
     }
+    // 1a) goals added / removed in the chat (apply to every path)
+    const dateAt = (m: number) => {
+      const [y, mo] = profile.as_of.split('-').map(Number)
+      const d = new Date(Date.UTC(y, mo - 1 + Math.max(1, Math.round(m)), 0)) // "by 30" = end of the last month before turning 30
+      return d.toISOString().slice(0, 10)
+    }
+    const newGoals = (d.new_goals ?? []).filter((g) => g.target_chf > 0).map((g) => ({ name: g.name, target: g.target_chf, date: dateAt(g.by_month), priority: 'yours' }))
+    const dropGoals = (d.remove_goals ?? []).filter((n) => profile.goals.some((g) => g.name === n))
+    if (newGoals.length || dropGoals.length) {
+      setGoalEdits((ge) => ({ added: [...ge.added.filter((g) => !newGoals.some((n) => n.name === g.name)), ...newGoals], removed: [...ge.removed.filter((n) => !newGoals.some((g) => g.name === n)), ...dropGoals] }))
+      for (const g of newGoals) lines.push({ text: `🎯 New goal: ${g.name}, ${chf(g.target)} by ${g.date.slice(0, 7)} (age ${Math.floor(profile.age + (monthIndex(profile.as_of, g.date) + 1) / 12)}). Every path shows its chance of reaching it.` })
+      for (const n of dropGoals) lines.push({ text: `🗑 Removed goal: ${n}` })
+      const furthest = Math.max(0, ...newGoals.map((g) => monthIndex(profile.as_of, g.date) + 1))
+      if (furthest > H) setYears(Math.min(40, Math.ceil(furthest / 12))) // make sure the goal is on the chart
+    }
     // 1b) the economy (macro, shared by every path)
     if (d.macro_update && Object.values(d.macro_update).some((x) => x != null)) {
       const next = applyMacroUpdate(macro, d.macro_update)
@@ -398,7 +419,11 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const view = sameAsCash ? 'cash' : metric
   const focusParts = useMemo(() => runPath(focus.plan, params, null), [focus, params])
   const runsOut = today.result.probNegCash >= 0.5 && today.result.firstNegMonth != null
-  const memory = updates.length ? describeMemory(dataProfile, updates) : []
+  const memory = [
+    ...(updates.length ? describeMemory(dataProfile, updates) : []),
+    ...goalEdits.added.filter((g) => !goalEdits.removed.includes(g.name)).map((g) => `goal: ${g.name} ${chfk(g.target)} by ${g.date.slice(0, 4)}`),
+    ...goalEdits.removed.filter((n) => dataProfile.goals.some((g) => g.name === n)).map((n) => `goal removed: ${n}`),
+  ]
 
   return (
     <div className="page">
@@ -448,8 +473,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                   {m}
                 </span>
               ))}
-              <button className="link-btn" onClick={() => setUpdates((u) => u.slice(0, -1))}>
-                ↶ undo
+              <button className="link-btn" onClick={() => (setUpdates([]), setGoalEdits({ added: [], removed: [] }))} title="forget everything you told the twin">
+                ↶ reset to the data
               </button>
             </div>
           )}

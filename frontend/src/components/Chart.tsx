@@ -55,7 +55,9 @@ export function ProjectionChart({ paths, focusId, profile, metric, months, marke
         <XAxis dataKey="t" type="number" domain={[1, months]} ticks={ticks} tickFormatter={(t) => `${Math.floor(profile.age + t / 12)}`} stroke="var(--muted)" fontSize={12} tickLine={false} />
         <YAxis tickFormatter={(v) => chfk(v).replace('CHF ', '')} stroke="var(--muted)" fontSize={12} width={52} tickLine={false} axisLine={false} />
         <Tooltip
-          contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13 }}
+          contentStyle={{ background: 'color-mix(in srgb, var(--card) 75%, transparent)', backdropFilter: 'blur(2px)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13 }}
+          wrapperStyle={{ opacity: 0.78, pointerEvents: 'none' }}
+          cursor={{ stroke: 'var(--text)', strokeOpacity: 0.5, strokeDasharray: '3 3' }}
           labelFormatter={(t) => `Age ${(profile.age + Number(t) / 12).toFixed(1)}`}
           formatter={(v, key) => {
             if (key === 'band') return [`${chfk((v as number[])[0])} to ${chfk((v as number[])[1])}`, `${focus?.name}: 8 in 10 runs`]

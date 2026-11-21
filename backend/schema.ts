@@ -96,6 +96,10 @@ export const TurnSchema = z.object({
     )
     .describe('Changes to EXISTING paths, one entry per path ("instead", "that path", "add X to all paths" -> one entry for EVERY path id). Empty if not editing.'),
   remove_path_ids: z.array(z.string()).describe('ids of paths to delete (user says delete / that was wrong / I did not mean that)'),
+  new_goals: z
+    .array(z.object({ name: z.string().describe('short goal name, e.g. "Car fund"'), target_chf: z.number(), by_month: z.number().int().describe('months after the start date') }))
+    .describe('Savings goals the user wants to add ("I want 50k saved by 30", "add a goal: emergency fund of 10k by 2027"). Empty otherwise.'),
+  remove_goals: z.array(z.string()).describe('names of goals to delete (exact names from STATE.goals). Empty otherwise.'),
   macro_update: MacroUpdateSchema.nullable().describe('ECONOMY-WIDE conditions (inflation, interest rates, recession, market crash, house prices). Applies to EVERY path. null if not mentioned.'),
   horizon_years: int.describe('Only if the user asks for a specific horizon, or needs one to see their ages (e.g. "until 40")'),
   unsupported: z.array(z.string()).describe('Things the user wants that this model cannot represent (not: values you filled in)'),
