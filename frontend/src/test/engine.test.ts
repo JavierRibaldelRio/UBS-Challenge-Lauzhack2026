@@ -274,3 +274,71 @@ it('prints Alexia summary', () => {
   console.log('drivers(work)', drivers(work, params).map((d) => [d.name, Math.round(d.low), Math.round(d.high)]))
   console.log('break-even master', breakEven(plan(alexia, presets(alexia, params)[1].spec), work, params))
 })
+
+// ---------------------------------------------------------------- the scenario tree + the A/B comparison
+import { inferParent, layoutTree, withParentEvents, NODE_H } from '../lib/tree'
+import { compareFacts, goalFit, templateCompare, type Side } from '../lib/compare'
+
+describe('scenario tree', () => {
+  const job = makeEvent({ type: 'start_job', label: 'Job' })
+  const flat = makeEvent({ type: 'buy_home', label: 'Flat', amount_chf: 300000, start_month: 96 })
+  const kid = makeEvent({ type: 'household_change', label: 'Kid', household_type: 'family', start_month: 72 })
+  const spec = (name: string, events: TwinEvent[]): ScenarioSpec => ({ name, catalog_id: null, events })
+  it('a new path hangs under the path whose decisions it contains (the most of them)', () => {
+    const nodes = [{ id: 'w', spec: spec('work', [job]) }, { id: 'wf', spec: spec('work+flat', [job, flat]) }]
+    expect(inferParent(spec('x', [job, flat, kid]), nodes, 'today')).toBe('wf')
+    expect(inferParent(spec('x', [job, kid]), nodes, 'today')).toBe('w')
+    expect(inferParent(spec('x', [kid]), nodes, 'today')).toBe('today')
+    expect(inferParent(spec('x', [job]), nodes, 'today')).toBe('today') // same events = a sibling, not a child
+  })
+  it('a branch keeps every decision of its parent, without duplicates', () => {
+    const parent = spec('work+flat', [job, flat])
+    expect(withParentEvents(spec('kid', [kid]), parent).events.map((e) => e.label)).toEqual(['Job', 'Flat', 'Kid'])
+    expect(withParentEvents(spec('all', [job, flat, kid]), parent).events).toHaveLength(3)
+  })
+  it('layout: today on the left, branches to the right, no overlaps, collapsing hides a branch', () => {
+    const nodes = [{ id: 'today', parentId: null }, { id: 'a', parentId: 'today' }, { id: 'b', parentId: 'today' }, { id: 'a1', parentId: 'a' }, { id: 'a2', parentId: 'a' }]
+    const { placed, edges } = layoutTree(nodes, new Set())
+    expect(placed.get('a1')!.x).toBeGreaterThan(placed.get('a')!.x)
+    expect(placed.get('a')!.x).toBeGreaterThan(placed.get('today')!.x)
+    const ys = [...placed.values()].filter((p) => p.depth === 2).map((p) => p.y)
+    expect(Math.abs(ys[0] - ys[1])).toBeGreaterThanOrEqual(NODE_H)
+    expect(edges).toHaveLength(4)
+    const folded = layoutTree(nodes, new Set(['a']))
+    expect(folded.placed.has('a1')).toBe(false)
+    expect(folded.placed.get('a')!.hidden).toBe(2)
+  })
+  it('layout scales: 500 nodes in a few ms', () => {
+    const nodes = [{ id: 'today', parentId: null }, ...Array.from({ length: 499 }, (_, i) => ({ id: `n${i}`, parentId: i < 20 ? 'today' : `n${i % 20}` }))]
+    const t = performance.now()
+    const { placed } = layoutTree(nodes, new Set())
+    expect(placed.size).toBe(500)
+    expect(performance.now() - t).toBeLessThan(50)
+  })
+})
+
+describe('A/B comparison', () => {
+  const mk = (id: string, s: ScenarioSpec): Side => {
+    const pl = plan(alexia, s)
+    return { id, name: s.name, spec: s, plan: pl, result: simulate(pl, params, alexia), parentName: null, madeBy: 'test', unknownFromAge: null }
+  }
+  const ps = presets(alexia, params)
+  const work = mk('w', ps.find((p) => p.id === 'work')!.spec)
+  const today = mk('t', quo)
+  it('cash safety decides first: a path that runs out of cash does not "fit better", even with goals', () => {
+    const f = goalFit(today, work, alexia)
+    expect(f.pick).toBe('second')
+    expect(f.decidedBy).toBe('cash')
+  })
+  it('the same path against itself is too close to call', () => {
+    expect(goalFit(work, mk('w2', work.spec), alexia).pick).toBe('even')
+  })
+  it('the offline text only uses numbers from the facts', () => {
+    const v = verdict('Which path ends with more net worth?', { ...work, overrides: {} }, { ...today, overrides: {} }, alexia, params, 120, rate)
+    const facts = compareFacts({ profile: alexia, H: 120, first: today, second: work, verdict: v, fit: goalFit(today, work, alexia), breakEven: null, economy: null, told: [] })
+    const t = templateCompare(facts)
+    const all = [t.first.so_far, t.first.ahead, t.second!.so_far, t.second!.ahead, t.comparison].join(' ')
+    expect(verifyNumbers(all, facts).unmatched).toEqual([])
+    expect(facts.history_from_the_data!.months_observed).toBe(24) // the real ledger is reported as observed history
+  })
+})

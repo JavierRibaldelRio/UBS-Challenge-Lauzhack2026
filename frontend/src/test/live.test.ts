@@ -6,6 +6,7 @@ import { breakEven, buildFacts, drivers, verifyNumbers } from '../lib/analysis'
 import { answerFacts, verdict } from '../lib/answer'
 import { cities, medianLoanRate, presets, resolve } from '../lib/resolve'
 import { simulate } from '../lib/sim'
+import { compareFacts, goalFit, type CompareResult, type Side } from '../lib/compare'
 import type { AnswerResult, EditResult, ExplainResult, Params, ParseResult, Profile, TurnResult, TwinEvent } from '../lib/types'
 
 const API = process.env.API ?? 'http://localhost:8000'
@@ -231,8 +232,10 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     usual_spending_without_rent_chf_per_month: 1336, spending_ups_and_downs_chf: 426, loans: [], goals: [{ goal: 'Emergency savings', target_chf: 12800, by: '2029-12' }, { goal: 'Career transition', target_chf: 39366, by: '2032-12' }],
     told_the_twin: [], if_nothing_changes: { years_simulated: 10, age_at_end: 30, net_worth_at_end_median_chf: -116100, chance_cash_below_zero_pct: 100, cash_runs_out_at_age: 20, goals: [] },
   }
-  const chat = (text: string, o: { history?: { role: string; text: string }[]; paths?: unknown[]; target?: string | null } = {}) =>
-    post<TurnResult>('/api/chat', { ...ctx(text), history: o.history ?? [], state: STATE, paths: o.paths ?? [], focus_path_id: null, target_path_id: o.target ?? null })
+  const chat = (text: string, o: { history?: { role: string; text: string }[]; paths?: unknown[]; target?: string | null; fork_from_path_id?: string } = {}) =>
+    post<TurnResult>('/api/chat', { ...ctx(text), history: o.history ?? [], state: STATE, paths: o.paths ?? [], focus_path_id: null, target_path_id: o.target ?? null, fork_from_path_id: o.fork_from_path_id ?? null, compare: { A: null, B: null } })
+  type Ed = TurnResult['edits'][number]
+  const evOf = (e: Ed, before: { events: unknown[] }[] = []) => (e.path ? e.path.events : [...((before.find((b) => (b as { id?: string }).id === e.path_id) as { events?: TwinEvent[] } | undefined)?.events ?? []), ...(e.add_events ?? [])]) as TwinEvent[]
   const show = (l: string, r: { ms: number; data: TurnResult }) =>
     console.log(`${l} (${r.ms}ms)\n   reply: ${r.data.reply}\n   new ${r.data.new_paths.length} · edits ${JSON.stringify(r.data.edits.map((e) => [e.path_id, e.changes]))} · remove ${JSON.stringify(r.data.remove_path_ids)} · update ${JSON.stringify(r.data.profile_update)}`)
   const mansion = { id: 'p1', name: '1M job, mansion, kid', events: [{ type: 'income_change', label: '1M a year', start_month: 0, duration_months: 240, monthly_net_income_chf: 83333 }, { type: 'buy_home', label: 'Mansion', start_month: 240, amount_chf: 10000000 }, { type: 'household_change', label: 'Kid', start_month: 0, household_type: 'family' }, { type: 'recurring_expense', label: 'Kid costs', start_month: 0, monthly_amount_chf: 100000 }], net_worth_at_end_median_chf: -19520000 }
@@ -257,7 +260,7 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     show('kid at 35', r)
     expect(r.data.new_paths.length).toBe(0)
     expect(r.data.edits[0]?.path_id).toBe('p1')
-    const ev = r.data.edits[0].path.events
+    const ev = evOf(r.data.edits[0], [mansion])
     expect(ev.find((e) => e.type === 'household_change')!.start_month).toBe(180)
     expect(ev.find((e) => e.type === 'recurring_expense')!.start_month).toBe(180)
     expect(ev.find((e) => e.type === 'buy_home')!.amount_chf).toBe(10000000)
@@ -268,7 +271,7 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     const r = await chat("wheres the fucking 1M a year income", { history: [{ role: 'user', text: 'i wanna make 1M a year until 40 then buy a 10m mansion and have a kid at 35' }, { role: 'twin', text: '＋ 1M job, mansion, kid' }], paths: [noIncome] })
     show('1M income', r)
     expect(r.data.edits[0]?.path_id).toBe('p1')
-    expect(r.data.edits[0].path.events.some((e) => Math.round(e.monthly_net_income_chf ?? 0) === 83333)).toBe(true)
+    expect(evOf(r.data.edits[0], [mansion]).some((e) => Math.round(e.monthly_net_income_chf ?? 0) === 83333)).toBe(true)
   }, 40000)
   it('chat: "until I buy the house it should be 2K a month" (after asking about rent) -> rent update, not saving', async () => {
     const r = await chat('until i buy the house it should be 2K a month', { history: [{ role: 'user', text: 'whats my rent' }, { role: 'twin', text: 'Your rent is 900 CHF a month.' }] })
@@ -288,7 +291,7 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     const r = await chat('make it start a year later', { paths: [master, mansion], target: 'p3' })
     show('target', r)
     expect(r.data.edits[0]?.path_id).toBe('p3')
-    expect(r.data.edits[0].path.events.find((e) => e.type === 'study')!.start_month).toBe(12)
+    expect(evOf(r.data.edits[0]).find((e) => e.type === 'study')!.start_month).toBe(12)
   }, 40000)
 
   const three = [
@@ -300,12 +303,12 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     const r = await chat('i wanna buy a house at 40 for 400K. add to all', { paths: three })
     show('add to all', r)
     expect(r.data.edits.map((e) => e.path_id).sort()).toEqual(['d1', 'd2', 'd3'])
-    for (const e of r.data.edits) expect(e.path.events.some((x) => x.type === 'buy_home' && x.amount_chf === 400000 && x.start_month === 240)).toBe(true)
+    for (const e of r.data.edits) expect(evOf(e).some((x) => x.type === 'buy_home' && x.amount_chf === 400000 && x.start_month === 240)).toBe(true)
   }, 40000)
   it('chat: history claims a change that PATHS does not show -> applies it instead of saying "already done"', async () => {
     const r = await chat('[about path “Move abroad”] house for 400K at 40', { paths: three, target: 'd3', history: [{ role: 'user', text: 'i wanna buy a house at 40 for 400K. add to all' }, { role: 'twin', text: "I've added a 400K home purchase at 40 to all three paths. [no path, fact or economy was changed in this turn]" }] })
     show('claimed but not applied', r)
-    expect(r.data.edits.some((e) => e.path_id === 'd3' && e.path.events.some((x) => x.type === 'buy_home'))).toBe(true)
+    expect(r.data.edits.some((e) => e.path_id === 'd3' && evOf(e).some((x) => x.type === 'buy_home'))).toBe(true)
   }, 40000)
   it('chat: "add a goal: 50k saved by 30" -> a new goal (no path)', async () => {
     const r = await chat('add a goal: i want 50k saved by 30 for a car')
@@ -330,6 +333,74 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     expect(r.data.macro_update?.wage_growth_pct).toBe(1)
   }, 40000)
 
+  it('compare: A/B tiles + personal comparison, every number traced, the computed leaning respected, no advice words', async () => {
+    const ps = presets(alexia, params)
+    const side = (id: string): Side => {
+      const p = ps.find((x) => x.id === id)!
+      const plan = resolve(alexia, params, p.spec, {}, 120, rate)
+      return { id, name: p.spec.name, spec: p.spec, plan, result: simulate(plan, params, alexia), parentName: null, madeBy: 'a ready-made button', unknownFromAge: null }
+    }
+    const [a, b] = [side('master'), side('work')]
+    const v = verdict('Which path ends with more net worth?', { ...a, overrides: {} }, { ...b, overrides: {} }, alexia, params, 120, rate)
+    const fit = goalFit(a, b, alexia)
+    const facts = compareFacts({ profile: alexia, H: 120, first: a, second: b, verdict: v, fit, breakEven: v.flip && v.flip.pct > 0 ? { path: v.other.name, pct: v.flip.pct, fromAge: v.flip.fromAge } : null, economy: null, told: [] })
+    const r = await post<CompareResult>('/api/compare', { facts })
+    expect(r.ok, r.error).toBe(true)
+    const d = r.data
+    console.log(`${r.ms}ms compare:\n  A so far: ${d.first.so_far}\n  A ahead: ${d.first.ahead}\n  B so far: ${d.second?.so_far}\n  B ahead: ${d.second?.ahead}\n  vs: ${d.comparison}\n  ⚠ ${d.caveat}`)
+    expect(d.second).not.toBeNull()
+    const all = [d.first.so_far, d.first.ahead, d.second!.so_far, d.second!.ahead, d.comparison, d.caveat].join(' ')
+    expect(verifyNumbers(all, facts).unmatched).toEqual([])
+    expect(d.comparison).toContain(facts.comparison!.fits_goals_better)
+    expect(all).not.toMatch(/you should|we recommend|guaranteed|best choice/i)
+  }, 40000)
+  it('compare: one path only -> its story, no comparison', async () => {
+    const plan = resolve(alexia, params, { name: 'If nothing changes', catalog_id: null, events: [] }, {}, 120, rate)
+    const s: Side = { id: 'today', name: 'If nothing changes', spec: { name: 'If nothing changes', catalog_id: null, events: [] }, plan, result: simulate(plan, params, alexia), parentName: null, madeBy: 'the data', unknownFromAge: null }
+    const facts = compareFacts({ profile: alexia, H: 120, first: s, second: null, verdict: null, fit: null, breakEven: null, economy: null, told: [] })
+    const r = await post<CompareResult>('/api/compare', { facts })
+    expect(r.ok, r.error).toBe(true)
+    console.log(`${r.ms}ms solo: ${r.data.first.so_far} | ${r.data.first.ahead}`)
+    expect(r.data.second).toBeNull()
+    expect(verifyNumbers(`${r.data.first.so_far} ${r.data.first.ahead} ${r.data.caveat}`, facts).unmatched).toEqual([])
+  }, 40000)
+  it('chat: fork_from_path_id -> a NEW branch that keeps the parent decisions', async () => {
+    const work = { id: 'p1', name: 'Start working', parent_id: 'today', events: [{ type: 'start_job', label: 'Start working', start_month: 0 }], net_worth_at_end_median_chf: 745000 }
+    const r = await chat('then buy a flat for 400k at 28', { fork_from_path_id: 'p1', paths: [work] })
+    show('fork', r)
+    expect(r.data.edits.length).toBe(0)
+    expect(r.data.new_paths.length).toBe(1)
+    const evs = r.data.new_paths[0].events
+    // either it names the parent (the app copies its events) or it copied them itself
+    expect(r.data.new_paths[0].parent_id === 'p1' || evs.some((e) => e.type === 'start_job')).toBe(true)
+    expect(evs.some((e) => e.type === 'buy_home' && e.amount_chf === 400000 && e.start_month === 96)).toBe(true)
+  }, 40000)
+  // ---------------- from a real transcript: bulk requests must work (no refusal, no truncation, no fake "unsupported")
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `Path ${i + 1}`, parent_id: i < 3 ? 'today' : `p${(i % 3) + 1}`, events: [{ type: 'start_job', label: 'Job', start_month: 0 }, ...(i >= 3 ? [{ type: 'invest', label: `Invest ${i}`, start_month: 12 * (i % 5), monthly_amount_chf: 100 * i }] : [])], net_worth_at_end_median_chf: 700000 + 1000 * i }))
+  it('chat: "add 10 random paths" -> makes them (decisions only), no refusal, nothing "unsupported"', async () => {
+    const r = await chat('add 10 random paths lol')
+    show('10 random', r)
+    expect(r.ok, r.error).toBe(true)
+    expect(r.data.new_paths.length).toBeGreaterThanOrEqual(8)
+    expect(r.data.unsupported.join(' ')).not.toMatch(/random/i)
+  }, 130000)
+  it('chat: "add a flat at 30 to all of them" with 13 paths -> one short edit per path, not cut off', async () => {
+    const paths = many(13)
+    const r = await chat('add a flat for 500k at 30 to all of them', { paths })
+    show('13 edits', r)
+    expect(r.ok, r.error).toBe(true)
+    expect(new Set(r.data.edits.map((e) => e.path_id)).size).toBeGreaterThanOrEqual(12)
+    for (const e of r.data.edits) expect(evOf(e, paths).some((x) => x.type === 'buy_home' && x.amount_chf === 500000)).toBe(true)
+  }, 130000)
+  it('chat: "branch each of them out" -> branches name their parent and stay short', async () => {
+    const paths = many(4)
+    const r = await chat('branch each of these out with 2 more ideas', { paths })
+    show('branch out', r)
+    expect(r.ok, r.error).toBe(true)
+    expect(r.data.new_paths.length).toBeGreaterThanOrEqual(6)
+    expect(r.data.new_paths.filter((p) => p.parent_id && paths.some((x) => x.id === p.parent_id)).length).toBeGreaterThanOrEqual(6)
+    expect(r.data.horizon_years ?? null).toBeNull()
+  }, 130000)
   it('explain: Alexia demo, all numbers traced to the engine', async () => {
     const ps = presets(alexia, params)
     const specs = [ps.find((p) => p.id === 'work')!, ps.find((p) => p.id === 'master')!, ps.find((p) => p.id === 'abroad')!]

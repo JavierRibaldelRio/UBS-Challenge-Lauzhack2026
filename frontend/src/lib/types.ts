@@ -51,8 +51,9 @@ export type ParseResult = { profile_update?: ProfileUpdate | null; scenarios: Sc
 export type TurnResult = {
   reply: string
   profile_update: ProfileUpdate | null
-  new_paths: ScenarioSpec[]
-  edits: { path_id: string; path: ScenarioSpec; changes: string[] }[]
+  new_paths: (ScenarioSpec & { parent_id?: string | null })[]
+  /** path = the complete new version (events changed / removed), or null + add_events (only additions: shorter) */
+  edits: { path_id: string; path: ScenarioSpec | null; add_events?: TwinEvent[]; changes: string[] }[]
   remove_path_ids: string[]
   new_goals: { name: string; target_chf: number; by_month: number }[]
   remove_goals: string[]

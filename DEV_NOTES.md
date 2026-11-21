@@ -35,7 +35,7 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
 - **uncertainty:** ranges, drivers, break-even, unknowns, economy (C10);
 - **goal tracking** (C11);
 - **explains itself:** answers, stories, "how did the twin get this?" (C12, C18);
-- **validated:** live checks, backtest, 47 + 38 tests (C15, C19);
+- **validated:** live checks, backtest, 58 + 44 tests (C15, C19);
 - **transparent:** every number tagged data / learned / you / assumption / unknown / economy (C16, C17);
 - **responsible:** no advice, "in this simulation", fictional (C20).
 
@@ -45,7 +45,7 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
 |---|---|---|
 | MUST · Fictional client profile | ✅ 1,200 fictional people from UBS's data; Alexia by default | person line, profile picker |
 | MUST · One working scenario | ✅ 12 event types, any combination, in plain words; 7 ready-made paths | chat, `+` buttons |
-| MUST · Before / after comparison | ✅ baseline vs every path: cards, chart, "vs baseline", answer card | outcome cards, chart |
+| MUST · Before / after comparison | ✅ any two paths side by side (A green / B blue): tiles, year-by-year charts, the 4 UBS measures, answer in the chat | A/B tiles, comparison, chart |
 | MUST · Transparent assumptions | ✅ every number has a source tag and a note, editable; unknowns marked and dotted; prompt visible | "The numbers behind", "how did the twin get this?" |
 | BONUS · Conversational AI | ✅ a chat that answers, acts, remembers context, updates itself, edits paths, checks its own numbers | chat |
 | BONUS · Sensitivity & uncertainty | ✅ Monte Carlo (personal + economy luck, calibrated on real data), drivers, break-even, peer-range robustness, unknown ranges, economy stress tests | chart bands, "what matters most", answer confidence, economy bar |
@@ -68,7 +68,7 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
  you read a paragraph ◄── LLM #2 writes it ◄── facts ◄── ENGINE runs 500 possible futures per choice
  (every number in it is checked against the engine)          │
                                                              ▼
-                                                 chart, outcome cards, break-even, checks
+                                         scenario tree, A/B tiles + comparison, charts, break-even, checks
 ```
 
 - The **LLM never does maths**. It only (1) turns words into a fixed JSON format and (2) turns computed numbers into words.
@@ -276,7 +276,7 @@ After the events, the resolver applies the **learned spending response**. When i
 
 ## 5b. Answering the question, and how confident to be (`frontend/src/lib/answer.ts`)
 
-The explanation card describes the chart in general. When someone **asks a question**, they also get a separate **answer card** above the outcome cards. It holds a direct answer (*"No. … the chance is 0%"*, *"Starting work ends higher…"*) plus a **confidence level computed by the app, never by the AI**.
+The A/B comparison describes the two selected paths. When someone **asks a question**, they also get a separate **direct answer** in the chat bubble (with "why?" for the reasons). It holds a direct answer (*"No. … the chance is 0%"*, *"Starting work ends higher…"*) plus a **confidence level computed by the app, never by the AI**.
 
 **Which paths are compared:** the paths the question created. One new path is compared with the baseline; several are compared with each other (the two that end highest).
 
@@ -335,6 +335,7 @@ A ~170-line Node server (`server.ts`) with no framework. It holds the API key an
 | **`POST /api/chat`** (used by the app) | the new message + **the last 12 chat messages + the twin's current STATE (income, rent, cash, spending, goals, "if nothing changes" results) + every PATH on screen (id, events, results) + selected/target path** | `{ reply, profile_update, new_paths[], edits[] {path_id, path, changes} (several paths at once, e.g. "add to all"), remove_path_ids[], macro_update, horizon_years, unsupported[] }`: the twin talks **and** acts in one turn |
 | `POST /api/parse` | question + person summary + city list + scenario catalog | `{ scenarios[], horizon_years, unsupported[], note }` (older single-purpose endpoint, kept for tests and tools) |
 | `POST /api/explain` | `{ facts }` | `{ headline, explanation, caveat }` |
+| `POST /api/compare` | `{ facts }` from `compareFacts()` (A and B) | `{ first: {so_far, ahead}, second \| null, comparison, caveat }`: the tiles and the A vs B text |
 | `POST /api/answer` | `{ facts }` from `answerFacts()` | `{ short_answer, reasoning, confidence_level, confidence_sentence }` |
 | `POST /api/edit` | follow-up text + the current path (events) + numbers the user set by hand (`fixed`) | `{ path (the complete updated path), changes[], unsupported[], note }` |
 
@@ -389,7 +390,7 @@ Now every message goes to **`/api/chat`** with:
 - **HISTORY**: the last 12 messages (yours and the twin's), so "it", "that", "instead" can be resolved;
 - **STATE**: the twin's current numbers (after your updates), the monthly balance, goals, and the "if nothing changes" results, so it can answer "what's my rent?" or "explain my situation";
 - **PATHS**: every path on screen with its id, events and results, so it can **edit** or **remove** the right one;
-- the **selected** path and the **target** path (when you click "Change this path").
+- the paths being compared (**A** and **B**), the **target** path (✏️ Change) and the **branch parent** (⑂ Branch off).
 
 One turn can do several things: `reply` (always: natural, short, answers questions with STATE/PATHS numbers, no canned slogans), `profile_update`, `new_paths`, `edit`, `remove_path_ids` (when you say it misunderstood), `horizon_years` (e.g. "until 40" at 20 → 25 years). **Truthful history:** the chat history sent to the AI records what was *actually applied* in each turn ("[actions applied: …]" or "[no path, fact or economy was changed in this turn]"), and the prompt says PATHS is the truth. This stops the twin from believing its own earlier claim ("I've added it to all three") when nothing was changed. Edits are matched by path id or by name, and an edit that can't be matched is reported in the chat instead of vanishing.
 
@@ -403,7 +404,7 @@ The reply's numbers are checked: numbers from the data or from your message (als
   - "✏️ Changed Master's degree: ✓ flat price 600k → 500k".
   For questions, the direct answer and its confidence badge appear in the same bubble. "how did the twin get this?" opens the explanation window.
 - **The twin updates itself (state updating):** facts about today ("I now earn 1,500", "my rent went up to 1,100", "I have 10k saved") become a `profile_update`. It is applied on top of the data in the order you said it (`applyUpdates` in `App.tsx`), and **every path recomputes from the new state**. A purple "The twin knows" strip shows what changed, with undo. Offline, simple keyword rules catch "I earn / I have / my rent is".
-- **Follow-ups on a path:** select a card, then use the "Change this path" bar (one-click ideas, "✏️ write your own change…", undo). "Write your own" puts the chat in **reply mode** ("✏️ Changing Master's degree"). The AI returns the complete updated path, keeping everything you didn't mention and keeping values you set by hand (`fixed`). The old version is stored for **undo**. Your hand-set profile numbers (`g.*`) are kept; event numbers are passed to the AI as `fixed`.
+- **Follow-ups on a path:** click **✏️ Change** on its tile, then use the chat's change bar (one-click ideas, "✏️ write your own change…", undo). "Write your own" puts the chat in **reply mode** ("✏️ Changing Master's degree"). The AI returns the complete updated path, keeping everything you didn't mention and keeping values you set by hand (`fixed`). The old version is stored for **undo**. Your hand-set profile numbers (`g.*`) are kept; event numbers are passed to the AI as `fixed`.
 - **"How did the twin get this?" window:** plain story first (your message, what the twin understood as a readable list of events, each follow-up and what changed). The exact instructions, the raw JSON and the settings sit in one folded "Technical details" section.
 
 ## 6c. Showing what nobody knows (`lib/unknowns.ts`)
@@ -414,55 +415,65 @@ When a path depends on an **unknown** number that actually changes it (e.g. a de
 
 ## 7. The UI (`frontend/src/`)
 
-### What the user sees, top to bottom (`App.tsx`)
-1. **Person line:** avatar, name, age, city, savings, income, rent, goals. A dropdown on the right picks any of the 1,200 fictional people.
-2. **The hook:** one big sentence about the person's situation today, e.g. *"If nothing changes, Alexia's cash runs out at age 20."*
-3. **The question box:** type anything and press *Explore*. A question creates paths **and** an **answer card** (§5b) above the outcome cards, which you can close with ✕. Below the box are two labelled rows:
-   - **"Add a ready-made path · instant, no AI"**: the `+` buttons. Each one adds **one new path** with a fixed recipe (e.g. *+ Master's degree* = study for 2 years, then a job). Every missing number is filled from the data. Hover a button to read its recipe. They never call the AI, so they always work.
-   - **"Or try a question · the AI turns it into a path"**: example questions (in quotes). Clicking one is the same as typing it. They are **made for the person** (`lib/suggest.ts`, rules, no AI): a student gets "master's or work?", a retiree gets "markets fall 30%?" or "a medical bill at 72?". The goal question uses what is still **missing** to reach the goal (target − savings). The `+` buttons also adapt: no "master's" from age 40, no "start working" for retirees or people 60+, no "lose income" for retirees.
-4. **Outcome cards:** one per path. Under the name is one line saying what the path does (e.g. "job now · no income for 6 months at 25 · buy a home for 600k at 28"). Then a big number (net worth at the end), the difference vs the baseline, "cash runs out at…" or "cash stays positive", and goals reached. Clicking a card selects it; the card colour is its chart line. "compare others to this" makes it the baseline. × removes it.
-5. **Chart:** median line per path; shaded range only for the selected path (keeps it calm). Years: 3–30.
-   - **Net worth vs cash:** *cash* = money in the bank. *Net worth* = cash + investments + home − debts. For someone with only a bank account (like Alexia) they are the **same**, so the app shows one chart called "Money" and no toggle. The toggle appears as soon as any path has investments, a home or a loan. Example: buying a flat makes cash drop by the down payment while net worth stays flat.
-   - The **black dots** are the real bank balance from the data (first 24 months). They appear in the cash view, or in the single "Money" view.
-   - **🎯 markers = the person's goals** from `synthetic-goals.csv` (each has an amount and a date, e.g. emergency savings CHF 12,800 by Dec 2029). The marker sits at that amount and date, so it looks "low" on a chart that goes to 750k. Under the chart, a **goals strip** lists each goal with the % of futures that reach it, per path (path colours). A goal counts as reached if **cash + investments** are above the target at its date. A home doesn't count, because you can't spend it.
-6. **The story:** the AI paragraph, a highlighted **break-even** line, the main caveat, and "✓ all N numbers checked". The break-even reads "catches up only if income is X% higher" when a path is behind the baseline, or "stays ahead even if income were X% lower" when it is ahead. If you change things quickly, only the newest explanation is shown (older answers are dropped).
-7. **The numbers behind [path]** (folded). The first line says what the path does and **who made it**: the data, a `+` button, the AI from your question, or the offline rules. **"see the prompt" / "see how"** opens a window with the steps: your question → the exact instructions sent to the AI (folded, with a copy button) → the AI's raw JSON → the recipe → "the app filled the gaps". The explanation card has the same link for the paragraph. Below that line: every number with its source label. Click a value to change it (instant recompute); ↺ resets it. Below that, the *what matters most* bars.
-8. **Can you trust this?** (folded): the summary shows ✓ accounting, ✓ backtest, ✓ AI numbers. Opening it shows details in 4 plain blocks.
+PC first (no phone layout on purpose). One screen, three parts: **chat on the left**, a **drag divider** (drag to resize, double-click to reset, the width is remembered), and **the twin** on the right.
 
-**Demo button** (top right, or open `/?demo`): loads Alexia with *Start working* (baseline), *Master's degree* and *Move abroad*. This is the challenge's own example.
+### The right side, top to bottom (`App.tsx`)
+1. **Person line:** avatar, name, age, city, job, household, savings, income, rent, and the goals from the data. On the right, the hook: *"If nothing changes, cash runs out at 20."* The person dropdown and **▶ Demo** sit in the top bar. If you told the twin something ("I now earn 1,500"), a purple **"The twin knows"** strip shows it, with "reset to the data".
+2. **Your paths: the scenario tree** (`components/Tree.tsx`, layout in `lib/tree.ts`). UBS's docs describe this exact picture: a *scenario tree* of branching decisions (`examples/example-outputs.md` §3, `ai-and-technology.md` §21/§36).
+   - The root is **Today · no change** (the data, nothing changes). Every other path is a node; a **branch keeps every decision of its parent and adds its own** (today → *Start working* → *+ flat at 28* → *+ a child at 26*…). Each node shows its name, net worth at the end, the event icons, and a dot: green = cash stays positive, amber = some risk, red = cash runs out / down payment missing.
+   - **Click a node to compare it.** 1st click = **A (green)**, 2nd = **B (blue)**, a 3rd replaces B (A stays as the reference). Click a selected node again to drop it. **⇄ Swap** swaps A and B. Edges into A/B are coloured.
+   - **+ New path** (or the **+** on any node) opens a panel: *branch from* (any node), the instant ready-made paths (no AI), or **"✦ Describe it in the chat…"**. A new path from the chat is placed automatically under the path whose decisions it contains (`inferParent`).
+   - The root is labelled **BASELINE**. **Left to right is NOT a timeline**: it shows what builds on what (a branch continues its parent); the ages are inside each path. The canvas says so.
+   - **Pan & zoom canvas:** scroll wheel = zoom towards the pointer; drag with the **middle button** (or drag empty space) = move; − / % / + / ⤢ (fit) in the corner. It fits itself until you move it; after that, a newly selected node is brought into view. The canvas height can be resized from its corner.
+   - It can grow without limit: layout is O(n) (500 nodes in a few ms, tested), and **▾/▸ n** folds a branch. Simulations are **cached per node**: only nodes whose inputs changed are re-simulated; the "unknowns" envelopes and the confidence checks run only for A and B. The AI gets A, B, the path being edited and the 20 most recent paths (prompt size stays bounded).
+3. **The A and B tiles** (`components/Tiles.tsx`): event chips with ages, net worth and cash at the end, flags (cash runs out / down payment / goals likely / unknowns), then **two short paragraphs written for the person** ("you"): **So far** = the real bank history in UBS's data (observed, not simulated) + what this path changes; **Ahead** = what tends to happen in the simulation. Buttons: **✏️ Change** (the chat rewrites this path; undo keeps the old version), **⑂ Branch off**, **🔢 Numbers**, **↶ Undo**, 🗑.
+4. **A vs B** (only when both are selected): a personal comparison written by the AI, labelled **Not financial advice**. Next to it, the four measures UBS lists for every catalog scenario (*liquidity, net worth, goal feasibility, constraint breaches*): lowest cash, cash trouble %, net worth, each goal's %, with a ✓ on the better side. Above it: **"Fits your goals better, in this simulation: X"**. That verdict is **computed by the app** (`goalFit` in `lib/compare.ts`), never by the AI, with the weighting stated openly as UBS asks (`scenario-modelling.md` §13: preference weights must not be hidden): *1) not running out of cash, 2) your goals (high priority counts double), 3) net worth*. So more money does not automatically "win" (FAQ: *"Is the scenario with the most money always best? No"*). "How *fits better* is judged" unfolds the reasons and the confidence (§5b) that A or B ends with more net worth. The **break-even** line ("catches up only if income from 22 is 24% higher") sits below.
+5. **Year by year** (`components/CompareChart.tsx`): two charts side by side, **Net worth** and **Cash in the bank**, one point per year, A green and B blue with A/B labels at the line ends, shaded = where 8 in 10 futures land, dotted = from the age an unknown number starts to matter. Cash chart: **black dots** = the real bank balance in the data, **🎯** = goals. Under it, each goal with A % and B %. The horizon (3–30 years) is chosen here. Colours validated for colour-blind readers (`--a`/`--b` in `index.css`), and every series also carries its letter.
+6. **Folded:** **The numbers behind** (tabs A / B: what it does, who made it, *see the prompt*, ⬇ scenario report (UBS template), every number with its source, click to change, *what matters most*), **The economy** (presets, shared by every path), **Can you trust this?**.
+
+### The chat (left, `components/Chat.tsx`)
+Everything the twin could do before still works from here: what-ifs (new paths), facts about today, goals, the economy, editing / removing paths, questions with a **direct answer + computed confidence** (in the bubble; **why?** unfolds the reasoning, the reasons and *see the prompt*). New:
+- **Branch mode** (⑂ from a tile, a node's **+**, or "Describe it in the chat"): the bar says *"New branch of Start working"* with one-click ideas ("then buy a flat for 500k at 28"); the backend gets `fork_from_path_id` and returns a NEW path that copies the parent's events (the app re-adds any the AI forgot, `withParentEvents`).
+- **Change mode** (✏️ Change): as before ("Change this path"), with one-click ideas.
+- The AI also knows which paths are **A and B** ("compare them", "the green one").
+- *Ideas to ask* (made for the person, `lib/suggest.ts`) sit above the input, open until you start.
+
+### The A/B text pipeline (`lib/compare.ts` → `POST /api/compare`)
+`compareFacts()` builds the only numbers the AI may use: the person today, the **observed** ledger history, goals with priority, per path the decisions, yearly snapshots, end values, cash risk, goals, purchases, unknowns, and the computed comparison (who ends higher, in what % of paired futures, confidence, *fits goals better* + its reasons, break-even). The AI returns `{ first, second, comparison, caveat }`; the app checks **every number** (✓ N numbers checked) and shows a template instantly while it writes (and if the AI is down). Facts are sent in a fixed order (by id), so **swapping A and B costs no new AI call**; answers are cached in the browser like every other call.
 
 ### Files
 | file | what |
 |---|---|
-| `App.tsx` | page layout, state (paths, baseline, selection), ask flow, explanation flow |
-| `components/Outcome.tsx` | outcome card |
-| `components/Chart.tsx` | chart (Recharts) |
+| `App.tsx` | layout, state (tree, A/B selection, chat modes), per-node simulation cache, chat flow, A/B pipeline |
+| `components/Tree.tsx` + `lib/tree.ts` | the scenario tree (layout, parent inference, branches keep parent decisions) |
+| `components/Tiles.tsx` | A/B tiles and the comparison card |
+| `components/CompareChart.tsx` | year-by-year chart (net worth / cash) for A and B |
+| `components/Chat.tsx` | the chat (modes, ideas, answers with "why?") |
+| `lib/compare.ts` | facts for the A/B text, the "fits your goals better" rule, offline template |
 | `components/Details.tsx` | assumption list (editable), source chips, driver bars |
+| `components/Economy.tsx` | economy presets |
 | `components/Trust.tsx` | trust summary and details |
 | `components/HowMade.tsx` | the "see the prompt / see how" window (native `<dialog>`) |
-| `components/Answer.tsx` | the answer card (answer + computed confidence + reasons) |
 | `lib/answer.ts` | verdict + confidence (§5b) and the facts the answer-AI may use |
-| `lib/suggest.ts` | example questions made for each person |
-| `index.css` | all styles. Colours are CSS variables at the top; dark mode is automatic |
+| `lib/suggest.ts` | example questions, change ideas and branch ideas made for each person / path |
+| `index.css` | all styles. Colours are CSS variables at the top (`--a` green, `--b` blue); dark mode is automatic |
 | `lib/api.ts` | calls to the backend, with timeout and cache |
 | `lib/fallback.ts` | offline keyword parser |
 | `lib/fmt.ts` | CHF / % formatting |
 
 ### How to change it
-- **Texts:** directly in `App.tsx` / components (all plain English strings).
-- **Quick buttons:** `presets()` in `resolve.ts`. They adapt to the person: no "start working" or "master's" for retirees or people 60+. **Example questions:** `EXAMPLES` in `App.tsx`.
-- **Colours:** `COLORS` in `App.tsx` (path colours) and the CSS variables in `index.css`.
-- **The opening sentence:** the `hook` in `App.tsx`.
+- **Texts:** directly in `App.tsx` / components (all plain English strings). The A/B writing rules: `COMPARE_SYSTEM` in `backend/server.ts`.
+- **What "fits better" means:** `goalFit` + `FIT_RULE` in `lib/compare.ts` (keep the rule text in sync; it is shown to the user and to the AI).
+- **Quick buttons:** `presets()` in `resolve.ts`. **Example questions / change ideas / branch ideas:** `lib/suggest.ts`.
+- **Colours:** `--a` / `--b` (and dark-mode values) at the top of `index.css`. Re-validate for colour blindness if you change them.
 - **Default person:** `useState('P00001')` in `App.tsx`.
-
----
 
 ## 8. Tests
 
 | command | what it checks | needs |
 |---|---|---|
-| `cd frontend && pnpm test` | 41 tests: down-payment check (broke student can't pay, worker can; "can I afford" = no), answer confidence (clear case = high, unknown premium = not high, near-tie = low, goal 0% = high, 0%-return investing = tie, afford questions), suggestions fit every one of the 1,200 people, French/Swiss number formats, accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
-| `cd frontend && pnpm test:live` | 36 tests with the **real LLM** (all pass): 7 conversation-with-context cases from a real transcript; 23 earlier ones: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
+| `cd frontend && pnpm test` | 58 tests: scenario tree (parent inference, branches keep decisions, layout incl. 500 nodes), A/B comparison (cash decides first, offline text only uses checked numbers), down-payment check (broke student can't pay, worker can; "can I afford" = no), answer confidence (clear case = high, unknown premium = not high, near-tie = low, goal 0% = high, 0%-return investing = tie, afford questions), suggestions fit every one of the 1,200 people, French/Swiss number formats, accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
+| `cd frontend && pnpm test:live` | 44 tests with the **real LLM** (all pass): A/B texts (every number traced, the computed leaning respected, no advice words), one-path story, branching (`fork_from_path_id`); 7 conversation-with-context cases from a real transcript; 23 earlier ones: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
 | `cd backend && pnpm typecheck` | backend types | nothing |
 | `cd frontend && pnpm build` | frontend types and production build | nothing |
 | `cd ml && uv run train.py` | re-trains and prints the data checks and backtest | uv |
@@ -479,7 +490,7 @@ When a path depends on an **unknown** number that actually changes it (e.g. a de
 - **The LLM gives bad JSON:** set `LLM_JSON_MODE=json_object` and restart.
 - **You changed `train.py`:** rerun it; the frontend reloads by itself.
 - **The chart is blank:** never add `max-width` to `.recharts-surface` (Firefox renders the SVG empty). The chart sits in `.chart-box`, which already prevents overflow.
-- **Phone layout:** checked at 390 and 360 px in every state (demo, answer, all sections open, prompt window): no sideways scroll, nothing clipped.
+- **Screen:** PC first (no phone layout on purpose). Below ~1200 px the comparison and the two charts stack; the chat width is set with the divider.
 - **Security:** deliberately ignored for the demo. CORS is open, the server listens on all network interfaces, and there's no auth. The key stays on the backend, never in the browser.
 
 ---

@@ -85,12 +85,19 @@ export const MacroUpdateSchema = z.object({
 export const TurnSchema = z.object({
   reply: z.string().describe("What the twin says back, in the user's language. Natural, short (1-4 sentences). Answers questions directly using STATE / PATHS numbers."),
   profile_update: ProfileUpdateSchema.nullable().describe('Facts about TODAY the user stated or corrected. null if none.'),
-  new_paths: z.array(ScenarioSchema).describe('New paths to add (0-3). Empty if the user is editing, asking or chatting.'),
+  new_paths: z
+    .array(
+      ScenarioSchema.extend({
+        parent_id: z.string().nullable().describe('If this path CONTINUES an existing path (a branch): that path id. Then events = ONLY the new events; the app copies the parent\'s events. null = a path from today.'),
+      }),
+    )
+    .describe('New paths to add (0-10). Empty if the user is editing, asking or chatting.'),
   edits: z
     .array(
       z.object({
         path_id: z.string().describe('id of the existing path to change (from PATHS)'),
-        path: ScenarioSchema.describe('The COMPLETE updated path: all events, changed and unchanged'),
+        path: ScenarioSchema.nullable().describe('The COMPLETE updated path, ONLY when existing events change or are removed. null when you only ADD events (use add_events).'),
+        add_events: z.array(EventSchema).describe('Events to append to this path, everything else unchanged (short form for "add X"). Empty when path is given.'),
         changes: z.array(z.string()).describe('Plain-English list of what changed, e.g. "child: from now -> at 35"'),
       }),
     )
@@ -118,8 +125,21 @@ export const AnswerSchema = z.object({
   confidence_sentence: z.string().describe('One sentence that states the given confidence level and its main reason'),
 })
 
+/** The A/B view: a short story per selected path ("so far" + "ahead") and a personal comparison. */
+const StorySchema = z.object({
+  so_far: z.string().describe('1-3 sentences: where you stand today (real history from the data) and what this path changes'),
+  ahead: z.string().describe('2-4 sentences: what tends to happen on this path in the simulation'),
+})
+export const CompareSchema = z.object({
+  first: StorySchema.describe('Story of FACTS.paths[0]'),
+  second: StorySchema.nullable().describe('Story of FACTS.paths[1], or null if there is only one path'),
+  comparison: z.string().describe('Only if there are two paths (else ""): 4-7 sentences comparing them for this person'),
+  caveat: z.string().describe('One sentence: the biggest assumption or unknown'),
+})
+
 export type ParseResult = z.infer<typeof ParseSchema>
 export type EditResult = z.infer<typeof EditSchema>
 export type TurnResult = z.infer<typeof TurnSchema>
 export type AnswerResult = z.infer<typeof AnswerSchema>
 export type ExplainResult = z.infer<typeof ExplainSchema>
+export type CompareResult = z.infer<typeof CompareSchema>

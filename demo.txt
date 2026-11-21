@@ -24,9 +24,13 @@ A. TEN MINUTES BEFORE (checklist)
 4. Rehearse the whole script ONCE in this same browser. This stores the AI
    answers in the browser, so they replay even if the Wi-Fi dies.
    Do NOT clear browser data or switch to a private window after this.
-5. Press F5 (reload). You must see the start screen:
-   "If nothing changes, Alexia's cash runs out at age 20."
-6. Zoom so the cards and the chart fit on one screen (Ctrl + / Ctrl -, about 110%).
+5. Press F5 (reload). You must see the start screen: the chat on the left,
+   one node "Today · no change" in the tree, and top right
+   "If nothing changes, cash runs out at 20."
+6. Use a laptop/desktop screen with a mouse (the app is built for PC, not
+   phones). In the tree: scroll = zoom, middle-click drag = move, ⤢ = fit all. Zoom so
+   the tree and the two A/B tiles fit on one screen (Ctrl + / Ctrl -, 90-100%).
+   Drag the divider between the chat and the rest if the chat is too wide.
    Full screen: F11. Turn off notifications. Close other tabs.
 7. Backup: have a screen recording of a full run on a USB stick or phone.
    (Slides are not allowed, but images and videos are allowed as backup.)
@@ -41,62 +45,61 @@ B. THE SCRIPT (3:00)
 - SAY: "This is Alexia. She is fictional: 20 years old, a student in Lausanne,
   with 8,000 francs saved. She has UBS's question: should she start working,
   do a master's, or move abroad?"
-- SAY: "First, what happens if nothing changes."
-- DO: point at the big red sentence.
-- SAY: "Her cash runs out at age 20. The black dots on the chart are her real
-  bank balance from UBS's data. Our simulation follows them."
-- THEY SEE: the big sentence, one grey card, the chart line with black dots.
+- DO: point at the top right sentence, then at the tile "If nothing changes".
+- SAY: "If nothing changes, her cash runs out at 20. The tile says it in plain
+  words: in UBS's real data her bank balance already went from 8,000 to minus
+  17,000 in two years. The black dots on the cash chart are that real balance."
+- THEY SEE: the tree with one node "Today · no change", tile A, the chart.
 
-[0:25 – 1:05]  THREE FUTURES
+[0:25 – 1:05]  A TREE OF POSSIBLE LIVES, TWO AT A TIME
 - DO: click "▶ Demo" (top right).
-- THEY SEE: four cards. Start working ≈ CHF 745k, Master's degree ≈ CHF 557k
-  (−189k), Move abroad ≈ CHF 178k, If nothing changes ≈ CHF −116k.
-- SAY: "Each card is one possible life. Each line on the chart is the middle of
-  500 simulated futures. The shaded band shows where 8 out of 10 of them land."
-- SAY: "If Alexia starts working now, she ends at about 745,000 francs at 30.
-  With a master's, about 557,000, so 189,000 less."
-- DO: point at the paragraph under the chart.
-- SAY: "This paragraph is written by an AI. But the AI never calculates
-  anything. It only receives our computed numbers, and the app checks every
-  number it writes. Here: all numbers checked."
+- THEY SEE: the tree: Today branches into Start working (A, green),
+  Master's degree (B, blue) and Move abroad. Below the line "COMPARING A vs B":
+  two tiles, then the comparison, then the year-by-year charts.
+- SAY: "Every possible life is a node in this tree, starting from the BASELINE:
+  today, if nothing changes. A branch continues the one before it; left to
+  right is not time, the ages are inside each path. Click any two to compare:
+  the first turns green, the second blue. Start working ends at about 745,000
+  francs at 30, the master's at about 557,000."
+- DO: point at the "So far / Ahead" text in the two tiles.
+- SAY: "Each tile tells Alexia what is going on in her words: what happened so
+  far, from the real data, and what tends to happen next. The AI writes it, but
+  it only gets our computed numbers, and the app checks every number it writes."
+- DO: point at "Fits your goals better: Start working" and "NOT FINANCIAL ADVICE".
+- SAY: "Below, a personal comparison on the four things UBS measures for every
+  scenario: cash, net worth, goals, and breaking a constraint. Which fits her
+  goals better is computed by the app, with the rule shown: first, don't run out
+  of cash; then her goals; then money. It's a simulation, not advice."
 
 [1:05 – 1:50]  WHY: EVERY NUMBER HAS A SOURCE
-- DO: scroll to "The numbers behind Master's degree" (it is already open).
+- DO: on tile B (Master's degree) click "🔢 Numbers".
 - SAY: "Why is the master's lower? Every number shows where it comes from.
   Tuition, 8,000 a year: from UBS's data for Alexia. Her salary afterwards:
   the median of 69 people her age in the data."
 - DO: point at the red row "salary premium from degree: 0 %, unknown".
 - SAY: "But how much more a master's pays, the data simply does not say.
   So we don't guess. We compute the break-even: the master's only catches up
-  if it raises her salary by 24 percent."
-- DO: click "0 % ✎", type 30, press Enter.
-- THEY SEE: the Master's card jumps to ≈ CHF 795k, about +50k vs Start working.
-- SAY: "If you believe a master's adds 30 percent, it now wins by about
-  50,000 francs. Everything recalculates instantly."
+  if it raises her salary by 24 percent." (It is also in the comparison box.)
+- DO: click "0 % ✎", type 30, press Enter. Scroll up to the tiles.
+- THEY SEE: Master's ≈ CHF 795k, now ABOVE Start working (745k).
+  But "Fits your goals better" still says Start working.
+- SAY: "With 30 percent more salary the master's ends with more money. But it
+  still runs out of cash while she studies, in every simulated future. So the
+  twin does not call it the better fit: the most money is not automatically
+  the best choice, exactly as UBS's guidance says."
 
-[1:50 – 2:30]  JUST ASK, AND GET AN ANSWER
-- DO: scroll up to the chat. Click the example question
+[1:50 – 2:30]  JUST ASK, AND BRANCH OFF
+- DO: in the chat, click the idea
   "Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28".
-  (The example questions are made for each person. For Alexia this one is there.)
-  Your message appears in the chat, and the twin replies there.
-- THEY SEE (after 2–4 seconds):
-  - At the top, an ANSWER card: "Start working" ends higher, by about CHF 41k,
-    with "Low confidence" and its reasons.
-  - A new card: "job now · no income for 6 months at 25 · buy a home for 300k
-    at 28", about CHF 705k.
-- SAY: "You can just ask in plain words. One sentence became one path with
-  three life events. The AI only described them. Every amount it was not told
-  is filled in by the app and labelled. You get a direct answer, and the
-  confidence is computed by the simulator, not by the AI. Here it says LOW,
-  because if her salary were just 4 percent higher, the result would flip.
-  It tells you when it is not sure."
-- OPTIONAL (only if time), show that the twin is alive:
-  type in the chat: "I now earn 1,500 a month". The twin replies "Updated what I
-  know: income 1,200 → 1,500", and every path recomputes. Or click a path and
-  use "Change this path" (e.g. "make the flat 250k"): the twin rewrites only
-  that path, and you can undo.
-- OPTIONAL: click "Cash", then "Net worth". At 28 cash drops by
-  the 60,000 down payment, but net worth does not: the money became a home.
+- THEY SEE (after 2–4 seconds): a new node appears (usually as a branch of
+  Start working, because it contains that decision) and becomes B. The chat
+  bubble has a direct answer with a confidence level ("why?" shows the reasons).
+- SAY: "One sentence became one path with three life events. The AI only
+  described them. Every amount it was not told is filled in by the app and
+  labelled. And the confidence is computed by the simulator, not by the AI."
+- OPTIONAL (only if time): click "⑂ Branch off" on a tile and click the idea
+  "and invest 500 a month": a new branch keeps all its parent's decisions.
+  Or type "I now earn 1,500 a month": every path recomputes from that.
 
 [2:30 – 3:00]  WHY YOU CAN TRUST IT
 - DO: scroll down, click "Can you trust this?".
@@ -107,7 +110,7 @@ B. THE SCRIPT (3:00)
   verified."
 - SAY: "We don't predict the future. We make it explorable. Thank you."
 
-IF YOU ARE RUNNING LATE: skip the optional Cash/Net worth toggle in [1:50 – 2:30].
+IF YOU ARE RUNNING LATE: skip the optional branch in [1:50 – 2:30].
 
 
 ---------------------------------------------------------------------
@@ -118,10 +121,12 @@ C. IF SOMETHING GOES WRONG
   use simple keyword rules. SAY: "The AI is offline, so the app falls back
   to rules. That is by design: the maths never depends on the AI."
 - A question gives a strange path:
-  Remove it with the × on its card. Click the example question instead
+  Click it in the tree, then 🗑 on its tile. Click the example question instead
   (its answer is cached from your rehearsal).
-- The explanation text sounds odd:
-  Click "rewrite" under the paragraph.
+- The comparison text sounds odd:
+  Click "rewrite" under it. (While the AI writes, a plain template is shown.)
+- Wrong two paths compared:
+  Click a green/blue node to drop it, click another one. "⇄ Swap" swaps A and B.
 - Page frozen or blank:
   Press F5. Everything runs on your laptop; nothing is lost except the paths.
   Click ▶ Demo to get back to the main state.
@@ -167,7 +172,7 @@ A: Yes, because it gets the context: the last messages, the person's current
 
 Q: What happens if I ask for something impossible (e.g. a 200k down payment
    without the money)?
-A: It doesn't hide it: the card says "can't pay the down payment", the chart
+A: It doesn't hide it: the tile says "can't pay the down payment", the chart
    shows cash going below zero, and "can I afford it?" is answered "No".
 
 Q: Is this a prediction?
@@ -176,7 +181,7 @@ A: No. It is a simulation under assumptions you can see and change. It shows
    month ups and downs, learned from the data.
 
 Q: Which assumptions affect the result most?
-A: Open "What matters most". For the master's, income matters most (±83k for
+A: "🔢 Numbers" on a tile, then "What matters most". For the master's, income matters most (±83k for
    a 10% change), then other spending (±15k) and rent (±11k). The biggest
    unknown is the degree's salary premium; that's why we show the break-even
    (24%).
@@ -188,14 +193,14 @@ A: A decision is a list of life events (job, study, move, home...). The app
    money out.
 
 Q: How did you verify the calculations?
-A: Four ways. 41 automated tests (plus 23 tests against the real AI), including UBS's own validation list (zero
+A: Four ways. 58 automated tests (plus 44 tests against the real AI), including UBS's own validation list (zero
    income, higher tuition, loan payoff, transfers). Live checks on screen
    (cash adds up, net worth = assets − debts, debt never negative, same seed =
    same result). A backtest on real 2026 data. And we checked UBS's ledger
    itself: zero accounting errors in 28,800 rows.
 
 Q: What happens if a constraint is broken, for example cash goes negative?
-A: We never hide it. The card says "cash runs out at 20", and we show in how
+A: We never hide it. The tile says "cash runs out at 20", the node turns red, and we show in how
    many of the 500 futures it happens and how low it goes. This matches the
    data's own "requires financing" flag. We don't secretly borrow money.
 
@@ -238,15 +243,16 @@ A: We agree. Monte Carlo only handles normal month-to-month luck, and we
 Q: Buying a home doesn't drop the money?
 A: It drops CASH, not net worth. At the purchase, cash falls by the down
    payment (20% of the price), but that money became part of a home, so net
-   worth stays flat. In the net worth view the dotted line is cash, and the 🏠
-   marks the month. We also check, in every future, that the down payment can
-   really be paid from cash. If not, the card says "can't pay the down
+   worth stays flat. That is why there are two charts side by side, net worth
+   and cash in the bank, and the 🏠 marks the month. We also check, in every future, that the down payment can
+   really be paid from cash. If not, the tile says "can't pay the down
    payment" and "Can I afford it?" is answered "No".
 
 Q: What are the orange 🎯 markers?
 A: The person's own goals from UBS's data, for example "emergency savings,
-   CHF 12,800 by December 2029". Each marker sits at that amount and date.
-   Below the chart, each goal shows in what % of futures each path reaches it.
+   CHF 12,800 by December 2029" (high priority). Each marker sits at that amount
+   and date on the cash chart. Below the charts, each goal shows in what % of
+   futures A and B reach it, and the comparison table has a row per goal.
    A goal counts as reached if cash plus investments are above it at that date.
 
 Q: Does it understand complicated sentences or other languages?
@@ -292,6 +298,20 @@ A: Income in the data is already after tax. Values are in 2025 francs, so
    there is no inflation. Things we cannot model (for example new tax rules)
    are listed by the AI under "Not modelled".
 
+Q: Isn't "fits your goals better" financial advice?
+A: No, and it says so ("Not financial advice"). It is a reading of the
+   simulation against the person's own goals from the data, with the rule
+   shown on screen: 1) not running out of cash, 2) the goals (high priority
+   counts double), 3) net worth. UBS asks that such weights are never hidden,
+   and that the most money is not treated as automatically best. The app
+   computes it; the AI only explains it, and its numbers are checked.
+
+Q: Why a tree, and why only two at a time?
+A: UBS's own examples describe a "scenario tree" of branching decisions, and
+   real life is sequential: work, THEN maybe a flat, THEN maybe a child.
+   Comparing two at a time keeps it readable: one green, one blue, one chart,
+   one plain-English comparison. You can still have as many nodes as you like.
+
 Q: What's the difference between cash and net worth?
 A: Cash is money in the bank. Net worth is cash + investments + home − debts.
    For Alexia today they are the same. When she buys a flat, cash drops but
@@ -331,8 +351,11 @@ E. NUMBERS TO REMEMBER
   rent CHF 900/month.
 - If nothing changes: cash runs out at 20 (her real ledger goes negative in
   month 9); about CHF −116k at 30.
-- Start working ≈ CHF 745k · Master's ≈ CHF 557k (−189k) · Move abroad ≈ CHF 178k.
-- Master's break-even: +24% salary. With +30%: ≈ CHF 795k (≈ +50k vs working).
+- Start working ≈ CHF 745k · Master's ≈ CHF 557k (−189k) · Move abroad ≈ CHF 199k.
+- Fits goals better (computed): Start working, decided by cash (Master's: cash
+  below zero in 100% of futures). Still true with +30% premium.
+- Master's break-even: +24% salary from 22. With +30%: ≈ CHF 795k (≈ +50k vs
+  working), but it still runs out of cash while studying.
 - Data: 1,200 people × 24 months = 28,800 months; 0 accounting errors.
 - Backtest: 78.5% inside the 80% range, 49.8% inside the 50% range.
 - "Work now, job loss at 25, flat for 300k at 28": ≈ CHF 705k, ≈ 41k less than
@@ -340,7 +363,7 @@ E. NUMBERS TO REMEMBER
   Down payment 60k: cash 549k → 495k, net worth stays ≈ 550k.
 - Confidence evidence: "≥95%" statements were right 99.9% of the time
   (19,980 pairs of real people). Calibration: said 50% → 49.9%, said 90% → 87.9%.
-- 500 futures per path · AI answers in ~1–3 s · 41 automated tests + 23 live AI tests.
+- 500 futures per path · AI answers in ~1–3 s · 58 automated tests + 44 live AI tests.
 
 
 ---------------------------------------------------------------------

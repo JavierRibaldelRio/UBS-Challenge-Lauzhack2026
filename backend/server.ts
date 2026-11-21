@@ -1,12 +1,14 @@
-// Tiny LLM gateway for the Financial Twin. Two jobs, nothing else:
-//   POST /api/parse    free text  -> scenario JSON (validated against schema.ts)
-//   POST /api/explain  computed facts -> plain-English paragraph
+// Tiny LLM gateway for the Financial Twin. Words -> JSON, and computed numbers -> words. Nothing else:
+//   POST /api/chat     one chat turn: the twin replies AND acts (paths, edits, branches, facts, goals, economy)
+//   POST /api/compare  computed facts for paths A and B -> "so far / ahead" per path + a personal comparison
+//   POST /api/answer   computed verdict -> direct answer to a question
+//   POST /api/parse, /api/edit, /api/explain   older single-purpose endpoints (kept for tests and tools)
 // Works with ANY OpenAI-compatible endpoint (Together AI, OpenAI, Ollama, vLLM, LM Studio...).
 // If the LLM is down or returns garbage, we answer {ok:false} and the frontend uses its offline fallback.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import OpenAI from 'openai'
 import { z } from 'zod'
-import { AnswerSchema, EditSchema, ExplainSchema, ParseSchema, TurnSchema } from './schema.ts'
+import { AnswerSchema, CompareSchema, EditSchema, ExplainSchema, ParseSchema, TurnSchema } from './schema.ts'
 
 const PORT = Number(process.env.PORT ?? 8000)
 const BASE_URL = process.env.LLM_BASE_URL ?? 'https://api.together.ai/v1'
@@ -41,6 +43,26 @@ const EXPLAIN_JSON_SCHEMA = strictSchema(z.toJSONSchema(ExplainSchema))
 const ANSWER_JSON_SCHEMA = strictSchema(z.toJSONSchema(AnswerSchema))
 const EDIT_JSON_SCHEMA = strictSchema(z.toJSONSchema(EditSchema))
 const TURN_JSON_SCHEMA = strictSchema(z.toJSONSchema(TurnSchema))
+const COMPARE_JSON_SCHEMA = strictSchema(z.toJSONSchema(CompareSchema))
+
+// The A/B view. Written for the person (the user plays them), warm and plain. The verdicts were computed by the app.
+const COMPARE_SYSTEM = `You are the user's "financial twin". The user plays a FICTIONAL person from UBS's synthetic data.
+You talk to them in the second person ("you"), warm and familiar, like a friend who is good with money: everyday words, short sentences, no jargon. Speak in ages and years, never in months-from-start. "k" style amounts are fine (254300 -> CHF 254k).
+The simulation has already been run. You get its results as FACTS for one or two paths (possible futures of the same person).
+WRITE
+- first = FACTS.paths[0], second = FACTS.paths[1] (null if there is only one path). For each:
+  - so_far (1-3 sentences): where you stand today, using history_from_the_data (the REAL bank balance in UBS's data: observed, not simulated) and today (income, rent, usual spending, what they told the twin). Then what this path changes (its decisions with ages; if it branches_from another path, say it builds on that one). If decisions is empty, say nothing changes on this path.
+  - ahead (2-4 sentences): what tends to happen on this path in this simulation: net worth and cash over time (over_time_median), whether and when cash runs out, the chance of each goal, any home purchase and its down payment, and the unknown numbers it depends on.
+- comparison (4-7 sentences, only if there are two paths, else ""): a personal comparison for this person, using their goals. Cover the four measures UBS uses for every scenario: liquidity (lowest cash, chance of running out), net worth, goal feasibility (each goal; high priority first), constraint breaches (cash below zero, a down payment they cannot pay). Then say which path fits their goals better IN THIS SIMULATION: exactly comparison.fits_goals_better (never pick a different one), and why, from fits_goals_better_reasons. Say in a few words how that was judged (how_fit_is_judged). If more_net_worth is a different path, say plainly that more money is not automatically the better fit. Mention confidence_of_the_net_worth_gap as given. If break_even is given, explain it in one sentence.
+- caveat: one sentence, the biggest assumption or unknown.
+STRICT RULES
+- Use ONLY numbers that appear in FACTS. Do not calculate new numbers (no sums, no differences that are not given).
+- Say "in this simulation" or "under these assumptions" at least once. Never promise outcomes. Never write "you should", "we recommend", "guaranteed" or "best choice": you describe what the numbers show; the person decides.
+- If economy is not today's economy, mention once that both paths assume it.
+- Refer to paths by their names, not by letters.
+- The person and data are fictional.
+Reply with JSON only (no prose, no code fences), matching this JSON Schema:
+${JSON.stringify(COMPARE_JSON_SCHEMA)}`
 
 const ANSWER_SYSTEM = `You answer a person's question about their simulated financial future, in plain, simple English (short sentences, no jargon).
 The simulation has already been run. You get its results as FACTS. The verdict and the confidence level were computed by the simulator.
@@ -128,7 +150,7 @@ ${JSON.stringify(EDIT_JSON_SCHEMA)}`
 }
 
 // ------------------------------------------------------------------ the conversation (the twin talks AND acts)
-type ChatContext = ParseContext & { history: { role: string; text: string }[]; state: unknown; paths: unknown[]; focus_path_id: string | null; target_path_id: string | null }
+type ChatContext = ParseContext & { history: { role: string; text: string }[]; state: unknown; paths: unknown[]; focus_path_id: string | null; target_path_id: string | null; fork_from_path_id?: string | null; compare?: { A: string | null; B: string | null } }
 function chatSystemPrompt(ctx: ChatContext) {
   return `You are the "financial twin" of ${ctx.name}, a FICTIONAL person from UBS's synthetic data. You talk with the user (who plays ${ctx.name}) in a chat, and you can act on a financial simulator.
 You see the conversation so far, ${ctx.name}'s current STATE and the PATHS (possible futures) already on screen, with their results.
@@ -136,15 +158,25 @@ You see the conversation so far, ${ctx.name}'s current STATE and the PATHS (poss
 WHAT YOU CAN DO IN ONE TURN (combine as needed):
 1. reply: always. Talk like a helpful, natural person. Speak in ages and years, never in "month 120" style numbers. Answer questions directly ("what's my rent?", "explain my situation", "which path is best?") using the numbers in STATE / PATHS. Short: 1-4 sentences. No canned slogans; do not repeat the same suggestions you already gave in HISTORY. If the user asks for something specific ("just say hi"), do exactly that.
 2. profile_update: facts about TODAY the user states or corrects ("I now earn 1,500", "my rent is 2,000", "I have 10k saved"). Rent/income/savings "until X happens" are still facts about today (a later home purchase or job already changes them).
-3. new_paths: NEW what-ifs / decisions about the future. "A or B" = one path per option. Several things in one life = ONE path with several events.
-4. edits: when the user refers to EXISTING paths. One entry PER path to change: "add X to all / every path" = one entry for EVERY id in PATHS. When the user refers to an EXISTING path ("instead", "change it", "make the flat cheaper", "where is the 1M income?", "have the kid at 35", "assume I got a job" right after a path that lacks it). Return that path COMPLETE: keep everything not mentioned, fix what was missing or wrong. If target_path_id is set, the user is explicitly editing that path.
+3. new_paths: NEW what-ifs / decisions about the future. "A or B" = one path per option. Several things in one life = ONE path with several events. Up to 10 per turn.
+   If the user asks you to make up / suggest / add example or "random" paths, DO IT (no refusal, no lecture): pick plausible, varied decisions that fit this person (age, job, goals), as many as asked (max 10). Inventing DECISIONS on request is fine; amounts you were not told stay null as always.
+   A new path that CONTINUES an existing one (a branch: "branch them out", "then also…", "add more under X"): set parent_id to that path's id and list ONLY the new events (the app copies the parent's events). This keeps your answer short.
+4. edits: when the user refers to EXISTING paths. One entry PER path to change: "add X to all / every path" = one entry for EVERY id in PATHS.
+   Two forms, pick the right one:
+   - ONLY brand-new additions ("also buy a car", "add a flat at 30 to all"): path = null, add_events = the new events (short).
+   - ANY change to something already in the path (moving it: "the kid at 35 instead", a new amount: "make the flat cheaper", removing it): path = the COMPLETE updated path and add_events = []. Never use add_events to change or move an existing event: that would add a duplicate. When the user refers to an EXISTING path ("instead", "change it", "make the flat cheaper", "where is the 1M income?", "have the kid at 35", "assume I got a job" right after a path that lacks it). Return that path COMPLETE: keep everything not mentioned, fix what was missing or wrong. If target_path_id is set, the user is explicitly editing that path.
 5. remove_path_ids: when the user says a path was wrong / a misunderstanding / not what they meant ("I meant X, not Y", "not save", "that's wrong", "delete it"): REMOVE that path right away (do not ask), and do the right thing instead.
 6. macro_update: the ECONOMY. Every message can contain two kinds of variables:
    - IDIOSYNCRATIC = about this person (their job, studies, moves, home, kids, income, spending, personal luck) -> paths / profile_update.
    - MACROECONOMIC = about the whole economy (inflation, prices vs wages, interest/mortgage rates, recession, job market, stock market crash, house prices). These are NOT events in a path: put them in macro_update, they apply to EVERY path so decisions stay comparable.
    Use a preset when it fits (inflation, rates, recession, housing, crisis, uncertain, base = back to normal), or set numbers the user gave. Timing in months from now ("in 2027" -> months from the start date). Example: "what if I do a master's and there's a recession in 2 years?" -> new_paths: master's; macro_update: recession_start_month 24.
 7. new_goals / remove_goals: savings targets ("I want 50k saved by 30", "add a goal: emergency fund of 10k by 2027", "drop the career goal"). A goal = an amount of cash + investments by a date (by_month = months after the start date: "by 30" -> (30-${ctx.age})*12). Goals apply to every path (each path shows its chance of reaching them).
-8. horizon_years: if the user mentions ages beyond the current horizon (e.g. "until 40" at age 20 needs >= 20 years; use the furthest age mentioned + 5, max 40).
+8. horizon_years: ONLY if the user asks for a horizon or mentions ages beyond the current one (e.g. "until 40" at age 20 needs >= 20 years; use the furthest age mentioned + 5, max 40). Otherwise null.
+9. unsupported: ONLY real-world things the simulator cannot represent (taxes, specific stocks, other currencies…). Never your own choices, never meta requests ("random paths", "demo mode").
+
+THE PATHS FORM A TREE. Each path has a parent_id: a branch keeps every decision of its parent and adds its own (today -> "Start working" -> "Start working, then buy a flat at 28").
+- If fork_from_path_id is set, the user is creating a NEW BRANCH of that path: put it in new_paths (not edits) with parent_id = fork_from_path_id and ONLY the events the user describes. Name it by what it adds (2-5 words, e.g. "+ flat at 28"). Do not change the original path.
+- The user compares two paths side by side: COMPARE.A (shown in green, "A", "the green one") and COMPARE.B (blue, "B", "the blue one"). "compare them", "which is better", "the other one" refer to these. Answer "which is better" with the numbers in PATHS; never claim one is the right choice for them.
 
 USE THE CONTEXT. Resolve "it", "that", "instead", "the kid", "the house" from HISTORY and PATHS.
 PATHS IS THE TRUTH: it shows exactly what each path contains right now. HISTORY only shows what was said. If HISTORY says something was added or changed but PATHS does not contain it, it was NOT applied: apply it now. Never claim a change you did not put in this turn's edits / new_paths / profile_update / macro_update. If you misunderstood before (the user corrects you), fix it: remove or edit the wrong path; do not argue.
@@ -158,7 +190,8 @@ ${eventRules(ctx)}
 STATE (today, after the user's updates): ${JSON.stringify(ctx.state)}
 
 PATHS ON SCREEN (id, name, events, results): ${JSON.stringify(ctx.paths)}
-Selected path: ${ctx.focus_path_id ?? 'none'}. target_path_id: ${ctx.target_path_id ?? 'none'}
+Selected path: ${ctx.focus_path_id ?? 'none'}. target_path_id: ${ctx.target_path_id ?? 'none'}. fork_from_path_id: ${ctx.fork_from_path_id ?? 'none'}
+COMPARE: A = ${ctx.compare?.A ?? 'none'}, B = ${ctx.compare?.B ?? 'none'}
 
 CATALOG (closest scenario idea, for catalog_id): ${ctx.catalog.map((c) => `${c.id} ${c.name}`).join('; ')}
 
@@ -180,7 +213,9 @@ Reply with JSON only (no prose, no code fences), matching this JSON Schema:
 ${JSON.stringify(EXPLAIN_JSON_SCHEMA)}`
 
 // ------------------------------------------------------------------ LLM call with validation + one repair retry
-async function callJson<T>(schema: z.ZodType<T>, jsonSchema: object, name: string, system: string, user: string): Promise<T> {
+const SHORTER = 'Your previous answer was cut off because it was too long. Reply again with a much SHORTER JSON: use add_events (path = null) for additions, parent_id + only the new events for branches, at most 8 new paths and 8 edits, short labels, and say in reply what is left to do next turn.'
+
+async function callJson<T>(schema: z.ZodType<T>, jsonSchema: object, name: string, system: string, user: string, opts: { maxTokens?: number; shorter?: string; timeoutMs?: number } = {}): Promise<T> {
   if (!client) throw new Error('No LLM_API_KEY set')
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: system },
@@ -194,10 +229,18 @@ async function callJson<T>(schema: z.ZodType<T>, jsonSchema: object, name: strin
         : JSON_MODE === 'json_object'
           ? ({ type: 'json_object' } as const)
           : undefined
-    const body = { model: MODEL, messages, temperature: 0, max_tokens: 4000, response_format, ...(REASONING === 'default' ? {} : { reasoning: { enabled: REASONING === 'on' } }) }
+    const body = { model: MODEL, messages, temperature: 0, max_tokens: opts.maxTokens ?? 4000, response_format, ...(REASONING === 'default' ? {} : { reasoning: { enabled: REASONING === 'on' } }) }
     // `reasoning` is a Together extension the OpenAI SDK types don't know; the SDK forwards it as-is.
-    const res = await client.chat.completions.create(body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming)
-    if (res.choices[0]?.finish_reason === 'length') throw new Error('LLM output truncated (max_tokens)')
+    const res = await client.chat.completions.create(body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, opts.timeoutMs ? { timeout: opts.timeoutMs } : undefined)
+    if (res.choices[0]?.finish_reason === 'length') {
+      // too long (e.g. "add 10 things to all 13 paths"): ask once for a shorter answer instead of failing
+      if (attempt === 0 && opts.shorter) {
+        lastErr = 'answer too long'
+        messages.push({ role: 'user', content: opts.shorter })
+        continue
+      }
+      throw new Error('the AI\'s answer was too long and got cut off')
+    }
     const text = res.choices[0]?.message?.content ?? ''
     try {
       const parsed = schema.safeParse(JSON.parse(stripFences(text)))
@@ -260,7 +303,14 @@ const server = createServer(async (req, res) => {
     if (url === '/api/health') {
       return send(res, 200, { ok: true, app: 'financial-twin', pid: process.pid, llm: client ? { base_url: BASE_URL, model: MODEL, json_mode: JSON_MODE, reasoning: REASONING } : null })
     }
-    if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, edit: EDIT_JSON_SCHEMA, chat: TURN_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA, answer: ANSWER_JSON_SCHEMA })
+    if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, edit: EDIT_JSON_SCHEMA, chat: TURN_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA, answer: ANSWER_JSON_SCHEMA, compare: COMPARE_JSON_SCHEMA })
+    if (url === '/api/compare' && req.method === 'POST') {
+      const { facts } = await readJson(req)
+      const user = `FACTS:\n${JSON.stringify(facts)}`
+      const data = await callJson(CompareSchema, COMPARE_JSON_SCHEMA, 'compare', COMPARE_SYSTEM, user)
+      console.log(`[compare] ${Date.now() - t0}ms`)
+      return send(res, 200, { ok: true, model: MODEL, data, prompt: { system: COMPARE_SYSTEM, user, settings: callSettings('compare') }, ms: Date.now() - t0 })
+    }
     if (url === '/api/parse' && req.method === 'POST') {
       const ctx = (await readJson(req)) as ParseContext
       const system = parseSystemPrompt(ctx)
@@ -280,7 +330,7 @@ const server = createServer(async (req, res) => {
       const ctx = (await readJson(req)) as ChatContext
       const system = chatSystemPrompt(ctx)
       const messages = [...(ctx.history ?? []).slice(-12).map((m) => `${m.role === 'user' ? 'USER' : 'TWIN'}: ${m.text}`), `USER: ${ctx.text}`].join('\n')
-      const data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `HISTORY (oldest first; the last line is the new message):\n${messages}`)
+      const data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `HISTORY (oldest first; the last line is the new message):\n${messages}`, { maxTokens: 12000, shorter: SHORTER, timeoutMs: Math.max(TIMEOUT_MS, 60000) })
       console.log(`[chat] ${Date.now() - t0}ms "${ctx.text.slice(0, 50)}" -> new ${data.new_paths.length}, edits ${data.edits.length}, remove ${data.remove_path_ids.length}, update ${data.profile_update ? 1 : 0}`)
       return send(res, 200, { ok: true, model: MODEL, data, prompt: { system, user: messages, settings: callSettings('turn') }, ms: Date.now() - t0 })
     }

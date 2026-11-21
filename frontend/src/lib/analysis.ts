@@ -108,7 +108,8 @@ export function verifyNumbers(text: string, facts: unknown): { total: number; un
     else if (x && typeof x === 'object') Object.values(x).forEach(walk)
     else if (typeof x === 'string') for (const m of x.matchAll(new RegExp(NUM.source + String.raw`(?:\s*(k|K|m|M|million)(?![\p{L}\d]))?`, 'gu'))) {
       const v = toNumber(m[1])
-      known.push(v, m[2] && /^k$/i.test(m[2]) ? v * 1000 : m[2] ? v * 1e6 : v)
+      const scaled = m[2] && /^k$/i.test(m[2]) ? v * 1000 : m[2] ? v * 1e6 : v
+      known.push(v, scaled, Math.abs(v), Math.abs(scaled))
     }
   }
   walk(facts)
@@ -125,7 +126,11 @@ export function verifyNumbers(text: string, facts: unknown): { total: number; un
     const unit = m[2] ?? m[3]
     if (v <= 12 && !unit && Number.isInteger(v)) continue // small counts ("2 years", "3 paths")
     total++
-    const tol = (x: number) => Math.max(1, Math.abs(x) * (unit ? 0.02 : 0.01))
+    // "1.3k" honestly stands for anything from 1,250 to 1,350: allow half of the last written digit (k / M amounts only)
+    const decimals = m[1].match(/[.,](\d+)$/)?.[1].length ?? 0
+    const scale = m[2] === 'k' || m[2] === 'K' ? 1000 : m[2] === 'M' || m[2] === 'million' ? 1e6 : 0
+    const precision = scale && !/[ \u00a0\u202f'’,]\d{3}/.test(m[1]) ? 0.5 * 10 ** -decimals * scale : 0
+    const tol = (x: number) => Math.max(1, Math.abs(x) * (unit ? 0.02 : 0.01), precision)
     if (!known.some((k) => Math.abs(k - v) <= tol(k))) unmatched.push(raw)
   }
   return { total, unmatched }
