@@ -1,0 +1,77 @@
+
+# ===================================
+# Node.js / React / pnpm
+# ===================================
+
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# pnpm
+.pnpm-store/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# ===================================
+# Python / uv
+# ===================================
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# ===================================
+# Environment variables / secrets
+# ===================================
+
+.env
+.env.*
+!.env.example
+
+# ===================================
+# mise
+# ===================================
+
+# Keep mise.toml and .mise.toml tracked.
+# Ignore local overrides if used.
+.mise.local.toml
+
+# ===================================
+# Editors
+# ===================================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===================================
+# OS
+# ===================================
+
+.DS_Store
+Thumbs.db
+
+# ===================================
+# Temporary files
+# ===================================
+
+*.tmp
+*.bak
+*.local
