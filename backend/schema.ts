@@ -14,6 +14,7 @@ export const EVENT_TYPES = [
   'invest', // monthly investing and/or a lump sum moved from cash into investments
   'market_shock', // investments drop by X%
   'take_loan', // borrow money (cash in now, repayments later)
+  'buy_home', // buy a home: own money + mortgage, rent stops
 ] as const
 
 export const HOUSEHOLDS = ['single', 'couple', 'family', 'shared_housing'] as const
@@ -29,12 +30,13 @@ export const EventSchema = z.object({
   monthly_net_income_chf: num.describe('New monthly NET income in CHF, ONLY if the user said it'),
   income_change_pct: num.describe('Income change in %, e.g. -40 for 60% part-time, -100 for job loss, +15 salary premium'),
   monthly_amount_chf: num.describe('Monthly amount in CHF (new rent for relocate, cost for recurring_expense, contribution for invest)'),
-  amount_chf: num.describe('Single amount in CHF (one_off: >0 cost, <0 money received; moving cost; lump sum; loan principal)'),
+  amount_chf: num.describe('Single amount in CHF (one_off: >0 cost, <0 money received; moving cost; lump sum; loan principal; home price)'),
   annual_tuition_chf: num.describe('Tuition per year in CHF, study only'),
   city: z.string().nullable().describe('relocate only: a city from the list, or "abroad: <country>"'),
   household_type: z.enum(HOUSEHOLDS).nullable(),
-  annual_rate_pct: num.describe('take_loan only: yearly interest rate in %'),
+  annual_rate_pct: num.describe('take_loan or buy_home (mortgage): yearly interest rate in %, ONLY if the user said it'),
   drop_pct: num.describe('market_shock only: % fall of investment value, e.g. 30'),
+  down_payment_pct: num.describe('buy_home only: % of the price paid with own money, ONLY if the user said it'),
 })
 
 export const ScenarioSchema = z.object({

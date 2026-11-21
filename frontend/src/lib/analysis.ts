@@ -80,7 +80,7 @@ export function buildFacts(profile: Profile, params: Params, branches: Branch[],
     })),
     focus_path: focus.name,
     drivers_for_focus_path: drv.slice(0, 3).map((d) => ({ input: d.name, effect_on_end_net_worth_chf: [r100(Math.min(d.low, d.high)), r100(Math.max(d.low, d.high))] })),
-    break_even: be ? { path: focus.name, income_change_needed_pct: Math.round(be.pct), from_age: Math.floor(profile.age + be.month / 12), monthly_income_needed_chf: r100(be.incomeNeeded), meaning: `income from that age would need to change by this % for ${focus.name} to end level with ${base.name}` } : null,
+    break_even: be ? { path: focus.name, income_change_needed_pct: Math.round(be.pct), from_age: Math.floor(profile.age + be.month / 12), monthly_income_needed_chf: r100(be.incomeNeeded), meaning: be.pct >= 0 ? `${focus.name} catches up with ${base.name} only if income from that age is this % higher than assumed` : `${focus.name} stays ahead of ${base.name} even if income from that age were this % lower than assumed` } : null,
     method: {
       uncertainty: 'Monte Carlo, 500 paths, spending surprises and bonuses learned from 24 months of synthetic ledger data',
       backtest_80pct_band_coverage_pct: p(params.backtest.coverage_80_year_end),

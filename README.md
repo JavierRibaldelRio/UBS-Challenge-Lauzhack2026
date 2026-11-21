@@ -185,14 +185,16 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 31 validation tests (accounting identities, edge cases, backtest sanity, number checker)
+cd frontend && pnpm test                     # 29 validation tests (accounting identities, edge cases, home purchase, number checker…)
+cd frontend && pnpm test:live                # 13 tests with the REAL LLM (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 cd ml && uv sync --frozen && uv run train.py # re-train from pre_docs/Data -> rewrites frontend/src/model/*.json (~5 s, deterministic)
 curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow
 ```
 
-LLM settings (`backend/.env`): `LLM_BASE_URL` (default Together `https://api.together.xyz/v1`), `LLM_MODEL`
-(default `meta-llama/Llama-3.3-70B-Instruct-Turbo`), `LLM_JSON_MODE`, `LLM_TIMEOUT_MS`. Any OpenAI-compatible server works
+LLM settings (`backend/.env`): `LLM_BASE_URL` (default Together `https://api.together.ai/v1`), `LLM_MODEL`
+(default `deepseek-ai/DeepSeek-V4.1-Flash-1017`), `LLM_REASONING` (`off` = no thinking, fast), `LLM_JSON_MODE`, `LLM_TIMEOUT_MS`.
+Full explanation of every part: **[DEV_NOTES.md](DEV_NOTES.md)**. Any OpenAI-compatible server works
 (OpenAI, Together, Groq, Ollama `http://localhost:11434/v1`, LM Studio, vLLM).
 
 ---
@@ -254,11 +256,11 @@ decision, not luck. Fixed seed → same result every time.
     { "name": "Master in Zurich", "catalog_id": "S001",   // closest of the 120 catalog ideas, or null
       "events": [
         { "type": "study",             // start_job | study | relocate | income_change | household_change |
-                                       // recurring_expense | one_off | invest | market_shock | take_loan
+                                       // recurring_expense | one_off | invest | market_shock | take_loan | buy_home
           "label": "Master", "start_month": 0, "duration_months": 24,
           "monthly_net_income_chf": null, "income_change_pct": null, "monthly_amount_chf": null,
           "amount_chf": null, "annual_tuition_chf": null, "city": null, "household_type": null,
-          "annual_rate_pct": null, "drop_pct": null }
+          "annual_rate_pct": null, "drop_pct": null, "down_payment_pct": null }
       ] }
   ],
   "horizon_years": null,
@@ -295,11 +297,11 @@ mise.toml          pinned toolchain
 
 ### 2.6 Suggested 3-minute demo
 
-1. *(20 s)* Problem: "Alexia, 20, Lausanne, CHF 8k. Work, master, or abroad?" → click **▶ Alexia demo**.
-2. *(40 s)* Chart: 3 futures with bands. Status quo: her real ledger runs out of cash in month 9 (switch to **Cash** — the black dots are the real data inside our band).
-3. *(40 s)* Click *Master's degree* → its pills: tuition **DATA** (her row in scenario-assumptions.csv), salary **DATA** (median of 69 peers), premium **UNKNOWN**. Break-even: "+24% salary needed". Edit premium to 30% → everything recomputes.
-4. *(40 s)* Type: *"What if I move to Zurich and have a child at 28?"* → new path appears, explanation updates, "✓ all numbers traced to the engine".
-5. *(40 s)* "Can you trust it?": backtest 78.5% in an 80% band, live accounting checks, every number has a source. "Don't predict the future — make it explorable."
+1. *(20 s)* Open the page. The big sentence says it: *"If nothing changes, Alexia's cash runs out at age 20."* The black dots on the chart are her **real** bank balance from the data, and our simulation sits right on them.
+2. *(40 s)* Click **▶ Demo**: *Start working* vs *Master's* vs *Move abroad* appear as cards and lines. Read the story card aloud: plain English, and "✓ all 13 numbers checked against the model".
+3. *(40 s)* Click the *Master's* card → **The numbers behind it**: tuition **from data** (her row in scenario-assumptions.csv), salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 24% higher". Set the premium to 30% → everything recomputes instantly.
+4. *(40 s)* Type: *"Work now, lose my job for 6 months at 25, then buy a flat for 600k at 28"* → one new path with 3 events. Toggle **Net worth / Cash**: buying the flat drops cash by the down payment, but net worth stays flat.
+5. *(40 s)* Open **Can you trust this?**: maths checks 5/5; trained on 2025 and tested on 2026, the "8 in 10" range caught 78.5% of real results. "Don't predict the future, make it explorable."
 
 ### 2.7 Limitations (say them before the judges do)
 

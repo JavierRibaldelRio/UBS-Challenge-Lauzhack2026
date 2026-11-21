@@ -15,6 +15,7 @@ export type EventType =
   | 'invest'
   | 'market_shock'
   | 'take_loan'
+  | 'buy_home'
 
 export type TwinEvent = {
   type: EventType
@@ -30,6 +31,7 @@ export type TwinEvent = {
   household_type: Household | null
   annual_rate_pct: number | null
   drop_pct: number | null
+  down_payment_pct: number | null
   /** set by presets only: where the preset's numbers come from */
   _source?: string
 }

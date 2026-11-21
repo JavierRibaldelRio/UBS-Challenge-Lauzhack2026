@@ -9,12 +9,15 @@ import { z } from 'zod'
 import { ExplainSchema, ParseSchema } from './schema.ts'
 
 const PORT = Number(process.env.PORT ?? 8000)
-const BASE_URL = process.env.LLM_BASE_URL ?? 'https://api.together.xyz/v1'
-const MODEL = process.env.LLM_MODEL ?? 'meta-llama/Llama-3.3-70B-Instruct-Turbo'
+const BASE_URL = process.env.LLM_BASE_URL ?? 'https://api.together.ai/v1'
+const MODEL = process.env.LLM_MODEL ?? 'deepseek-ai/DeepSeek-V4.1-Flash-1017'
 const API_KEY = process.env.LLM_API_KEY ?? process.env.TOGETHER_API_KEY ?? ''
 const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS ?? 25000)
 // json_schema (strict structured output) | json_object (JSON mode + schema in prompt) | none (prompt only)
 const JSON_MODE = (process.env.LLM_JSON_MODE ?? 'json_schema') as 'json_schema' | 'json_object' | 'none'
+// Hybrid reasoning models (DeepSeek V4.x on Together): "off" sends reasoning:{enabled:false} -> fast, no thinking tokens.
+// "default" sends nothing (provider default). Other providers may reject the extra field -> use "default" there.
+const REASONING = (process.env.LLM_REASONING ?? 'off') as 'off' | 'on' | 'default'
 
 const client = API_KEY ? new OpenAI({ baseURL: BASE_URL, apiKey: API_KEY, timeout: TIMEOUT_MS, maxRetries: 1 }) : null
 
@@ -42,7 +45,7 @@ function parseSystemPrompt(ctx: ParseContext) {
 You DESCRIBE decisions. You NEVER invent money amounts.
 
 RULES
-- Use only these event types: start_job, study, relocate, income_change, household_change, recurring_expense, one_off, invest, market_shock, take_loan.
+- Use only these event types: start_job, study, relocate, income_change, household_change, recurring_expense, one_off, invest, market_shock, take_loan, buy_home.
 - Any number the user did not state -> null. The simulator fills it from data and shows the source. Do not guess salaries, rents, tuition or costs.
 - Timing: months after the start (month 0 = ${ctx.start_date}, when ${ctx.name} is ${ctx.age}). "at 25" -> (25-${ctx.age})*12. "next year" -> 12. "now" -> 0.
 - If the user compares options ("A or B"), return one scenario per option (max 3). Do not add a "do nothing" scenario; the app already has one.
@@ -50,6 +53,9 @@ RULES
 - study: after it ends the person starts a job automatically; use income_change_pct only if the user states a salary premium.
 - income_change: part-time 60% -> -40. Job loss -> -100 with duration_months.
 - one_off: positive amount_chf = a cost, negative = money received.
+- buy_home: amount_chf = the home price; down_payment_pct and annual_rate_pct (mortgage) only if stated. Do NOT also add a one_off or take_loan for the same purchase.
+- Several things in ONE life (e.g. "do a master's now, lose my job at 27 and buy a flat at 30") = ONE scenario with several events, in any order.
+- "k" means thousand (25k = 25000), "m"/"million" = 1000000.
 - relocate.city must be one of: ${ctx.cities.join(', ')}; otherwise "abroad: <country>".
 - Put anything you cannot represent (taxes, specific stocks, career probabilities...) in "unsupported".
 - catalog_id: closest id from the catalog below, or null.
@@ -58,7 +64,9 @@ PERSON (fictional): ${JSON.stringify(ctx.profile)}
 
 CATALOG (id: name):
 ${ctx.catalog.map((c) => `${c.id}: ${c.name}`).join('\n')}
-${JSON_MODE !== 'json_schema' ? `\nReply with JSON only, matching this JSON Schema:\n${JSON.stringify(PARSE_JSON_SCHEMA)}` : ''}`
+
+Reply with JSON only (no prose, no code fences), matching this JSON Schema:
+${JSON.stringify(PARSE_JSON_SCHEMA)}`
 }
 
 const EXPLAIN_SYSTEM = `You explain financial simulation results to a non-expert, in plain, simple English (short sentences, no jargon).
@@ -68,7 +76,9 @@ STRICT RULES
 - Say "in this simulation" / "under these assumptions". Never promise outcomes. Never give advice like "you should".
 - Mention the risk of running out of cash if it is above 0%.
 - If a break-even value is given, explain it in one sentence.
-- The person and data are fictional.${JSON_MODE !== 'json_schema' ? `\nReply with JSON only, matching this JSON Schema:\n${JSON.stringify(EXPLAIN_JSON_SCHEMA)}` : ''}`
+- The person and data are fictional.
+Reply with JSON only (no prose, no code fences), matching this JSON Schema:
+${JSON.stringify(EXPLAIN_JSON_SCHEMA)}`
 
 // ------------------------------------------------------------------ LLM call with validation + one repair retry
 async function callJson<T>(schema: z.ZodType<T>, jsonSchema: object, name: string, system: string, user: string): Promise<T> {
@@ -85,7 +95,10 @@ async function callJson<T>(schema: z.ZodType<T>, jsonSchema: object, name: strin
         : JSON_MODE === 'json_object'
           ? ({ type: 'json_object' } as const)
           : undefined
-    const res = await client.chat.completions.create({ model: MODEL, messages, temperature: 0, response_format })
+    const body = { model: MODEL, messages, temperature: 0, max_tokens: 4000, response_format, ...(REASONING === 'default' ? {} : { reasoning: { enabled: REASONING === 'on' } }) }
+    // `reasoning` is a Together extension the OpenAI SDK types don't know; the SDK forwards it as-is.
+    const res = await client.chat.completions.create(body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming)
+    if (res.choices[0]?.finish_reason === 'length') throw new Error('LLM output truncated (max_tokens)')
     const text = res.choices[0]?.message?.content ?? ''
     try {
       const parsed = schema.safeParse(JSON.parse(stripFences(text)))
@@ -134,7 +147,7 @@ const server = createServer(async (req, res) => {
   const t0 = Date.now()
   try {
     if (url === '/api/health') {
-      return send(res, 200, { ok: true, llm: client ? { base_url: BASE_URL, model: MODEL, json_mode: JSON_MODE } : null })
+      return send(res, 200, { ok: true, llm: client ? { base_url: BASE_URL, model: MODEL, json_mode: JSON_MODE, reasoning: REASONING } : null })
     }
     if (url === '/api/schema') return send(res, 200, { parse: PARSE_JSON_SCHEMA, explain: EXPLAIN_JSON_SCHEMA })
     if (url === '/api/parse' && req.method === 'POST') {
@@ -159,5 +172,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Financial Twin API on http://localhost:${PORT}`)
-  console.log(client ? `LLM: ${MODEL} @ ${BASE_URL} (json mode: ${JSON_MODE})` : 'LLM: none (no LLM_API_KEY) -> frontend uses offline fallback')
+  console.log(client ? `LLM: ${MODEL} @ ${BASE_URL} (json mode: ${JSON_MODE}, reasoning: ${REASONING})` : 'LLM: none (no LLM_API_KEY) -> frontend uses offline fallback')
 })

@@ -97,7 +97,7 @@ Both are **bundled into the frontend**, so there's no loading step that could fa
 **No, not for this.** Training is 1,200 people × 24 months, about 5 seconds on a laptop CPU. A GPU would not help, and a big neural network would just overfit 28,800 rows.
 
 When Together compute *would* make sense:
-- **Managed fine-tuning** (no cluster needed): `tg files upload train.jsonl`, then `tg fine-tuning create --training-file <id> --model <base> --lora`. This would teach a small LLM our JSON format. Today DeepSeek already gets 10/10 of our live test questions right, so this isn't needed.
+- **Managed fine-tuning** (no cluster needed): `tg files upload train.jsonl`, then `tg fine-tuning create --training-file <id> --model <base> --lora`. This would teach a small LLM our JSON format. Today DeepSeek already gets 11/11 of our live test questions right, so this isn't needed.
 - **GPU clusters** (H100 from about $2–4 per GPU-hour, launched in the console at `api.together.ai/clusters` or with `tg clusters create`): only for training large models from scratch. Not useful with this data size.
 
 ---
@@ -142,7 +142,7 @@ These run on the selected path every time anything changes. You can see them und
 
 Input: the person + a list of **events** (from the LLM, a preset button, or the offline parser). Output: a `Plan` (arrays of income, rent, spending etc. for every month) plus a list of **assumptions**. Each assumption has a source label and a short note saying where the number comes from.
 
-### The 10 event types
+### The 11 event types
 
 | type | what it does | default when a number is missing |
 |---|---|---|
@@ -156,6 +156,9 @@ Input: the person + a list of **events** (from the LLM, a preset button, or the 
 | `invest` | monthly amount and/or lump sum moved into investments | 0 (**unknown**) |
 | `market_shock` | investments fall by X% | 30% (**assumption**) |
 | `take_loan` | cash now, monthly repayments | median rate of the 283 loans (**data**); 5-year term (**assumption**) |
+| `buy_home` | own money (down payment) leaves cash, a mortgage is paid to the seller, the home is added to net worth, rent stops, upkeep starts. Interest-only mortgage | price: **unknown** (must be set); down payment 20%, mortgage 2%, upkeep 1%/yr (**assumption**) |
+
+**One path can hold many events.** "Do a master's now, lose my job at 25 and buy a flat at 28" becomes **one path with 3 events** (one line on the chart). "Master's **or** work?" becomes **two paths** (two lines). One question can create 1–3 paths.
 
 Events are applied **in time order**, so "study, then move" works.
 
@@ -226,11 +229,12 @@ Restart the backend after editing `.env`.
 5. The browser **caches** every successful answer (localStorage). The same question replays even without internet. Rehearse demo questions once.
 
 ### The prompts (in `server.ts`)
-- **Parse rules (short version):** use only the 10 event types; **any number the user didn't say → null**; "at 25" → months from now; "A or B" → two scenarios; anything we can't model → `unsupported`.
+- **Parse rules (short version):** use only the 11 event types; several things in one life = one scenario with several events; **any number the user didn't say → null**; "at 25" → months from now; "A or B" → two scenarios; anything we can't model → `unsupported`.
 - **Explain rules:** plain English, use **only** numbers from the facts, say "in this simulation", never give advice, mention the cash risk and the break-even.
 
 ### Measured with the real API (`pnpm test:live`)
-- 10/10 test questions parsed correctly, in **0.6–2.6 s** each. These include "A or B", ages → months, money amounts, "Berlin" → abroad, part-time 60% → −40%, a car + insurance, and a lottery question with tax (taxes correctly listed as unsupported).
+- 11/11 test questions parsed correctly, in **0.6–2.6 s** each. These include "A or B", ages → months, money amounts, "Berlin" → abroad, part-time 60% → −40%, a car + insurance, a lottery question with tax (taxes correctly listed as unsupported), and one sentence with three life events (master's + job loss + flat), which became one path with 3 events.
+- In the app, a question takes ~2–6 s end to end (the parse prompt includes the 120-scenario catalog).
 - Explanation in about **1.5 s**, with 13/13 numbers verified.
 
 ### How to change it
@@ -249,8 +253,10 @@ Restart the backend after editing `.env`.
    - **quick buttons** (`+ Master's degree`…) add a path instantly, without AI
    - **example questions** (in quotes) go through the AI
 4. **Outcome cards:** one per path. A big number (net worth at the end), the difference vs the baseline, "cash runs out at…" or "cash stays positive", and goals reached. Clicking a card selects it; the card colour is its chart line. "compare others to this" makes it the baseline. × removes it.
-5. **Chart:** median line per path; shaded range only for the selected path (keeps it calm). Toggles: Net worth / Cash (Cash shows the **real ledger dots** from the data) and 3–30 years.
-6. **The story:** the AI paragraph, a highlighted **break-even** line, the main caveat, and "✓ all N numbers checked".
+5. **Chart:** median line per path; shaded range only for the selected path (keeps it calm). Years: 3–30.
+   - **Net worth vs cash:** *cash* = money in the bank. *Net worth* = cash + investments + home − debts. For someone with only a bank account (like Alexia) they are the **same**, so the app shows one chart called "Money" and no toggle. The toggle appears as soon as any path has investments, a home or a loan. Example: buying a flat makes cash drop by the down payment while net worth stays flat.
+   - The **black dots** are the real bank balance from the data (first 24 months). They appear in the cash view, or in the single "Money" view.
+6. **The story:** the AI paragraph, a highlighted **break-even** line, the main caveat, and "✓ all N numbers checked". The break-even reads "catches up only if income is X% higher" when a path is behind the baseline, or "stays ahead even if income were X% lower" when it is ahead. If you change things quickly, only the newest explanation is shown (older answers are dropped).
 7. **The numbers behind [path]** (folded): every number with its source label. Click a value to change it (instant recompute); ↺ resets it. Below that, the *what matters most* bars.
 8. **Can you trust this?** (folded): the summary shows ✓ accounting, ✓ backtest, ✓ AI numbers. Opening it shows details in 4 plain blocks.
 
@@ -271,7 +277,7 @@ Restart the backend after editing `.env`.
 
 ### How to change it
 - **Texts:** directly in `App.tsx` / components (all plain English strings).
-- **Quick buttons:** `presets()` in `resolve.ts`. **Example questions:** `EXAMPLES` in `App.tsx`.
+- **Quick buttons:** `presets()` in `resolve.ts`. They adapt to the person: no "start working" or "master's" for retirees or people 60+. **Example questions:** `EXAMPLES` in `App.tsx`.
 - **Colours:** `COLORS` in `App.tsx` (path colours) and the CSS variables in `index.css`.
 - **The opening sentence:** the `hook` in `App.tsx`.
 - **Default person:** `useState('P00001')` in `App.tsx`.
@@ -282,8 +288,8 @@ Restart the backend after editing `.env`.
 
 | command | what it checks | needs |
 |---|---|---|
-| `cd frontend && pnpm test` | 31 tests: accounting identities for every preset on 3 different people, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
-| `cd frontend && pnpm test:live` | 12 tests with the **real LLM**: 10 questions parsed and checked field by field, then a full explanation with every number verified | backend running with a key |
+| `cd frontend && pnpm test` | 29 tests: accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
+| `cd frontend && pnpm test:live` | 13 tests with the **real LLM**: 11 questions parsed and checked field by field, then a full explanation with every number verified | backend running with a key |
 | `cd backend && pnpm typecheck` | backend types | nothing |
 | `cd frontend && pnpm build` | frontend types and production build | nothing |
 | `cd ml && uv run train.py` | re-trains and prints the data checks and backtest | uv |

@@ -41,7 +41,7 @@ export function AssumptionList({ items, overrides, onChange }: { items: Assumpti
 function Row({ a, overridden, onChange }: { a: Assumption; overridden: boolean; onChange: (v: number | null) => void }) {
   const [edit, setEdit] = useState(false)
   const [val, setVal] = useState('')
-  const editable = a.key !== 'learned.delta'
+  const editable = a.key !== 'learned.delta' && !a.key.endsWith('.info') // computed lines are read-only
   const shown = a.unit.startsWith('CHF') ? `${chf(a.value)}${a.unit.slice(3)}` : `${Math.round(a.value * 100) / 100} ${a.unit}`
   const commit = () => {
     const n = Number(val.replace(/['’,\s]/g, ''))

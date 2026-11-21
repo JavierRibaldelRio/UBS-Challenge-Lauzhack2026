@@ -16,11 +16,13 @@ export type Plan = {
   extra: Float64Array // recurring extra costs
   oneOff: Float64Array // single costs (>0) / money in (<0), incl. tuition
   contrib: Float64Array // cash -> investments transfers
+  homeDown: Float64Array // own money paid into a home (down payment)
+  homeValue: Float64Array // value of an owned home (counted in net worth, not in cash)
   status: Status[]
   household: Household[]
   city: string[]
   shocks: { month: number; drop: number }[]
-  loans: { start: number; principal: number; annualRate: number; payment: number; isNew: boolean }[]
+  loans: { start: number; principal: number; annualRate: number; payment: number; isNew: boolean; toSeller?: boolean }[]
   startCash: number
   startInvest: number
   muSe: number // standard error of the personal spending level (parameter uncertainty)
@@ -101,6 +103,8 @@ export function resolve(
   const extra = new Float64Array(H)
   const oneOff = new Float64Array(H)
   const contrib = new Float64Array(H)
+  const homeDown = new Float64Array(H)
+  const homeValue = new Float64Array(H)
   const shocks: Plan['shocks'] = []
   const loans: Plan['loans'] = []
   let changeMonth: number | null = null
@@ -234,6 +238,27 @@ export function resolve(
         if (startInvest <= 0 && !spec.events.some((x) => x.type === 'invest')) warnings.push('A market shock only affects investments, and this profile has none.')
         break
       }
+      case 'buy_home': {
+        const price = A(`${k}.price`, `${e.label}: price`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'House prices are not in the data. Please set the price.')
+        if (price <= 0) {
+          warnings.push('Buying a home has no effect until you set a price.')
+          break
+        }
+        const downPct = A(`${k}.down`, `${e.label}: own money (down payment)`, e.down_payment_pct ?? 20, '%', e.down_payment_pct != null ? tag : 'assumption', e.down_payment_pct != null ? tagNote : 'Swiss lenders usually ask for at least 20% own money.')
+        const rate = A(`${k}.rate`, `${e.label}: mortgage interest`, e.annual_rate_pct ?? 2, '%/yr', e.annual_rate_pct != null ? tag : 'assumption', e.annual_rate_pct != null ? tagNote : 'Mortgage rates are not in the data. Illustrative value, please check.') / 100
+        const upkeep = A(`${k}.upkeep`, `${e.label}: upkeep per year`, 1, '% of price', 'assumption', 'Rule of thumb for maintenance. Not in the data.')
+        const mortgage = price * (1 - downPct / 100)
+        homeDown[s] += price - mortgage
+        for (let t = s; t < H; t++) {
+          homeValue[t] += price // real value kept constant (no price growth assumed)
+          rent[t] = 0 // owners stop paying rent
+          extra[t] += (price * upkeep) / 100 / 12
+        }
+        // interest-only mortgage (common in Switzerland); principal stays as debt
+        loans.push({ start: s, principal: mortgage, annualRate: rate, payment: (mortgage * rate) / 12, isNew: true, toSeller: true })
+        assumptions.push({ key: `${k}.info`, label: `${e.label}: mortgage`, value: Math.round(mortgage), unit: 'CHF', source: 'assumption', note: 'price − own money; interest only, rent stops, home value kept constant in 2025 francs' })
+        break
+      }
       case 'take_loan': {
         const principal = A(`${k}.principal`, `${e.label}: amount borrowed`, e.amount_chf ?? 0, 'CHF', e.amount_chf != null ? tag : 'missing', e.amount_chf != null ? tagNote : 'Amount not given.')
         const rate = A(`${k}.rate`, `${e.label}: interest rate`, e.annual_rate_pct ?? loanRateMedian * 100, '%/yr', e.annual_rate_pct != null ? tag : 'data', e.annual_rate_pct != null ? tagNote : 'median rate of the 283 loans in synthetic-liabilities.csv') / 100
@@ -265,7 +290,7 @@ export function resolve(
   }
 
   return {
-    months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, status, household, city, shocks, loans,
+    months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, homeDown, homeValue, status, household, city, shocks, loans,
     startCash, startInvest, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
   }
 }
@@ -273,16 +298,18 @@ export function resolve(
 // ---------------------------------------------------------------- presets (no LLM needed)
 const ev = (p: Partial<TwinEvent> & Pick<TwinEvent, 'type' | 'label'>): TwinEvent => ({
   start_month: 0, duration_months: null, monthly_net_income_chf: null, income_change_pct: null, monthly_amount_chf: null,
-  amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, ...p,
+  amount_chf: null, annual_tuition_chf: null, city: null, household_type: null, annual_rate_pct: null, drop_pct: null, down_payment_pct: null, ...p,
 })
 
 export function presets(profile: Profile, params: Params): { id: string; label: string; spec: ScenarioSpec }[] {
   const out: { id: string; label: string; spec: ScenarioSpec }[] = []
-  if (profile.status !== 'employed') out.push({ id: 'work', label: 'Start working', spec: { name: 'Start working', catalog_id: 'S001', events: [ev({ type: 'start_job', label: 'Start working' })] } })
-  out.push({ id: 'master', label: "Master's degree", spec: { name: "Master's degree", catalog_id: 'S001', events: [ev({ type: 'study', label: "Master's" })] } })
+  const working = profile.status === 'employed' || profile.status === 'self_employed'
+  const late = profile.status === 'retired' || profile.age >= 60
+  if (!working && !late) out.push({ id: 'work', label: 'Start working', spec: { name: 'Start working', catalog_id: 'S001', events: [ev({ type: 'start_job', label: 'Start working' })] } })
+  if (!late) out.push({ id: 'master', label: "Master's degree", spec: { name: "Master's degree", catalog_id: 'S001', events: [ev({ type: 'study', label: "Master's" })] } })
   const dest = profile.city === 'Zurich' ? 'Geneva' : 'Zurich'
-  if (params.anchors.rent_by_city[dest]) out.push({ id: 'move', label: `Move to ${dest}`, spec: { name: `Move to ${dest}`, catalog_id: null, events: [ev({ type: 'relocate', label: `Move to ${dest}`, city: dest, start_month: 12 }), ...(profile.status !== 'employed' ? [ev({ type: 'start_job', label: 'Job', start_month: 12 })] : [])] } })
-  out.push({
+  if (params.anchors.rent_by_city[dest]) out.push({ id: 'move', label: `Move to ${dest}`, spec: { name: `Move to ${dest}`, catalog_id: null, events: [ev({ type: 'relocate', label: `Move to ${dest}`, city: dest, start_month: 12 }), ...(!working && !late ? [ev({ type: 'start_job', label: 'Job', start_month: 12 })] : [])] } })
+  if (!late) out.push({
     id: 'abroad', label: 'Move abroad', spec: {
       name: 'Move abroad', catalog_id: null,
       events: [ev({ type: 'relocate', label: 'Move abroad', city: 'abroad', monthly_net_income_chf: 3700, amount_chf: 6500, _source: 'UBS starter-kit illustrative value (scenario_config.json)' })],

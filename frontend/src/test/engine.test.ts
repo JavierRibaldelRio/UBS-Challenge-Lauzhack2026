@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { breakEven, drivers, verifyNumbers } from '../lib/analysis'
 import { makeEvent, medianLoanRate, presets, resolve } from '../lib/resolve'
 import { checks, runPath, simulate } from '../lib/sim'
+import { offlineParse } from '../lib/fallback'
 import type { Params, Profile, ScenarioSpec } from '../lib/types'
 
 const params: Params = JSON.parse(readFileSync('src/model/params.json', 'utf8'))
@@ -49,6 +50,32 @@ describe('scenario logic', () => {
   it('loan repaid: debt never negative, interest costs money', () => {
     const l = plan(alexia, { name: 'l', catalog_id: null, events: [makeEvent({ type: 'take_loan', label: 'l', amount_chf: 10000, duration_months: 24 })] })
     expect(endNW(l)).toBeLessThan(endNW(plan(alexia, quo)))
+  })
+  it('buying a home: net worth unchanged at purchase, cash drops by the down payment, rent stops, checks pass', () => {
+    const home = plan(alexia, { name: 'h', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'h', start_month: 12, amount_chf: 500000 })] }, { 'g.cash': 200000 })
+    const none = plan(alexia, quo, { 'g.cash': 200000 })
+    const a = runPath(home, params, null)
+    const b = runPath(none, params, null)
+    // cash drops by ~the 100k down payment; net worth only by the small monthly differences (rent saved, upkeep, interest)
+    expect(Math.abs(a.cash[12] - a.cash[11] - (b.cash[12] - b.cash[11]) + 100000)).toBeLessThan(2000)
+    expect(Math.abs(a.nw[12] - a.nw[11] - (b.nw[12] - b.nw[11]))).toBeLessThan(2000)
+    expect(home.rent[12]).toBe(0)
+    for (const c of checks(home, params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+  it('buying a home without a price does nothing and warns', () => {
+    const h = plan(alexia, { name: 'h', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'h' })] })
+    expect(h.warnings.length).toBe(1)
+    expect(endNW(h)).toBeCloseTo(endNW(plan(alexia, quo)), 6)
+  })
+  it('presets fit the person (no "start working" for a retiree)', () => {
+    const retired = profiles.find((p) => p.status === 'retired')!
+    expect(presets(retired, params).map((p) => p.id)).not.toContain('work')
+    expect(presets(retired, params).map((p) => p.id)).not.toContain('master')
+  })
+  it('offline parser understands a combined sentence', () => {
+    const r = offlineParse('work now, lose my job for 6 months, then buy a flat for 600k', alexia, Object.keys(params.anchors.rent_by_city))
+    const types = r.scenarios.flatMap((s) => s.events.map((e) => e.type))
+    expect(types).toEqual(expect.arrayContaining(['start_job', 'income_change', 'buy_home']))
   })
   it('user override wins and is tagged "you"', () => {
     const p2 = plan(alexia, presets(alexia, params)[0].spec, { 'e0.income': 5000 })

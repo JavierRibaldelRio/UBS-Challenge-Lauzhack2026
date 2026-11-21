@@ -39,6 +39,10 @@ export function offlineParse(text: string, profile: Profile, cities: string[]): 
     if (pt) ev.push(makeEvent({ type: 'income_change', label: 'Part-time', start_month: start, income_change_pct: Number(pt[1] ?? pt[2]) - 100 }))
     if (/child|baby|kid/.test(part)) ev.push(makeEvent({ type: 'household_change', label: 'Have a child', start_month: start, household_type: 'family' }))
     if (/partner|move in together|married|wedding/.test(part)) ev.push(makeEvent({ type: 'household_change', label: 'Move in with partner', start_month: start, household_type: 'couple' }))
+    if (/\bbuy\b.*\b(house|flat|apartment|home|property)\b/.test(part)) {
+      const price = money(/(?:for|price|costing|worth) (?:chf )?(\d[\d',]*)(k?)/)
+      ev.push(makeEvent({ type: 'buy_home', label: 'Buy a home', start_month: start, amount_chf: price }))
+    }
     if (/crash|recession|market drop/.test(part)) ev.push(makeEvent({ type: 'market_shock', label: 'Market crash', start_month: start, drop_pct: 30 }))
     const inv = money(/invest (?:chf )?(\d[\d',]*)(k?)/)
     if (inv != null) ev.push(makeEvent({ type: 'invest', label: 'Invest', start_month: start, monthly_amount_chf: inv }))

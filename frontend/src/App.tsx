@@ -16,7 +16,7 @@ import profilesJson from './model/profiles.json'
 const COLORS = ['#64748b', '#2563eb', '#e11d48', '#059669', '#7c3aed', '#d97706', '#0891b2']
 type PathState = { id: string; spec: ScenarioSpec; overrides: Overrides; color: string }
 const TODAY = (): PathState => ({ id: 'today', spec: { name: 'If nothing changes', catalog_id: null, events: [] }, overrides: {}, color: COLORS[0] })
-const EXAMPLES = ["Master's in Zurich, or start working at 22 for 6,000 a month?", 'What if I have a baby at 28?', 'What if I lose my job for 6 months at 25?']
+const EXAMPLES = ["Master's in Zurich, or start working at 22 for 6,000 a month?", 'Work now, lose my job for 6 months at 25, then buy a flat for 600k at 28', 'What if I have a baby at 28?']
 
 type Explain = { status: 'loading' | 'ai' | 'offline'; data: ExplainResult; model?: string; cached?: boolean; error?: string; verify?: { total: number; unmatched: string[] } }
 
@@ -96,8 +96,11 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const factsKey = JSON.stringify(facts)
 
   // ------------------------------------------------------------ explanation: instant template, then the LLM (verified)
+  const explainSeq = useRef(0)
   const runExplain = useCallback(async (f: typeof facts) => {
+    const id = ++explainSeq.current
     const r = await apiExplain(f)
+    if (id !== explainSeq.current) return // a newer request was sent meanwhile: drop this stale answer
     if (r.ok) setExplain({ status: 'ai', data: r.data, model: r.model, cached: r.cached, verify: verifyNumbers(`${r.data.headline} ${r.data.explanation} ${r.data.caveat}`, f) })
     else setExplain({ status: 'offline', data: templateExplanation(f), error: r.error })
   }, [])
@@ -140,6 +143,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   }
 
   const endAge = profile.age + years
+  // Net worth = cash + investments + home − debts. If nothing but cash exists in any path, the two views are identical -> one chart.
+  const sameAsCash = computed.every((c) => c.result.nw.every((b, i) => Math.abs(b.p50 - c.result.cash[i].p50) < 1))
+  const view = sameAsCash ? 'cash' : metric
   const runsOut = today.result.probNegCash >= 0.5 && today.result.firstNegMonth != null
   const hook = runsOut ? (
     <>
@@ -240,16 +246,18 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
 
         <section className="card">
           <div className="card-head">
-            <h2>{metric === 'nw' ? 'Net worth' : 'Cash in the bank'}, year by year</h2>
+            <h2>{sameAsCash ? 'Money, year by year' : view === 'nw' ? 'Net worth (everything owned − debts)' : 'Cash in the bank'}</h2>
             <span className="spacer" />
-            <div className="seg">
-              <button className={metric === 'nw' ? 'on' : ''} onClick={() => setMetric('nw')}>
-                Net worth
-              </button>
-              <button className={metric === 'cash' ? 'on' : ''} onClick={() => setMetric('cash')}>
-                Cash
-              </button>
-            </div>
+            {!sameAsCash && (
+              <div className="seg">
+                <button className={view === 'nw' ? 'on' : ''} onClick={() => setMetric('nw')}>
+                  Net worth
+                </button>
+                <button className={view === 'cash' ? 'on' : ''} onClick={() => setMetric('cash')}>
+                  Cash
+                </button>
+              </div>
+            )}
             <select className="mini" value={years} onChange={(e) => setYears(Number(e.target.value))}>
               {[3, 5, 10, 20, 30].map((y) => (
                 <option key={y} value={y}>
@@ -258,10 +266,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               ))}
             </select>
           </div>
-          <ProjectionChart paths={computed} focusId={focus.id} profile={profile} metric={metric} months={H} />
+          <ProjectionChart paths={computed} focusId={focus.id} profile={profile} metric={view} months={H} />
           <p className="caption">
             Lines = the typical outcome of 500 simulated futures. Shaded = where 8 in 10 of them land for <b style={{ color: focus.color }}>{focus.name}</b>.
-            {metric === 'cash' ? ' Dots = the real ledger from the data.' : ' Switch to Cash to compare with the real data.'}
+            {view === 'cash' ? ' Dots = the real bank balance from the data (first 2 years).' : ' Switch to Cash to see the real data.'}
           </p>
         </section>
 
@@ -274,12 +282,15 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               <div className="insight">
                 <span className="insight-icon">⚖</span>
                 <div>
-                  <b>{focus.name}</b> ends level with <b>{baseline.name}</b> only if income from age {Math.floor(profile.age + be.month / 12)} is{' '}
-                  <b>
-                    {be.pct >= 0 ? '+' : ''}
-                    {be.pct.toFixed(0)}%
-                  </b>{' '}
-                  compared to what we assumed (about {chf(be.incomeNeeded)} a month).
+                  {be.pct >= 0 ? (
+                    <>
+                      <b>{focus.name}</b> catches up with <b>{baseline.name}</b> only if income from age {Math.floor(profile.age + be.month / 12)} is <b>{be.pct.toFixed(0)}% higher</b> than we assumed (about {chf(be.incomeNeeded)} a month).
+                    </>
+                  ) : (
+                    <>
+                      <b>{focus.name}</b> stays ahead of <b>{baseline.name}</b> even if income from age {Math.floor(profile.age + be.month / 12)} were <b>{Math.abs(be.pct).toFixed(0)}% lower</b> than we assumed (about {chf(be.incomeNeeded)} a month).
+                    </>
+                  )}
                 </div>
               </div>
             )}

@@ -6,7 +6,8 @@
 //   cash[t+1] = cash[t] + income + bonus + loan_in - spending - extra - one_off - invest_transfer - loan_payment
 //   invest[t+1] = (invest[t] + invest_transfer) * (1 + r_t) * (1 - shock)
 //   debt[t+1] = debt[t] + interest - loan_payment      (never below 0)
-//   net_worth = cash + invest - debt
+//   home      = value of a bought home (bought with own money + a mortgage paid to the seller)
+//   net_worth = cash + invest + home - debt
 // All branches use the SAME random numbers (common random numbers), so differences between
 // branches come from the decision, not from luck.
 import { fromQuantiles, mulberry32, normal, quantile } from './rng'
@@ -81,7 +82,7 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
     plan.loans.forEach((l, i) => {
       if (l.isNew && t === l.start) {
         debt[i] += l.principal
-        loanIn += l.principal
+        if (!l.toSeller) loanIn += l.principal // a mortgage goes straight to the seller, not into cash
       }
       if (t < l.start || debt[i] <= 0) return
       const it = (debt[i] * l.annualRate) / 12
@@ -93,7 +94,8 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
 
     const contrib = plan.contrib[t]
     const cashBefore = c
-    c = c + inc + bonus + loanIn - spend - plan.extra[t] - oneOff - contrib - pay
+    const down = plan.homeDown[t] // own money put into a home (cash -> home, net worth unchanged)
+    c = c + inc + bonus + loanIn - spend - plan.extra[t] - oneOff - contrib - pay - down
     const vBefore = v
     const r = retM + (rand ? volM * zRet : 0)
     v = (v + contrib) * (1 + r)
@@ -101,9 +103,9 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
     if (shock) v *= 1 - shock.drop
     const d = debt.reduce((a, x) => a + x, 0)
     cash[t] = c
-    nw[t] = c + v - d
+    nw[t] = c + v + plan.homeValue[t] - d
     liquid[t] = c + v
-    ledger?.push({ t, cashBefore, cashAfter: c, inflow: inc + bonus + loanIn, outflow: spend + plan.extra[t] + oneOff + contrib + pay, contrib, interest, investGain: v - vBefore - contrib, debt: d, nw: nw[t], spend })
+    ledger?.push({ t, cashBefore, cashAfter: c, inflow: inc + bonus + loanIn, outflow: spend + plan.extra[t] + oneOff + contrib + pay + down, contrib, interest, investGain: v - vBefore - contrib, debt: d, nw: nw[t], spend })
   }
   return { cash, nw, liquid }
 }
@@ -191,7 +193,7 @@ export function checks(plan: Plan, params: Params, profile: Profile): Check[] {
   let maxNwErr = 0
   let prevNw = plan.startCash + plan.startInvest - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
   for (const r of rows) {
-    const loanIn = plan.loans.filter((l) => l.isNew && l.start === r.t).reduce((a, l) => a + l.principal, 0)
+    const loanIn = plan.loans.filter((l) => l.isNew && !l.toSeller && l.start === r.t).reduce((a, l) => a + l.principal, 0)
     const expected = prevNw + (r.inflow - loanIn) - r.spend - plan.extra[r.t] - plan.oneOff[r.t] - r.interest + r.investGain
     maxNwErr = Math.max(maxNwErr, Math.abs(expected - r.nw))
     prevNw = r.nw

@@ -36,6 +36,17 @@ const CASES: Case[] = [
   { q: 'What if I lose my job for 6 months at 25?', expect: (r) => { const c = ev(r).find((e) => e.type === 'income_change'); expect(c?.income_change_pct).toBe(-100); expect(c?.duration_months).toBe(6) } },
   { q: 'What if I work part-time at 60%?', expect: (r) => expect(ev(r).find((e) => e.type === 'income_change')?.income_change_pct).toBe(-40) },
   { q: 'What if I buy a car for 25k and pay 300 a month for insurance?', expect: (r) => { expect(ev(r).some((e) => e.type === 'one_off' && e.amount_chf === 25000)).toBe(true); expect(ev(r).some((e) => e.type === 'recurring_expense' && e.monthly_amount_chf === 300)).toBe(true) } },
+  {
+    q: "Do a 2-year master's now, lose my job for 6 months at 25, and buy a flat for 750k at 28",
+    expect: (r) => {
+      expect(r.scenarios.length).toBe(1)
+      const types = ev(r).map((e) => e.type)
+      expect(types).toEqual(expect.arrayContaining(['study', 'income_change', 'buy_home']))
+      const h = ev(r).find((e) => e.type === 'buy_home')!
+      expect(h.amount_chf).toBe(750000)
+      expect(h.start_month).toBe(96)
+    },
+  },
   { q: 'What if I win the lottery? Also, how do taxes affect me?', expect: (r) => expect(r.unsupported.length + r.scenarios.length).toBeGreaterThan(0) },
 ]
 
