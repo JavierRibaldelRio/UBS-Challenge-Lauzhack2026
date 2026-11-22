@@ -657,6 +657,16 @@ cat("Chosen by BIC:", chosen, "\n")
 fg <- fit_fgls(f_mean, mm)
 best <- fg$fit
 cat("lme4 fits:", round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 1), "s\n")
+# lmer has no native adjusted R-squared.  Report the usual residual-based,
+# conditional pseudo-R2 (including client effects), adjusted for fixed terms.
+n_model <- nobs(best)
+p_fixed <- length(fixef(best))
+r2_conditional <- 1 - sum(residuals(best)^2) / sum((mm$other_outflow - mean(mm$other_outflow))^2)
+r2_adjusted <- 1 - (1 - r2_conditional) * (n_model - 1) / (n_model - p_fixed - 1)
+model_fit <- data.frame(n = n_model, fixed_terms = p_fixed,
+                        r_squared = r2_conditional, r_squared_adjusted = r2_adjusted)
+cat("Conditional pseudo-R2 (adjusted):", round(r2_adjusted, 3), "\n")
+save_tab(model_fit, "05_model_fit")
 vc <- as.data.frame(VarCorr(best))
 sigma_u <- vc$sdcor[vc$grp == "pid"]
 sigma_tab <- data.frame(stratum = names(fg$sigma), sigma_eps_chf = unname(fg$sigma)) |>
