@@ -13,7 +13,7 @@ import { answerFacts, templateAnswer, verdict as computeVerdict, type ComparedPa
 import { apiAnswer, apiChat, apiCompare, apiHealth } from './lib/api'
 import { breach, compareFacts, goalFit, templateCompare, type CompareResult, type Side } from './lib/compare'
 import { offlineParse } from './lib/fallback'
-import { chf, chfk, monthIndex } from './lib/fmt'
+import { chf, chfk, monthIndex, nonEmpty } from './lib/fmt'
 import { applyMacroUpdate, BASE_MACRO, describeMacro, MACRO_PRESETS, type Macro } from './lib/macro'
 import { downloadJson, scenarioReport } from './lib/report'
 import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Plan, type Preset } from './lib/resolve'
@@ -387,10 +387,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       undo_would_restore: c.history.length ? describeSpec(c.history.at(-1)!.spec, profile.age) : null,
       net_worth_at_end_median_chf: r100(c.result.endNW.p50), worth_in_todays_money_at_end_median_chf: r100(c.result.endNPV.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100), cash_runs_out_at_age: ageOut(c.result.firstNegMonth),
       goals: c.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, chance_pct: Math.round(g.prob! * 100) })),
-      unknown_inputs: c.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label),
-      home_down_payment_missing_pct: c.result.homeBuys.map((h) => Math.round(h.shortShare * 100)),
-      planned_investing_skipped_pct: Math.round(c.result.investCut.share * 100),
-      warnings: c.plan.warnings,
+      ...nonEmpty('unknown_inputs', c.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label)),
+      ...nonEmpty('home_down_payment_missing_pct', c.result.homeBuys.map((h) => Math.round(h.shortShare * 100))),
+      ...(c.result.investCut.share > 0 ? { planned_investing_skipped_pct: Math.round(c.result.investCut.share * 100) } : {}),
+      ...nonEmpty('warnings', c.plan.warnings),
       income_needed: needFor(c.plan),
     }))
   }
@@ -945,7 +945,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                   </h3>
                   <CompareChart sides={chartSides} metric="cash" profile={profile} years={years} observed={!updates.length} />
                 </div>
-                <div>
+                <div className="chart-wide">
                   <h3
                     className="chart-title"
                     title={`Net present value (NPV) over a rolling horizon. Each point = what the path is worth today if you stopped counting at that age. It is net worth, except that money arriving or leaving later counts a bit less: at ${discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 1 year ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 1)} today and CHF 1 in 10 years ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)}. So costs paid early weigh more than gains that come late. At 0% this chart equals the net worth chart. It only changes how paths are valued, not the simulation.`}

@@ -61,8 +61,9 @@ export function offlineParse(text: string, profile: Profile, cities: string[]): 
   if (profile_update && scenarios.length === 1 && scenarios[0].events.every((e) => e.type === 'start_job')) scenarios.length = 0 // "I now earn…" is a fact, not a new job
 
   // "use a 5% discount rate" / "discount at 2%": the rate for today's-money values (NPV), shared by every path
-  const disc = t.match(/discount(?:ing)?(?: rate)?(?: of| at| to| =|:)? (\d+(?:\.\d+)?) ?%|(\d+(?:\.\d+)?) ?% discount/)
-  const discount_rate_pct = disc ? Number(disc[1] ?? disc[2]) : null
+  // ("a 20% discount on my rent" is a price cut, not a discount rate: it needs "rate", or "discount(ing) at X%")
+  const disc = t.match(/discount(?:ing)? rate(?: of| at| to| =|:)? (\d+(?:\.\d+)?) ?%|(\d+(?:\.\d+)?) ?% discount(?:ing)? rate|discount(?:ing)? at (\d+(?:\.\d+)?) ?%/)
+  const discount_rate_pct = disc ? Number(disc[1] ?? disc[2] ?? disc[3]) : null
 
   return {
     profile_update,

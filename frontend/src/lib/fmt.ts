@@ -18,3 +18,6 @@ export const monthIndex = (asOf: string, date: string) => {
   const [y, m] = date.split('-').map(Number)
   return (y - y0) * 12 + (m - m0)
 }
+
+/** `{ [key]: list }` only if the list has items. AI facts stay about what IS there (an empty list gets reported: "there is no home purchase on this path"). */
+export const nonEmpty = <K extends string, T>(key: K, list: T[]): Partial<Record<K, T[]>> => (list.length ? ({ [key]: list } as Record<K, T[]>) : {})

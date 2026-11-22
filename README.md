@@ -1,96 +1,10 @@
-# [Lauzhack 2026](https://lauzhack.com)
+# AI Financial Twin — UBS challenge, LauzHack 2026
 
-## USEFUL LINKS
+> *"One choice, many possible futures. Don't predict the future, make it explorable."*
 
-[Google Docs Plan & Understanding](https://docs.google.com/document/d/1Nwf3SoaL9csPrZBiiXJPQGaQfBoytl8wBbCtf3ApGYI/edit?usp=sharing)
+Built in 24 hours at [LauzHack 2026](https://lauzhack.com) (EPFL, Lausanne) for the **UBS "AI Financial Twin"** challenge.
 
-
-LauzHack is a student-run hackathon at EPFL in Lausanne, Switzerland.
-
-q: Is there a specific topic?
-a: No, all ideas are welcome, and you can choose to work on one or more of the challenges our sponsors will propose. There are prizes for the best hacks overall and the best challenge entries.
-
-## 2026 Schedule
-
-| Day | Time | Activity |
-| --- | --- | --- |
-| Saturday | 8:00–9:30 | Check-in and breakfast |
-| Saturday | 10:00–10:15 | Opening ceremony |
-| Saturday | 10:20–11:40 | Tech talks |
-| Saturday | 11:40–12:00 | Team building |
-| Saturday | 12:00 | Hacking starts |
-| Saturday | 12:00–13:00 | Lunch |
-| Saturday | 18:30–19:30 | Dinner |
-| ... | ... | GRIND |
-| Sunday | 0:00–1:00 | Midnight snack |
-| Sunday | 7:00–9:00 | Breakfast |
-| Sunday | 11:30–12:30 | Lunch |
-| Sunday | 12:00 | Hacking ends |
-| Sunday | 12:30–15:00 | Judging |
-| Sunday | 15:00–17:00 | Closing ceremony |
-
-## The event
-You will get 24 hours to build your hack, optionally inspired by our sponsors’ challenges.
-You can be in a team of up to 4, there will be a team-building opportunity before hacking.
-After hacking is over, there will be one global ranking from our jury, and one per sponsor challenge.
-We also have some fun workshops and games, with small prizes!
-
-## Project evaluation
-You will demo in 3 minutes to our jury for the global ranking, with 1 minute of Q&A.
-You will also demo to sponsors whose challenge you are working on, if any.
-
-Prizes for the global ranking are awarded based on
-(1) how innovative, original and unexpected your project is;
-(2) how convincing, smooth, and easy to follow your demo is; and
-(3) how much of a difference your project can make in the world.
-Prizes for sponsor challenges are awarded according to each sponsor’s criteria.
-
-Slides are not allowed, though you can prepare images and videos as backup if your demo doesn’t work as expected.
-
-You are encouraged to use existing libraries and APIs, you may use existing code you wrote, but you must clearly state what you created during the event and what you reused.
-
-> Criteria, in a nutshell: IMPACT, NOVELTY, DEMO.
-
-
-## Sponsors and Partners
-
-### Gold Sponsors
-
-- Logitech
-- Loterie Romande
-- IMC
-
-### Silver Sponsors
-
-- JetBrains
-- Nexthink
-- Scholé AI
-- AXA
-- UBS
-- SBB
-
-- - -
-
-### Other Partner (anything below this cant have challenges)
-
-- EPFL (organizer)
-
-### Community Partners
-
-- SwissDevJobs
-- START Hack
-- Socraft
-
-### Food and Drinks Partners
-
-- La Semeuse
-- Fizzy
-- Pragers
-- Snacky
-
-> Each sponsor will have their own challenges
-
-## Team members
+## Team members
 
 - [Cagan Efe Calidag](https://www.linkedin.com/in/cagancalidag), Paris-Saclay (ME)
     - Cybersecurity interest, web development (react), ai agent/harness/tool and mcp develooment, local ai
@@ -105,13 +19,19 @@ You are encouraged to use existing libraries and APIs, you may use existing code
     My strongest area is backend development, with experience in JavaScript, Rust and Go. I'm also familiar with React and R for data analysis."
 
 
-## Sponsor chosen: UBS
-### Challenge
+Planning notes: [Google Doc](https://docs.google.com/document/d/1Nwf3SoaL9csPrZBiiXJPQGaQfBoytl8wBbCtf3ApGYI/edit?usp=sharing)
 
-**AI Financial Twin** — "One choice, many possible futures. Don't predict the future, make it explorable."
+## The challenge (UBS)
+
 Build a fictional person's financial state, let a user change a life decision, recompute, compare against a
-baseline, and explain the trade-offs with transparent assumptions. Full brief: [`pre_docs/`](pre_docs/README.md)
-(rubric: [`pre_docs/evaluation/`](pre_docs/evaluation/)).
+baseline, and explain the trade-offs with transparent assumptions. The challenge example is Alexia: 20, a student
+in Lausanne with CHF 8,000 in savings, choosing between starting work, a master's and moving abroad.
+
+> **The UBS challenge material is not in this repo.** The brief, docs and synthetic data come from UBS's private
+> challenge repository. We kept a local copy in `pre_docs/`, which is git-ignored. The app runs without it, because the
+> model files it needs are committed in `frontend/src/model/`. You need the data only to **re-train** the
+> models: see [§1.6](#16-reproducing-the-models-needs-the-ubs-data). References in our docs such as
+> `scenario-modelling.md §13` point to that material.
 
 ### Idea:
 
@@ -189,12 +109,12 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 109 validation tests (R model parity, economy forecast, backtest, NPV valuation, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
-cd frontend && pnpm test:live                # 67 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
+cd frontend && pnpm test                     # 110 validation tests (R model parity, economy forecast, backtest, NPV valuation, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
+cd frontend && pnpm test:live                # 69 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts, texts only describe what IS on a path, NPV discount rate only when asked) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
-Rscript R/eda.R && Rscript R/macro.R         # re-estimate the spending model and the economy forecast -> R/output/*.csv
+Rscript R/eda.R && Rscript R/macro.R         # re-estimate the spending model (needs the UBS data, §1.6) and the economy forecast -> R/output/*.csv
 cd frontend && pnpm model:import             # R/output/*.csv -> src/model/spending.json, macro.json (then pnpm backtest)
-cd ml && uv sync --frozen && uv run train.py # data checks, defaults and people from pre_docs/Data -> params.json, profiles.json (deterministic)
+cd ml && uv sync --frozen && uv run train.py # data checks, defaults and people from pre_docs/Data -> params.json, profiles.json (deterministic; needs the UBS data, §1.6)
 curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow
 ```
 
@@ -202,6 +122,22 @@ LLM settings (`backend/.env`): `LLM_BASE_URL` (default Together `https://api.tog
 (default `deepseek-ai/DeepSeek-V4.1-Flash-1017`), `LLM_REASONING` (`off` = no thinking, fast), `LLM_JSON_MODE`, `LLM_TIMEOUT_MS`.
 Full explanation of every part: **[DEV_NOTES.md](DEV_NOTES.md)**. Any OpenAI-compatible server works
 (OpenAI, Together, Groq, Ollama `http://localhost:11434/v1`, LM Studio, vLLM).
+
+### 1.6 Reproducing the models (needs the UBS data)
+
+The synthetic data is **not committed**, because it is private UBS challenge material. To re-run `ml/train.py`, `R/eda.R` or
+`R/engine/test_engine.R`, copy UBS's `Data/` folder to **`pre_docs/Data/`** (the folder is git-ignored):
+
+```
+pre_docs/Data/
+  synthetic-profiles.csv        synthetic-cash-balances.csv   synthetic-assets.csv
+  synthetic-liabilities.csv     synthetic-goals.csv           synthetic-accounts.csv
+  scenario-assumptions.csv      scenario-catalog.csv
+  (also in UBS's folder, not used by us: README.md, data-dictionary.md, life-events.csv, synthetic-transactions.zip)
+```
+
+Without it, these scripts stop with a message saying so. The rest does **not** need it: `R/macro.R` (World Bank data in `R/data/`),
+`pnpm model:import`, `pnpm backtest`, the tests and the app itself.
 
 ---
 
@@ -251,7 +187,7 @@ decision, not luck. Fixed seed → same result every time.
   (the previous model: 2,281); cash-crunch prediction (Brier) 0.0006 vs 0.0025 (previous: 0.0012).
 - **Economy backtest** (`R/macro.R`, 2005–2024): 1 year ahead the 80% range held 70% of the time for inflation and 95% for unemployment.
 - **Live checks** in the UI for the selected path: cash identity, net worth = assets − debts (transfers don't change it), debt never negative, reproducible seed.
-- **Tests** (`pnpm test`): the boundary cases from [`technical-validation.md`](pre_docs/evaluation/technical-validation.md) (zero income, higher tuition, loan payoff, transfers…).
+- **Tests** (`pnpm test`): the boundary cases from UBS's `evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers…).
 - **Data checks**: the source ledger itself has 0 identity / 0 continuity violations.
 
 ### 2.3 The LLM contract
@@ -284,7 +220,7 @@ Rule: **any number the user did not say is `null`** → the resolver fills it fr
 ### 2.4 Repo layout
 
 ```
-pre_docs/          challenge material + synthetic data (given)
+pre_docs/          not committed (git-ignored): UBS challenge material + synthetic data, needed only to re-train (§1.6)
 R/                 eda.R (spending model, LMM) + macro.R (inflation & unemployment VAR) -> R/output/*.csv; data/ = World Bank series
 ml/                train.py (pandas, uv-pinned) -> data checks, defaults, people
 backend/           server.ts: OpenAI-compatible LLM gateway (parse / explain), schema.ts = JSON contract
@@ -298,22 +234,19 @@ demo.mjs           starts backend + frontend
 mise.toml          pinned toolchain
 ```
 
-### 2.5 Who works on what next
+### 2.5 Who did what
 
-- **Models (Sebastián, Joshua)** — `R/`: calibrate investment return/volatility from public index data (see `pre_docs/resources_2/data/financial-markets-data.md`) next to `macro.R`; widen the inflation ranges; try a better spending model and keep it only if `pnpm backtest` gets better; add a backtest plot.
-- **Backend (Javier)** — `backend/`: test Together models for JSON reliability (`LLM_JSON_MODE`), tune prompts in `server.ts`, add a few-shot example per event type.
-- **Frontend (Cagan)** — polish the demo flow, add more presets from the 120-scenario catalog. (The UI is PC-first on purpose.)
-- **Everyone** — rehearse the 3-minute demo below with the real API key (answers get cached).
+- **Models (Sebastián, Joshua)**: `R/`: the data analysis, the spending model, the economy forecast and the R reference engine.
+- **Backend (Javier)**: `backend/`: the LLM gateway and prompts, and worth in today's money (NPV).
+- **Frontend (Cagan)**: `frontend/`: the app, the engine in the browser, the chat and the tests.
 
-### 2.6 Suggested 3-minute demo
+### 2.6 A 3-minute tour
 
-**The full script, with exact sentences, timings, a pre-demo checklist, fixes for problems, and judge FAQs, is in [demo.txt](demo.txt).** Short version:
-
-1. *(20 s)* Open the page. The big sentence says it: *"If nothing changes, Alexia's cash runs out at age 20."* The black dots on the chart are her **real** bank balance from the data; the band is what someone in her situation would have. In year 2 her dots are above it: she spent less than students like her, and in the data such differences don't carry over from one year to the next (across all 1,200 people the real balance is inside the band 78% of the time).
-2. *(40 s)* Click **▶ Demo**: the scenario tree shows *Today* branching into *Start working* (**A**, green), *Master's* (**B**, blue) and *Move abroad*. Read the two tiles ("So far / Ahead", written for Alexia from the computed numbers, every number checked) and the A vs B comparison: *fits your goals better* (computed: cash first, then goals, then money), labelled **Not financial advice**.
-3. *(40 s)* Click the *Master's* card → **The numbers behind it**: tuition **from data** (her row in scenario-assumptions.csv), salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 23% higher". Set the premium to 30% → everything recomputes instantly.
-4. *(40 s)* Click the chat idea *"Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28"* → one new node with 3 events (a branch of *Start working*), compared as **B**, plus a direct answer in the chat with a **confidence level computed by the simulator**. Optional: **⑂ Branch off** a tile to add a later decision.
-5. *(40 s)* Open **How the model & simulations work**: maths checks 5/5; estimated on 2025 and tested on 2026, the "8 in 10" range caught 78.2% of real results. "Don't predict the future, make it explorable."
+1. Open `http://localhost:5173/?demo`. The big sentence says *"If nothing changes, Alexia's cash runs out at age 20."* The black dots are her **real** bank balance from the data; the band is what someone in her situation would have.
+2. Click **▶ Demo**: the scenario tree shows *Today* branching into *Start working* (**A**), *Master's* (**B**) and *Move abroad*. The two tiles ("So far / Ahead") are written from the computed numbers, and every number in them is checked. The A vs B comparison says which path *fits your goals better* (cash first, then goals, then money). Not financial advice.
+3. Click the *Master's* card → **📋 Assumptions**: tuition **from data**, salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 23% higher". Set the premium to 30% and everything recomputes.
+4. In the chat, type *"Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28"* → one new path with 3 events, compared as **B**, plus a direct answer with a **confidence level computed by the simulator**.
+5. Open **How the model & simulations work**: maths checks 5/5; estimated on 2025 and tested on 2026, the "8 in 10" range caught 78.2% of real results.
 
 ### 2.7 Limitations (say them before the judges do)
 
@@ -322,9 +255,9 @@ mise.toml          pinned toolchain
 - Constant 2025 CHF (no inflation); net income (taxes already inside); investment return 4% a year (UBS's illustrative rate from financial-concepts.md; editable, shared by every path).
 - The band shows month-to-month variability, not uncertainty about the assumptions (that's the drivers panel). Not a forecast, not advice.
 
-### 2.8 What we built vs. reused (LauzHack rule)
+### 2.8 What we built vs. reused
 
-- **Reused:** challenge data, docs and the starter-kit modelling convention (`pre_docs/`, by Stefania Stan / UBS); open-source libraries
+- **Reused:** challenge data, docs and the starter-kit modelling convention (UBS's challenge repository by Stefania Stan / UBS, not included here); open-source libraries
   (React, Vite, Recharts, zod, openai SDK, numpy, pandas, vitest); the "move abroad" preset numbers come from the starter kit's `scenario_config.json`.
 - **Built during the event:** everything in `ml/`, `backend/`, `frontend/`, `demo.mjs`.
 

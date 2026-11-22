@@ -124,6 +124,9 @@ describe('today’s money in the A/B text, the chat and offline mode', () => {
     expect(offlineParse('use a 5% discount rate', alexia, []).discount_rate_pct).toBe(5)
     expect(offlineParse('discount at 2.5%', alexia, []).discount_rate_pct).toBe(2.5)
     expect(offlineParse('what if I do a master?', alexia, []).discount_rate_pct).toBeNull()
+    expect(offlineParse('discount rate of 4%', alexia, []).discount_rate_pct).toBe(4)
+    expect(offlineParse('I get a 20% discount on my rent', alexia, []).discount_rate_pct).toBeNull() // a price cut, not a rate
+    expect(offlineParse('20% discount on a car', alexia, []).discount_rate_pct).toBeNull()
   })
 })
 

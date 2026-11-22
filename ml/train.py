@@ -1,6 +1,8 @@
 """Prepare the Financial Twin's data artifacts from the synthetic challenge data.
 
 Reads  : pre_docs/Data/*.csv
+         The UBS synthetic data is NOT in this repo (private challenge material). To reproduce,
+         copy UBS's challenge "Data/" folder to pre_docs/Data/ (git-ignored); see README §1.6.
 Writes : frontend/src/model/params.json    (data checks, defaults from the data, scenario catalog)
          frontend/src/model/profiles.json  (the 1,200 people: state today, goals, real ledger)
 
@@ -40,6 +42,15 @@ def r(x, n=4):
 
 # ----------------------------------------------------------------------------- load
 def load():
+    need = ["synthetic-profiles.csv", "synthetic-cash-balances.csv", "synthetic-assets.csv", "synthetic-liabilities.csv",
+            "synthetic-goals.csv", "scenario-assumptions.csv", "scenario-catalog.csv"]
+    missing = [f for f in need if not (DATA / f).exists()]
+    if missing:
+        raise SystemExit(
+            f"Missing UBS data in {DATA}: {', '.join(missing)}\n"
+            "The synthetic data is not committed (private UBS challenge material). Copy UBS's challenge 'Data/' folder to "
+            "pre_docs/Data/ to re-train (README §1.6). The app does not need it: frontend/src/model/*.json is committed."
+        )
     prof = pd.read_csv(DATA / "synthetic-profiles.csv")
     cash = pd.read_csv(DATA / "synthetic-cash-balances.csv")
     assets = pd.read_csv(DATA / "synthetic-assets.csv")

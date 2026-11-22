@@ -1,5 +1,6 @@
 // Explanations that are COMPUTED, not written: what drives the result, break-even values,
 // and the "facts" object the LLM is allowed to talk about (nothing else).
+import { nonEmpty } from './fmt'
 import type { Assumption, Params, Profile } from './types'
 import type { Plan } from './resolve'
 import { NO_KNOBS, runPath, type Knobs, type SimResult } from './sim'
@@ -76,9 +77,9 @@ export function buildFacts(profile: Profile, params: Params, branches: Branch[],
       age_when_cash_goes_below_zero: b.result.firstNegMonth != null ? Math.floor(profile.age + b.result.firstNegMonth / 12) : null,
       goals: b.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by: g.date.slice(0, 4), chance_pct: p(g.prob!) })),
       key_assumptions: b.plan.assumptions.filter((a) => !a.key.startsWith('g.') || a.source === 'you').slice(0, 8).map(summarize),
-      unknown_inputs: b.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label),
-      home_purchases: b.result.homeBuys.map((h) => ({ age: Math.floor(profile.age + h.month / 12), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_cash_for_down_payment_pct: p(h.shortShare), note: 'cash drops by the down payment; net worth does not (the money becomes part of the home)' })),
-      warnings: b.plan.warnings,
+      ...nonEmpty('unknown_inputs', b.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label)),
+      ...nonEmpty('home_purchases', b.result.homeBuys.map((h) => ({ age: Math.floor(profile.age + h.month / 12), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_cash_for_down_payment_pct: p(h.shortShare), note: 'cash drops by the down payment; net worth does not (the money becomes part of the home)' }))),
+      ...nonEmpty('warnings', b.plan.warnings),
     })),
     focus_path: focus.name,
     drivers_for_focus_path: drv.slice(0, 3).map((d) => ({ input: d.name, effect_on_end_net_worth_chf: [r100(Math.min(d.low, d.high)), r100(Math.max(d.low, d.high))] })),
@@ -150,7 +151,7 @@ export function templateExplanation(f: Facts) {
   }
   if (f.drivers_for_focus_path[0]) lines.push(`For "${f.focus_path}", the input that matters most is ${f.drivers_for_focus_path[0].input.toLowerCase()}.`)
   if (f.break_even) lines.push(`It ends level with the baseline only if income from age ${f.break_even.from_age} changes by ${f.break_even.income_change_needed_pct}%.`)
-  const unknown = others.flatMap((o) => o.unknown_inputs)
+  const unknown = others.flatMap((o) => o.unknown_inputs ?? [])
   return {
     headline: others.length ? `${others.length} path(s) compared with "${base.name}"` : `Baseline: ${base.name}`,
     explanation: lines.join(' '),

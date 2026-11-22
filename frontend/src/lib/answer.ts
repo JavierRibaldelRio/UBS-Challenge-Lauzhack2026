@@ -8,6 +8,7 @@
 //                  (salary at the 10th percentile, rent at the 90th) and the other path at the lucky end?
 //   3. Unknowns  : does the result depend on a number nobody knows (e.g. a degree's salary premium)?
 //                  If so, how far would that unknown have to move to flip the result (break-even)?
+import { nonEmpty } from './fmt'
 import { breakEven } from './analysis'
 import { resolve, type Overrides, type Plan } from './resolve'
 import { runPath, type SimResult } from './sim'
@@ -157,8 +158,8 @@ export function answerFacts(v: Verdict, profile: Profile, params: Params, H: num
     chance_cash_below_zero_pct: Math.round(p.result.probNegCash * 100),
     age_cash_first_below_zero: p.result.firstNegMonth != null ? Math.floor(profile.age + p.result.firstNegMonth / 12) : null,
     goals: p.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by_year: g.date.slice(0, 4), chance_pct: Math.round(g.prob! * 100) })),
-    home_purchases: p.result.homeBuys.map((h) => ({ age: Math.floor(profile.age + h.month / 12), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_cash_for_down_payment_pct: Math.round(h.shortShare * 100) })),
-    warnings: p.plan.warnings,
+    ...nonEmpty('home_purchases', p.result.homeBuys.map((h) => ({ age: Math.floor(profile.age + h.month / 12), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_cash_for_down_payment_pct: Math.round(h.shortShare * 100) }))),
+    ...nonEmpty('warnings', p.plan.warnings),
   })
   const cal80 = params.backtest.calibration_central?.find((c) => c.said === 80)
   return {
