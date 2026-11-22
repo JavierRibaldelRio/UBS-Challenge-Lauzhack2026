@@ -1,0 +1,5 @@
+"model","n_fixed","logLik","AIC","BIC","dBIC","dAIC"
+"M0_emp_x_month_no_city",74,-224428,449007,449636,866.955,602.375
+"M1_city_common_months",31,-224404,448874,449147,378.362,469.312
+"M2_city_common_plus_student",42,-224159,448405,448769,0,0
+"M3_city_emp_x_month",85,-224126,448426,449146,376.869,21.3389

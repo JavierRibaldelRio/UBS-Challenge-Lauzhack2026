@@ -1,12 +1,14 @@
 import { chf, pct } from '../lib/fmt'
 import type { Check } from '../lib/sim'
 import type { Params } from '../lib/types'
+import { DEFAULT_DISCOUNT_PCT } from '../lib/valuation'
 import { SOURCE, SourceChip } from './Details'
 
 export function TrustSummary({ checks, params, verify }: { checks: Check[]; params: Params; verify?: { total: number; unmatched: string[] } }) {
   const passed = checks.filter((c) => c.ok).length
   return (
     <span className="trust-summary">
+      <span className="model-badge">R model → 500 futures per path</span>
       <span className={passed === checks.length ? 'ok' : 'neg'}>✓ accounting {passed}/{checks.length}</span>
       <span className="ok">✓ tested on real data: {pct(params.backtest.coverage_80_year_end, 1)} inside the 80% range</span>
       {verify && <span className={verify.unmatched.length ? 'neg' : 'ok'}>✓ AI numbers checked {verify.total - verify.unmatched.length}/{verify.total}</span>}
@@ -14,13 +16,59 @@ export function TrustSummary({ checks, params, verify }: { checks: Check[]; para
   )
 }
 
+const r1 = (x: number) => (Math.round(x * 10) / 10).toFixed(1)
+const signed = (x: number) => `${x < 0 ? '−' : '+'}${chf(Math.abs(x))}`
+
+function ModelPipeline({ params }: { params: Params }) {
+  const S = params.spending
+  return (
+    <section className="model-pipeline" aria-label="How the R model and Monte Carlo simulation work">
+      <div className="pipeline-intro">
+        <span className="eyebrow">How your result is made</span>
+        <p>The model does not guess a life decision from examples. R learns how ordinary months vary; the app applies your decisions with exact accounting and simulates possible futures.</p>
+      </div>
+      <div className="pipeline-steps">
+        <article className="pipeline-step learned">
+          <span className="pipeline-num">1</span>
+          <h4>R learns from past months</h4>
+          <p>A mixed spending model fitted to {params.source.profile_months.toLocaleString()} person-months learns spending by status, city and calendar month, plus bonuses and normal month-to-month variation.</p>
+          <span className="pipeline-tag">R/eda.R · learned</span>
+        </article>
+        <article className="pipeline-step exact">
+          <span className="pipeline-num">2</span>
+          <h4>The plan is calculated exactly</h4>
+          <p>Your income, rent, tuition, loans, investments and purchases follow accounting rules month by month. A decision changes these inputs; it is not an AI prediction.</p>
+          <span className="pipeline-tag">TypeScript engine · exact</span>
+        </article>
+        <article className="pipeline-step simulated">
+          <span className="pipeline-num">3</span>
+          <h4>Monte Carlo tests 500 futures</h4>
+          <p>Each run draws different spending surprises and bonuses from the R model. The median is the typical result; the shaded band contains the middle 80% of runs.</p>
+          <span className="pipeline-tag">500 runs per path · uncertainty</span>
+        </article>
+      </div>
+      <div className="monte-carlo-note">
+        <b>What varies between runs:</b> normal spending shocks, December bonuses, and uncertainty in the personal spending offset{S.sigma_u > 0 ? ` (about ±${chf(S.sigma_u)}/month)` : ''}. With <b>Forecast (Swiss data)</b>, R’s separate VAR model also draws annual inflation and unemployment. When paths are compared, they use the same random draw in each run, so the difference comes from the decision instead of luck.
+      </div>
+    </section>
+  )
+}
+
 export function TrustDetails({ params, checks, focusName }: { params: Params; checks: Check[]; focusName: string }) {
   const bt = params.backtest
-  const reg = params.regressions
+  const S = params.spending
+  const M = params.macro_model
+  const medianSize = (q: number[]) => (q[Math.floor((q.length - 1) / 2)] + q[Math.ceil((q.length - 1) / 2)]) / 2
+  const cities = Object.entries(S.city_offset).sort((a, b) => a[1] - b[1])
+  const kFeb = S.k.employed[1]
+  const bt1 = (v: string) => M.backtest.find((b) => b.variable === v && b.horizon === 1)
+  const years = [...new Set(M.forecast.map((f) => f.year))].sort()
+  const fc = (y: number, v: string) => M.forecast.find((f) => f.year === y && f.variable === v)
   return (
     <div className="trust">
+      <div className="trust-wide"><ModelPipeline params={params} /></div>
       <div>
-        <h4>1. The maths adds up</h4>
+        <h4>4. The maths adds up</h4>
         <p className="muted small">Checked live, every time you change something ({focusName}):</p>
         {checks.map((c) => (
           <div key={c.name} className="check">
@@ -29,8 +77,8 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         ))}
       </div>
       <div>
-        <h4>2. The ranges are honest</h4>
-        <p className="muted small">We trained on 2025 only, predicted 2026 for all {bt.profiles.toLocaleString()} people, then compared with what really happened in the data.</p>
+        <h4>5. The ranges are honest</h4>
+        <p className="muted small">We estimated the model on 2025 only, let this app’s own simulator predict 2026 for all {bt.profiles.toLocaleString()} people, then compared with what really happened in the data.</p>
         <div className="check">
           <span className="ok">✓</span> The "8 in 10 runs" range caught <b>{pct(bt.coverage_80_year_end, 1)}</b> of real results (perfect = 80%).
         </div>
@@ -71,27 +119,78 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         </div>
       </div>
       <div>
-        <h4>3. What the model learned from {params.source.profile_months.toLocaleString()} months of data</h4>
+        <h4>6. What the model learned from {params.source.profile_months.toLocaleString()} months of data</h4>
+        <p className="muted small">A mixed model estimated in R (R/eda.R; its structure chosen among four by BIC). Spending here means everything except rent.</p>
         <ul className="small">
-          {Object.entries(params.bonus).map(([s, b]) => (
+          <li>
+            Spending depends on <b>status, city and the month</b>. Compared with a regular month, an employed person spends {signed(S.base.employed[1] - S.base_regular.employed)} in February and {signed(S.base.employed[7] - S.base_regular.employed)} in August.
+          </li>
+          <li>
+            City: from {cities[0][0]} ({signed(cities[0][1])}/month) to {cities[cities.length - 1][0]} ({signed(cities[cities.length - 1][1])}/month) vs the average city. Moving city moves spending by the difference.
+          </li>
+          <li>
+            Students spend {chf(S.student_month_excess[1])} more in February and {chf(S.student_month_excess[8])} more in September (tuition-like). When you plan a degree its tuition is paid explicitly, so these peaks are left out.
+          </li>
+          {(Object.entries(S.bonus) as [string, { probability: number; size_quantiles: number[] }][]).map(([s, b]) => (
             <li key={s}>
-              {pct(b!.probability)} of {s} people get a December bonus (typical size {pct(b!.size_quantiles[10])} of a month’s pay).
+              {pct(b.probability)} of {s.replace('_', '-')} people get a December bonus (typical size {pct(medianSize(b.size_quantiles))} of a month’s pay).
             </li>
           ))}
-          <li>Spending jumps in February and August (students: +{pct(params.season.student[1])} in February).</li>
-          <li>Surprise expenses come at random and are sometimes big. We replay the real pattern, not a textbook bell curve.</li>
           <li>
-            How much people spend barely depends on income in this data (R² {reg.other_spending.selected_cv_r2.toFixed(2)}), so the twin starts from each person’s <b>own</b> history.
+            People in the same situation spend almost the same: a personal habit adds only about ±{chf(S.sigma_u)}/month. Income does not change the level once status and city are known; it changes how much spending <b>varies</b>.
+          </li>
+          <li>
+            Surprises: a bell curve around each person’s own month-to-month spread (pulled toward people like them), wider in February, August and December (×{r1(kFeb)} in February for employed people).
           </li>
         </ul>
       </div>
       <div>
-        <h4>4. What it does not know</h4>
+        <h4>7. The economy forecast (only in “Forecast (Swiss data)”)</h4>
+        <p className="muted small">
+          Inflation and unemployment follow a small model of Swiss data 1991–{M.start.year} (World Bank; R/macro.R). {M.start.year} is observed (inflation {r1(M.start.inflation_pct)}%, unemployment {r1(M.start.unemployment_pct)}%); every simulated future draws its own years after that.
+        </p>
+        <table className="calib">
+          <thead>
+            <tr>
+              <th>year</th>
+              {years.map((y) => (
+                <th key={y}>{y}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(['inflation_pct', 'unemployment_pct'] as const).map((v) => (
+              <tr key={v}>
+                <td>{v === 'inflation_pct' ? 'inflation %' : 'unemployment %'}</td>
+                {years.map((y) => (
+                  <td key={y} title="median (80% range)">
+                    {r1(fc(y, v)!.p50)} <span className="muted">({r1(fc(y, v)!.p10)}–{r1(fc(y, v)!.p90)})</span>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="check">
+          <span className="ok">✓</span> Tested on 2005–2024, one year ahead: the 80% range held <b>{pct(bt1('inflation_pct')!.coverage80)}</b> of the time for inflation (a bit narrow) and <b>{pct(bt1('unemployment_pct')!.coverage80)}</b> for unemployment (a bit wide).
+        </div>
+        <div className="check">
+          <span className="muted">≈</span> Typical error: inflation {r1(bt1('inflation_pct')!.rmse_model)} points vs {r1(bt1('inflation_pct')!.rmse_random_walk)} for “same as last year”; unemployment {r1(bt1('unemployment_pct')!.rmse_model)} vs {r1(bt1('unemployment_pct')!.rmse_random_walk)} (no better: the model mainly adds the range).
+        </div>
+        <p className="muted small">
+          The national rate is not your personal chance: every employee gets the same risk of losing their job, about {M.labour.duration_months} months to find a new one (assumption), and benefits under Swiss law ({pct(M.labour.replacement)}–{pct(M.labour.replacement_higher)} of pay for up to {M.labour.max_months_standard} months). The self-employed are not insured and are not exposed. Pay follows last year’s inflation, so costs run ahead of pay while inflation rises.
+        </p>
+      </div>
+      <div>
+        <h4>8. What it does not know</h4>
         <ul className="small">
-          <li>All people are fictional. Not Swiss statistics, not a forecast, not advice.</li>
+          <li>All people are fictional. Not Swiss statistics, not a personal forecast, not advice. The 24 months of data are calm, so how the economy affects people comes from public Swiss data and labelled assumptions, not from the data.</li>
           <li>The data has no education, abroad or age-salary information. Those numbers are marked <SourceChip s="missing" /> and we show a break-even instead of guessing.</li>
-          <li>Values are in 2025 francs (no inflation). Income is after tax. Investment growth is 0% unless you set it.</li>
+          <li>Values are in 2025 francs (constant purchasing power). Income is after tax. Investments grow 4% a year by default (UBS’s illustrative rate, not learned: the data has no returns); change it in “The economy”.</li>
           <li>The shaded range shows normal ups and downs, not doubts about the assumptions. That’s what “what matters most” is for.</li>
+          <li>
+            “Worth in today’s money” (NPV) discounts every franc in or out to today when it happens, plus what you own minus debts at that age. One discount rate for every path: {DEFAULT_DISCOUNT_PCT}% a year by default (an assumption, not learned), change it under “Assumptions” or say “use a 5% discount rate”. It only values paths; comparisons and confidence use net worth.
+          </li>
         </ul>
         <div className="legend">
           {(Object.keys(SOURCE) as (keyof typeof SOURCE)[]).map((s) => (

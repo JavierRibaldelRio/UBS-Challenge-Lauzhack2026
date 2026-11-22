@@ -1,0 +1,7 @@
+"employment_status","n","age_min","age_max","income_min","income_median","income_max","n_income_below_300","n_rent_gt_income"
+"employed",682,18,66,3666.13,7738.46,11972,0,0
+"self_employed",106,18,66,2881.79,7269.76,12293.1,0,0
+"part_time",120,19,66,2632.51,4313.23,5996.57,0,3
+"retired",216,67,76,2554.35,3834.75,5313.1,0,8
+"student",39,18,59,522.21,1200,1988.15,0,32
+"unemployed",37,19,65,9.4,533.09,1248.72,7,37

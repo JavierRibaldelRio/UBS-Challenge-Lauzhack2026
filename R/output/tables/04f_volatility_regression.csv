@@ -1,0 +1,8 @@
+"model","term","estimate","std_error","t_value","p_value","r_squared"
+"log(sd_reg_within) ~ emp + log(income)","(Intercept)",2.55017,0.192063,13.2777,1.2622e-37,0.668682
+"log(sd_reg_within) ~ emp + log(income)","employment_statusself_employed",1.18271,0.0272074,43.4704,3.47118e-248,0.668682
+"log(sd_reg_within) ~ emp + log(income)","employment_statuspart_time",0.0212707,0.028481,0.746838,0.455309,0.668682
+"log(sd_reg_within) ~ emp + log(income)","employment_statusretired",0.266555,0.0247089,10.7878,5.92185e-26,0.668682
+"log(sd_reg_within) ~ emp + log(income)","employment_statusstudent",0.682626,0.0589262,11.5844,1.74862e-29,0.668682
+"log(sd_reg_within) ~ emp + log(income)","employment_statusunemployed",0.841515,0.0731839,11.4986,4.28907e-29,0.668682
+"log(sd_reg_within) ~ emp + log(income)","log(income)",0.397301,0.0215511,18.4353,5.66285e-67,0.668682

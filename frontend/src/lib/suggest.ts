@@ -1,7 +1,7 @@
 // Example questions that make sense for THIS person (age, job, household, money, goals).
 // Rule-based on purpose: instant, always the same, never suggests "start working at 22" to a 70-year-old.
 import { cities, incomeAnchor } from './resolve'
-import type { Params, Profile } from './types'
+import type { Params, Profile, ScenarioSpec, TwinEvent } from './types'
 
 const round = (x: number, step: number) => Math.max(step, Math.round(x / step) * step)
 const fmtK = (x: number) => (x >= 1e6 ? `${(x / 1e6).toFixed(1)}M` : `${Math.round(x / 1000)}k`)
@@ -45,5 +45,35 @@ export function suggestQuestions(p: Profile, params: Params): string[] {
       out.push(`Do I still reach my ${goal.name.toLowerCase()} goal by ${goalYear} if ${p.investments > 0 ? 'markets fall 30% next year' : 'I pay a 20,000 surprise bill next year'}?`)
     }
   }
+  return out.slice(0, 3)
+}
+
+/** One-click follow-ups when CHANGING a path (rules, instant). */
+export function followUpIdeas(spec: ScenarioSpec): string[] {
+  const out: string[] = []
+  const has = (t: TwinEvent['type']) => spec.events.find((e) => e.type === t)
+  const study = has('study')
+  const home = has('buy_home')
+  const move = has('relocate')
+  const job = has('start_job')
+  const loss = spec.events.find((e) => e.type === 'income_change' && e.income_change_pct === -100)
+  if (study) out.push(study.income_change_pct == null ? 'what if the degree raises my salary by 20%?' : 'start it one year later')
+  if (home) out.push(home.amount_chf ? `make the flat ${Math.round((home.amount_chf * 0.8) / 1000)}k instead` : 'the flat costs 500k')
+  if (move && /abroad/i.test(move.city ?? '')) out.push('rent there is 1,500 a month')
+  if (job && !study) out.push('earn 1,000 more a month')
+  if (loss) out.push('make the job loss 12 months')
+  if (spec.events.length > 1) out.push(`remove “${spec.events[spec.events.length - 1].label}”`)
+  return out.slice(0, 3)
+}
+
+/** One-click next decisions when BRANCHING OFF a path: things that happen later in that life. */
+export function branchIdeas(spec: ScenarioSpec, p: Profile): string[] {
+  const a = p.age
+  const out: string[] = []
+  const has = (t: TwinEvent['type']) => spec.events.some((e) => e.type === t)
+  if (!has('buy_home') && p.status !== 'retired') out.push(`then buy a flat for ${fmtK(round(Math.max(300000, p.income * 12 * 6), 50000))} at ${a + 8}`)
+  if (!has('invest')) out.push('and invest 500 a month')
+  if (p.status !== 'retired' && a < 60) out.push(`then lose my job for 6 months at ${a + 4}`)
+  if (a < 42 && p.household !== 'family' && !has('household_change')) out.push(`then have a child at ${a + 6}`)
   return out.slice(0, 3)
 }

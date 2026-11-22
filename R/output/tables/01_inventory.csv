@@ -1,0 +1,9 @@
+"table","rows","cols","primary_key","key_unique","n_profiles","cells_na","cells_empty"
+"profiles",1200,14,"profile_id",TRUE,1200,0,0
+"accounts",1200,6,"account_id",TRUE,1200,0,0
+"assets",2399,8,"asset_id",TRUE,1200,0,0
+"liabilities",283,9,"liability_id",TRUE,283,0,0
+"goals",1500,7,"goal_id",TRUE,1200,0,0
+"cash",28800,8,"profile_id+month",TRUE,1200,0,0
+"scen_assump",240,9,"assumption_id",TRUE,120,0,0
+"scen_catalog",120,6,"id",TRUE,NA,0,0

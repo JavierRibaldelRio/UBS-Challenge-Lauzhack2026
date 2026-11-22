@@ -12,6 +12,8 @@ export function scenarioReport(o: { profile: Profile; path: P; baseline: P; macr
   const r100 = (x: number) => Math.round(x / 100) * 100
   const out = (r: SimResult) => ({
     net_worth_at_end_chf: { p10: r100(r.endNW.p10), median: r100(r.endNW.p50), p90: r100(r.endNW.p90) },
+    worth_in_todays_money_at_end_chf: { p10: r100(r.endNPV.p10), median: r100(r.endNPV.p50), p90: r100(r.endNPV.p90) },
+    worth_in_todays_money_by_year_median_chf: Array.from({ length: Math.floor(r.npv.length / 12) }, (_, y) => r100(r.npv[y * 12 + 11].p50)),
     cash_at_end_median_chf: r100(r.endCash.p50),
     lowest_cash_median_chf: r100(r.minCash.p50),
     chance_cash_below_zero_pct: Math.round(r.probNegCash * 100),
@@ -31,12 +33,18 @@ export function scenarioReport(o: { profile: Profile; path: P; baseline: P; macr
     jurisdiction: 'Switzerland (synthetic data); incomes are net of tax as given in the data; no tax model',
     assumptions: path.plan.assumptions.map((a) => ({ what: a.label, value: Math.round(a.value * 100) / 100, unit: a.unit, source: a.source, note: a.note })),
     model: {
-      idiosyncratic: 'the person: income, rent, own spending habit (learned from 24 months of their ledger), life decisions as events, personal luck (surprise expenses, December bonus) sampled from what was learned on 28,800 months',
+      idiosyncratic: 'the person: income, rent, usual spending (mixed model estimated in R on 28,800 months: status, city, calendar month + a small personal offset), life decisions as events, personal luck (surprise expenses, December bonus) drawn from that model',
       macroeconomic: `the economy, shared by every path: ${macro.name}${macro.catalog ? ` (${macro.catalog})` : ''}${describeMacro(macro, pr.age).length ? ': ' + describeMacro(macro, pr.age).join('; ') : ''}`,
       method: 'deterministic monthly accounting x_{t+1}=F(x_t,a_t,w_t;θ) + Monte Carlo, 500 futures per path with common random numbers (same luck for every path), fixed seed',
     },
     constraints: ['cash is reconciled every month; negative cash = funding gap, flagged (not hidden, no automatic borrowing)', 'a home down payment must come from own cash at that moment (checked in every future)', 'debt never below zero', 'goals: cash + investments (not home) above target at the goal date'],
-    outputs: { path: out(path.result), baseline: out(baseline.result), difference_median_chf: r100(path.result.endNW.p50 - baseline.result.endNW.p50) },
+    outputs: {
+      path: out(path.result),
+      baseline: out(baseline.result),
+      difference_median_chf: r100(path.result.endNW.p50 - baseline.result.endNW.p50),
+      difference_in_todays_money_median_chf: r100(path.result.endNPV.p50 - baseline.result.endNPV.p50),
+      valuation: `rolling-horizon NPV at ${Math.round(path.plan.discountRate * 10000) / 100}% a year (real; ${path.plan.assumptions.find((a) => a.key === 'v.disc')?.source === 'you' ? 'set by the user' : 'default assumption, the same for every path'}): every franc in or out discounted to today when it happens + net worth excluding cash at the horizon, discounted. Shown only; comparisons use net worth.`,
+    },
     uncertainty: {
       month_to_month_luck: '10th–90th percentile of 500 futures (see outputs)',
       sensitivity: o.drivers.map((d) => ({ input: d.name, effect_on_end_net_worth_chf: `±${r100(d.range / 2)}` })),
@@ -46,10 +54,10 @@ export function scenarioReport(o: { profile: Profile; path: P; baseline: P; macr
     },
     validation: {
       live_accounting_checks: o.checks.map((c) => ({ check: c.name, ok: c.ok })),
-      backtest: `trained on 2025, tested on 2026 for ${bt.profiles} people: 80% range caught ${Math.round(bt.coverage_80_year_end * 1000) / 10}% of real results`,
+      backtest: `estimated on 2025, tested on 2026 for ${bt.profiles} people: 80% range caught ${Math.round(bt.coverage_80_year_end * 1000) / 10}% of real results`,
       data_checks: o.params.data_checks,
     },
-    limitations: ['all people and data are fictional (UBS synthetic data), not Swiss statistics', 'the data has no decisions, education or abroad information: decision effects are explicit assumptions, unknowns are marked', 'the economy presets are illustrative stress tests, not forecasts', 'not financial advice'],
+    limitations: ['all people and data are fictional (UBS synthetic data), not Swiss statistics', 'the data has no decisions, education or abroad information: decision effects are explicit assumptions, unknowns are marked', 'the economy presets are illustrative stress tests, not forecasts; “Forecast (Swiss data)” models national inflation and unemployment (World Bank data), not this person’s own risk', 'not financial advice'],
   }
 }
 

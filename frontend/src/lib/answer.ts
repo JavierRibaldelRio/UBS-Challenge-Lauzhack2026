@@ -3,7 +3,7 @@
 //
 // Confidence combines three independent checks (see DEV_NOTES §5b):
 //   1. Luck      : in how many of the 500 paired futures does the leading path end higher? (same random months for both)
-//                  -> this part is validated by the backtest calibration curve (said 80% -> 78.5% happened).
+//                  -> this part is validated by the backtest calibration curve (backtest.json: said 80% -> ~78% happened).
 //   2. Data range: does the result still hold if the person is at the unlucky end of their peers in the data
 //                  (salary at the 10th percentile, rent at the 90th) and the other path at the lucky end?
 //   3. Unknowns  : does the result depend on a number nobody knows (e.g. a degree's salary premium)?
@@ -153,6 +153,7 @@ export function answerFacts(v: Verdict, profile: Profile, params: Params, H: num
     name: p.name,
     net_worth_at_end_median_chf: r100(p.result.endNW.p50),
     range_8_in_10_chf: [r100(p.result.endNW.p10), r100(p.result.endNW.p90)],
+    worth_in_todays_money_at_end_median_chf: r100(p.result.endNPV.p50),
     chance_cash_below_zero_pct: Math.round(p.result.probNegCash * 100),
     age_cash_first_below_zero: p.result.firstNegMonth != null ? Math.floor(profile.age + p.result.firstNegMonth / 12) : null,
     goals: p.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by_year: g.date.slice(0, 4), chance_pct: Math.round(g.prob! * 100) })),
@@ -170,6 +171,7 @@ export function answerFacts(v: Verdict, profile: Profile, params: Params, H: num
     leading_path: describe(v.leader),
     other_path: describe(v.other),
     gap_at_end_median_chf: r100(v.gap),
+    todays_money: { discount_rate_pct: Math.round(v.leader.plan.discountRate * 10000) / 100, meaning: "NPV: worth in today's money (an extra measure; the answer and its confidence use net worth)" },
     confidence: v.confidence,
     confidence_reasons: v.reasons,
     futures_where_leader_ends_higher_pct: Math.round(v.pairedShare * 100),

@@ -1,0 +1,115 @@
+{
+ "method": "parameters estimated on 2025 only (R, model_parameters_fit2025.csv); the app engine simulates 2026 from real Dec-2025 cash (today’s economy); compared with the real 2026 ledger",
+ "profiles": 1200,
+ "paths_per_profile": 1000,
+ "coverage_80_year_end": 0.7817,
+ "coverage_50_year_end": 0.5008,
+ "coverage_80_all_months": 0.7497,
+ "calibration_central": [
+  {
+   "said": 10,
+   "real": 0.104
+  },
+  {
+   "said": 20,
+   "real": 0.22
+  },
+  {
+   "said": 30,
+   "real": 0.303
+  },
+  {
+   "said": 40,
+   "real": 0.415
+  },
+  {
+   "said": 50,
+   "real": 0.501
+  },
+  {
+   "said": 60,
+   "real": 0.596
+  },
+  {
+   "said": 70,
+   "real": 0.694
+  },
+  {
+   "said": 80,
+   "real": 0.783
+  },
+  {
+   "said": 90,
+   "real": 0.891
+  }
+ ],
+ "calibration_ends_higher": [
+  {
+   "said": "0-5%",
+   "pairs": 8982,
+   "avg_said": 0.001,
+   "real": 0.001
+  },
+  {
+   "said": "5-20%",
+   "pairs": 472,
+   "avg_said": 0.116,
+   "real": 0.087
+  },
+  {
+   "said": "20-50%",
+   "pairs": 558,
+   "avg_said": 0.338,
+   "real": 0.324
+  },
+  {
+   "said": "50-80%",
+   "pairs": 538,
+   "avg_said": 0.658,
+   "real": 0.632
+  },
+  {
+   "said": "80-95%",
+   "pairs": 487,
+   "avg_said": 0.887,
+   "real": 0.893
+  },
+  {
+   "said": "95-100%",
+   "pairs": 8943,
+   "avg_said": 0.999,
+   "real": 0.999
+  }
+ ],
+ "calibration_negative_cash": [
+  {
+   "said": "under 5%",
+   "profiles": 1136,
+   "avg_said": 0,
+   "real": 0
+  },
+  {
+   "said": "5-50%",
+   "profiles": 4,
+   "avg_said": 0.199,
+   "real": 0.25
+  },
+  {
+   "said": "50-95%",
+   "profiles": 2,
+   "avg_said": 0.891,
+   "real": 1
+  },
+  {
+   "said": "over 95%",
+   "profiles": 58,
+   "avg_said": 0.999,
+   "real": 1
+  }
+ ],
+ "median_abs_error_year_end_chf": 1830.77,
+ "median_abs_error_naive_chf": 2444.58,
+ "brier_negative_cash_model": 0.0006,
+ "brier_negative_cash_naive": 0.0025,
+ "naive_definition": "Dec-2025 cash + 12 x average 2025 monthly net flow, no uncertainty"
+}

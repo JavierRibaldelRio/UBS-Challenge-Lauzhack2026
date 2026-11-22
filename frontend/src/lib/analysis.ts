@@ -84,7 +84,7 @@ export function buildFacts(profile: Profile, params: Params, branches: Branch[],
     drivers_for_focus_path: drv.slice(0, 3).map((d) => ({ input: d.name, effect_on_end_net_worth_chf: [r100(Math.min(d.low, d.high)), r100(Math.max(d.low, d.high))] })),
     break_even: be ? { path: focus.name, income_change_needed_pct: Math.round(be.pct), from_age: Math.floor(profile.age + be.month / 12), monthly_income_needed_chf: r100(be.incomeNeeded), meaning: be.pct >= 0 ? `${focus.name} catches up with ${base.name} only if income from that age is this % higher than assumed` : `${focus.name} stays ahead of ${base.name} even if income from that age were this % lower than assumed` } : null,
     method: {
-      uncertainty: 'Monte Carlo, 500 paths, spending surprises and bonuses learned from 24 months of synthetic ledger data',
+      uncertainty: 'Monte Carlo, 500 paths: spending surprises and December bonuses from a mixed model estimated in R on 24 months × 1,200 people (+ inflation and job loss in the forecast economy)',
       backtest_80pct_band_coverage_pct: p(params.backtest.coverage_80_year_end),
     },
   }
@@ -108,7 +108,8 @@ export function verifyNumbers(text: string, facts: unknown): { total: number; un
     else if (x && typeof x === 'object') Object.values(x).forEach(walk)
     else if (typeof x === 'string') for (const m of x.matchAll(new RegExp(NUM.source + String.raw`(?:\s*(k|K|m|M|million)(?![\p{L}\d]))?`, 'gu'))) {
       const v = toNumber(m[1])
-      known.push(v, m[2] && /^k$/i.test(m[2]) ? v * 1000 : m[2] ? v * 1e6 : v)
+      const scaled = m[2] && /^k$/i.test(m[2]) ? v * 1000 : m[2] ? v * 1e6 : v
+      known.push(v, scaled, Math.abs(v), Math.abs(scaled))
     }
   }
   walk(facts)
@@ -125,7 +126,11 @@ export function verifyNumbers(text: string, facts: unknown): { total: number; un
     const unit = m[2] ?? m[3]
     if (v <= 12 && !unit && Number.isInteger(v)) continue // small counts ("2 years", "3 paths")
     total++
-    const tol = (x: number) => Math.max(1, Math.abs(x) * (unit ? 0.02 : 0.01))
+    // "1.3k" honestly stands for anything from 1,250 to 1,350: allow half of the last written digit (k / M amounts only)
+    const decimals = m[1].match(/[.,](\d+)$/)?.[1].length ?? 0
+    const scale = m[2] === 'k' || m[2] === 'K' ? 1000 : m[2] === 'M' || m[2] === 'million' ? 1e6 : 0
+    const precision = scale && !/[ \u00a0\u202f'’,]\d{3}/.test(m[1]) ? 0.5 * 10 ** -decimals * scale : 0
+    const tol = (x: number) => Math.max(1, Math.abs(x) * (unit ? 0.02 : 0.01), precision)
     if (!known.some((k) => Math.abs(k - v) <= tol(k))) unmatched.push(raw)
   }
   return { total, unmatched }

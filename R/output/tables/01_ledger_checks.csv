@@ -1,0 +1,15 @@
+"check","value"
+"profiles with != 24 months",0
+"profiles with non-consecutive months",0
+"rows |opening + net - closing| > 0.01",0
+"rows |opening_t - closing_{t-1}| > 0.01",0
+"months with closing < 0",772
+"profiles with any closing < 0",61
+"status flag != (closing < 0)",0
+"opening cash profiles vs accounts, max |diff|",0
+"opening cash profiles vs assets(cash), max |diff|",0
+"opening cash profiles vs ledger month 1, max |diff|",0
+"liabilities with monthly_payment_chf != 0",0
+"as_of_date != 2025-01-01 (any snapshot table)",0
+"currency != CHF (any table)",0
+"goals with target_date <= 2026-12-31",0

@@ -1,0 +1,13 @@
+"model","term","estimate","std_error","t_value","p_value","r_squared"
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusemployed",-1.84597,41.2438,-0.0447575,0.964308,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusself_employed",164.986,83.2344,1.98219,0.0476881,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statuspart_time",32.9128,129.495,0.254162,0.799414,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusretired",14.7545,111.925,0.131824,0.895146,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusstudent",57.5595,137.405,0.418905,0.675361,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusunemployed",57.504,100.842,0.57024,0.568623,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusemployed:I(income/1000)",12.0698,5.14454,2.34614,0.0191326,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusself_employed:I(income/1000)",-1.96791,10.7937,-0.18232,0.855362,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statuspart_time:I(income/1000)",-2.04962,29.6678,-0.0690856,0.944933,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusretired:I(income/1000)",1.09962,28.3525,0.0387839,0.969069,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusstudent:I(income/1000)",-46.1453,105.635,-0.436839,0.662308,0.0738426
+"yoy_reg_change ~ 0 + emp + emp:income_k","employment_statusunemployed:I(income/1000)",-104.793,134.003,-0.782016,0.434361,0.0738426

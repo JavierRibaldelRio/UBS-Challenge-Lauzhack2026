@@ -1,6 +1,7 @@
 // Calls to the backend (/api is proxied by Vite to :8000). Never throws: on any failure it returns
 // {ok:false} and the caller uses the offline fallback. Successful answers are cached in localStorage
 // so a demo question that worked once keeps working even if the network dies.
+import type { CompareResult } from './compare'
 import type { AnswerResult, EditResult, ExplainResult, ParseResult, PromptInfo, TurnResult } from './types'
 
 type Ok<T> = { ok: true; data: T; model: string; cached?: boolean; prompt?: PromptInfo; ms?: number }
@@ -51,8 +52,9 @@ async function post<T>(path: string, body: unknown, timeoutMs: number): Promise<
 
 export const apiParse = (ctx: unknown) => post<ParseResult>('/api/parse', ctx, 30000)
 export const apiExplain = (facts: unknown) => post<ExplainResult>('/api/explain', { facts }, 30000)
-export const apiChat = (ctx: unknown) => post<TurnResult>('/api/chat', ctx, 40000)
+export const apiChat = (ctx: unknown) => post<TurnResult>('/api/chat', ctx, 130000) // a big turn ("10 paths") can take a while; one shorter retry included
 export const apiEdit = (ctx: unknown) => post<EditResult>('/api/edit', ctx, 30000)
+export const apiCompare = (facts: unknown) => post<CompareResult>('/api/compare', { facts }, 40000)
 export const apiAnswer = (facts: unknown) => post<AnswerResult>('/api/answer', { facts }, 30000)
 
 export async function apiHealth(): Promise<{ ok: boolean; llm: { model: string; base_url: string } | null }> {

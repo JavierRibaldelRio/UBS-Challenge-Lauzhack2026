@@ -1,0 +1,3 @@
+"horizon","n","coverage80","coverage50","rmse_model","rmse_naive_repeat_2025","mean_bias_actual_minus_pred"
+"monthly",14400,0.814861,0.503889,951.606,NA,68.3824
+"annual total",1200,0.795,0.506667,3263.53,4518.31,820.588

@@ -1,0 +1,7 @@
+"goal_name","n","share_high","target_median","target_to_income_median","years_of_saving_median","share_no_positive_flow","share_target_le_cash_t0","date_min","date_max"
+"Career transition",71,0,69637.5,10.8041,2.40669,0.169014,0.56338,"2032-12-31","2032-12-31"
+"Education flexibility",77,0,63823.2,10.0126,2.39643,0.142857,0.558442,"2032-12-31","2032-12-31"
+"Emergency savings",447,1,56116.4,8.66843,1.72333,0.167785,0,"2029-12-31","2029-12-31"
+"Housing deposit",90,0,59677.9,11.12,2.54693,0.188889,0.522222,"2032-12-31","2032-12-31"
+"Long-term financial resilience",753,1,128199,21.1117,5.04508,0.177955,0,"2029-12-31","2029-12-31"
+"Retirement reserve",62,0,63246.8,10.1866,1.89936,0.209677,0.5,"2032-12-31","2032-12-31"

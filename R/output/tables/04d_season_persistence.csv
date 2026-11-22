@@ -1,0 +1,13 @@
+"month","group","n","spearman_2025_vs_2026"
+"Feb","all",1200,0.0310161
+"May","all",1200,-0.00537461
+"Aug","all",1200,0.0262352
+"Dec","all",1200,0.213618
+"Feb","employed",682,0.0235303
+"Feb","self_employed",106,-0.0819256
+"May","employed",682,0.0394695
+"May","self_employed",106,-0.0739451
+"Aug","employed",682,0.0168842
+"Aug","self_employed",106,0.107439
+"Dec","employed",682,0.0295642
+"Dec","self_employed",106,0.180754

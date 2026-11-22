@@ -1,0 +1,19 @@
+"model","term","estimate","std_error","t_value","p_value","r_squared"
+"nf_mean ~ income + rent","(Intercept)",-1552.51,23.8951,-64.9719,0,0.994849
+"nf_mean ~ income + rent","income",1.03956,0.00219103,474.46,0,0.994849
+"nf_mean ~ income + rent","rent",-1.0496,0.00973224,-107.848,0,0.994849
+"nf_reg_mean ~ income + rent","(Intercept)",-1432.14,18.9371,-75.6263,0,0.996515
+"nf_reg_mean ~ income + rent","income",1.00177,0.00173641,576.922,0,0.996515
+"nf_reg_mean ~ income + rent","rent",-1.03095,0.00771288,-133.667,0,0.996515
+"other_reg_mean ~ emp + household + income + age + has_loan","(Intercept)",1400.31,27.4411,51.0296,1.09107e-301,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","employment_statusself_employed",57.0621,17.8445,3.19773,0.00142167,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","employment_statuspart_time",34.6884,18.9794,1.82768,0.0678478,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","employment_statusretired",85.6404,20.0492,4.27151,2.09659e-05,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","employment_statusstudent",28.8559,33.1364,0.870824,0.384026,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","employment_statusunemployed",59.8366,33.8423,1.7681,0.0773009,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","household_typecouple",-2.52936,12.07,-0.209558,0.834048,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","household_typefamily",-5.12504,13.5289,-0.37882,0.704889,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","household_typeshared_housing",19.9067,16.4551,1.20976,0.226612,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","income",0.00574276,0.00253357,2.26667,0.0235896,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","age_at_start",0.526882,0.396001,1.33051,0.183607,0.0435956
+"other_reg_mean ~ emp + household + income + age + has_loan","has_loanTRUE",-20.1799,11.6068,-1.73862,0.0823605,0.0435956

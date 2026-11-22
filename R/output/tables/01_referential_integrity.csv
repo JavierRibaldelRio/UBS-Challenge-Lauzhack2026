@@ -1,0 +1,14 @@
+"check","n_rows","n_violations"
+"accounts.profile_id -> profiles",1200,0
+"assets.profile_id -> profiles",2399,0
+"assets(cash).account_id -> accounts",1200,0
+"assets(investment).account_id -> accounts",1199,1199
+"liabilities.profile_id -> profiles",283,0
+"goals.profile_id -> profiles",1500,0
+"cash.profile_id -> profiles",28800,0
+"cash.account_id -> accounts",28800,0
+"scen_assump.profile_id -> profiles",240,0
+"scen_assump.scenario_id -> scen_catalog",240,0
+"profiles without investment asset",1200,1
+"profiles without liability",1200,917
+"profiles without goal",1200,0

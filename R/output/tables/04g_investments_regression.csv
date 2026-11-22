@@ -1,0 +1,10 @@
+"model","term","estimate","std_error","t_value","p_value","r_squared"
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","(Intercept)",7.6073,0.931919,8.16305,8.24409e-16,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","age_at_start",0.0658198,0.00289484,22.7369,2.43382e-95,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","employment_statusself_employed",0.00766514,0.119827,0.0639686,0.949006,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","employment_statuspart_time",-0.0900293,0.125295,-0.718537,0.472567,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","employment_statusretired",-0.906438,0.134014,-6.76375,2.10261e-11,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","employment_statusstudent",-0.549081,0.263254,-2.08574,0.0372143,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","employment_statusunemployed",-0.292474,0.322354,-0.907304,0.364429,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","log(income)",-0.127849,0.0949353,-1.34669,0.178335,0.429061
+"log1p(investments) ~ age + emp + log(income) + log(cash_t0)","log(cash_t0)",0.0538623,0.0426106,1.26406,0.206457,0.429061
