@@ -34,6 +34,8 @@ export type TwinEvent = {
   drop_pct: number | null
   down_payment_pct: number | null
   depreciation_pct: number | null
+  /** income_change only: repeat the % change every N months (12 = a yearly raise), compounding */
+  repeat_every_months?: number | null
   /** set by presets only: where the preset's numbers come from */
   _source?: string
 }

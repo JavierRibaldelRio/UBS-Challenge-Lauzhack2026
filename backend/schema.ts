@@ -31,7 +31,7 @@ export const EventSchema = z.object({
   monthly_net_income_chf: num.describe('New monthly NET income in CHF, ONLY if the user said it'),
   income_change_pct: num.describe('Income change in %, e.g. -40 for 60% part-time, -100 for job loss, +15 salary premium'),
   monthly_amount_chf: num.describe('Monthly amount in CHF (new rent for relocate, cost for recurring_expense, contribution for invest)'),
-  amount_chf: num.describe('Single amount in CHF (one_off: >0 cost, <0 money received; moving cost; lump sum; loan principal; home price)'),
+  amount_chf: num.describe('Single amount in CHF (one_off: >0 cost, <0 money received; moving cost; invest: lump sum, NEGATIVE = sell / withdraw; loan principal; home price)'),
   annual_tuition_chf: num.describe('Tuition per year in CHF, study only'),
   city: z.string().nullable().describe('relocate only: a city from the list, or "abroad: <country>"'),
   household_type: z.enum(HOUSEHOLDS).nullable(),
@@ -39,6 +39,7 @@ export const EventSchema = z.object({
   drop_pct: num.describe('market_shock only: % fall of investment value, e.g. 30'),
   down_payment_pct: num.describe('buy_home / buy_asset: % of the price paid with own money (rest = loan), ONLY if the user said it'),
   depreciation_pct: num.describe('buy_asset: % of value lost per year, ONLY if the user said it'),
+  repeat_every_months: int.describe('income_change only: repeat the % change every N months, compounding (a yearly raise = 12; with duration_months = how long the raises keep coming). null = once'),
 })
 
 export const ScenarioSchema = z.object({

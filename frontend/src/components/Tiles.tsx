@@ -14,6 +14,8 @@ export type TileData = {
   unknownFromAge: number | null
   canUndo: boolean
   removable: boolean
+  /** how many numbers of this path were filled in for the person (not said by them) */
+  assumed: number
 }
 
 type TextStatus = 'loading' | 'ai' | 'offline'
@@ -81,6 +83,7 @@ export function NodeTile(p: { t: TileData; age: number; endAge: number; floor?: 
           )
         ) : null}
         {goals.length > 0 && <span className={`flag ${reached === goals.length ? 'good' : reached ? 'warn' : 'bad'}`}>🎯 {reached}/{goals.length} goals likely</span>}
+        {r.investCut.share > 0.05 && <span className="flag warn" title="UBS budget constraint: you can only invest money you have. The planned amount is skipped when cash runs out.">⚠ investing skipped when cash is short ({Math.round(r.investCut.share * 100)}% of futures, ~{chfk(r.investCut.p50).replace('CHF ', '')} in total)</span>}
         {t.unknownFromAge != null && <span className="flag fogflag">? depends on unknowns from {t.unknownFromAge}</span>}
         {t.warnings.map((w) => (
           <span key={w} className="flag warn">⚠ {w}</span>
@@ -107,8 +110,8 @@ export function NodeTile(p: { t: TileData; age: number; endAge: number; floor?: 
         <button className="chip chip-soft" onClick={p.onBranch} title="keep this path as it is and branch off a new one with an extra decision">
           ⑂ Branch off
         </button>
-        <button className="chip chip-soft" onClick={p.onNumbers}>
-          🔢 Numbers
+        <button className="chip chip-soft" onClick={p.onNumbers} title="every number of this path, where it comes from, and why it was assumed">
+          📋 Assumptions{t.assumed ? ` (${t.assumed})` : ''}
         </button>
         {t.canUndo && (
           <button className="chip chip-undo" onClick={p.onUndo}>

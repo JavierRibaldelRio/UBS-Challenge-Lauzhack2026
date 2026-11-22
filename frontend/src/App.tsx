@@ -22,6 +22,7 @@ import { branchIdeas, followUpIdeas, suggestQuestions } from './lib/suggest'
 import { addEvents, eventKey, inferParent, shiftBranch, withParentEvents } from './lib/tree'
 import type { Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
 import { unknownImpact } from './lib/unknowns'
+import { effectIssues, incomeNeeded } from './lib/effects'
 import paramsJson from './model/params.json'
 import profilesJson from './model/profiles.json'
 
@@ -194,19 +195,22 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   const addPaths = (specs: ScenarioSpec[], origin: Origin, parentId: string | null | (string | null)[] = null) => {
     const others = computed.map((c) => ({ id: c.id, spec: c.spec }))
     const parents: string[] = []
-    const added: PathState[] = specs.map((s, i) => {
+    const added: PathState[] = []
+    specs.forEach((s, i) => {
       const pid = Array.isArray(parentId) ? parentId[i] : parentId
-      const parent = pid ? byId.get(pid) : undefined
+      // "new:2" = the 3rd path created in this same turn (a chain of new nodes)
+      const chained = pid?.startsWith('new:') ? added[Number(pid.slice(4))] : undefined
+      const parent = chained ?? (pid ? byId.get(pid) : undefined)
       const spec = parent ? withParentEvents(s, parent.spec) : s // a branch keeps every decision of its parent
-      if (parent) parents.push(parent.id)
-      return { id: `p${nextId.current++}`, parentId: parent?.id ?? inferParent(spec, others, 'today'), spec, overrides: {}, origin, history: [], edits: [] }
+      if (parent && !chained) parents.push(parent.id)
+      added.push({ id: `p${nextId.current++}`, parentId: parent?.id ?? inferParent(spec, others, 'today'), spec, overrides: {}, origin, history: [], edits: [] })
     })
-    if (!added.length) return []
+    if (!added.length) return [] as PathState[]
     setPaths((ps) => [...ps, ...added])
     const ids = added.map((a) => a.id)
     setSel((s) => (ids.length >= 2 ? { a: ids[0], b: ids[1] } : { a: s.a ?? s.b ?? 'today', b: ids[0] }))
     if (parents.length) setCollapsed((c) => { if (!parents.some((x) => c.has(x))) return c; const n = new Set(c); parents.forEach((x) => n.delete(x)); return n })
-    return ids
+    return added
   }
   const remove = (id: string) => {
     if (id === 'today') return
@@ -347,6 +351,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     goals: profile.goals.map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by: g.date.slice(0, 7), priority: g.priority })),
     told_the_twin: describeMemory(dataProfile, updates),
     economy: { current: macro.name, conditions: describeMacro(macro, profile.age), presets: MACRO_PRESETS.map((p) => `${p.id}: ${p.name}${p.catalog ? ` (${p.catalog})` : ''}`) },
+    if_nothing_changes_income_needed: needFor(today.plan),
+    // every path INCLUDING the baseline, ranked by the engine (for "which is best?")
+    all_paths_ranked_by_net_worth_at_end: [...computed].sort((a, b) => b.result.endNW.p50 - a.result.endNW.p50).map((c, i) => ({ rank: i + 1, path: c.id === 'today' ? 'BASELINE (if nothing changes)' : c.name, net_worth_at_end_median_chf: r100(c.result.endNW.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100) })),
     if_nothing_changes: {
       years_simulated: years, age_at_end: endAge, net_worth_at_end_median_chf: r100(today.result.endNW.p50),
       chance_cash_below_zero_pct: Math.round(today.result.probNegCash * 100), cash_runs_out_at_age: ageOut(today.result.firstNegMonth),
@@ -366,7 +373,17 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       goals: c.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, chance_pct: Math.round(g.prob! * 100) })),
       unknown_inputs: c.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label),
       home_down_payment_missing_pct: c.result.homeBuys.map((h) => Math.round(h.shortShare * 100)),
+      planned_investing_skipped_pct: Math.round(c.result.investCut.share * 100),
+      warnings: c.plan.warnings,
+      income_needed: needFor(c.plan),
     }))
+  }
+  /** goal-seeking, computed by the engine: what income (in every month) keeps cash >= 0 (or >= the floor) on a path */
+  const needFor = (pl: Plan) => {
+    const n = incomeNeeded(pl, params, profile.minCash ?? 0)
+    if (!n) return 'already enough: cash never goes below zero with today\'s income'
+    if (!Number.isFinite(n.pct)) return 'not reachable by income alone (even 5x the income is not enough)'
+    return { income_change_needed_pct: n.pct, monthly_income_needed_now_chf: n.monthlyNow, meaning: 'smallest income (in every month, same % change) for which cash never goes below zero on this path (and planned investing can happen)' }
   }
   const historyFor = () =>
     messages.slice(-12).map((m) =>
@@ -397,12 +414,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
         lines.push({ text: `🧠 Updated what I know: ${describeMemory(profile, [{ id: 0, said: text, update: res.profile_update }]).join(', ')}.` })
         setUpdates((us) => [...us, { id: updId.current++, said: text, update: res.profile_update! }])
       }
-      const ids = addPaths(res.scenarios, { kind: 'offline', question: text, reason: r.error, answer: res }, fork?.id ?? null)
+      const ids = addPaths(res.scenarios, { kind: 'offline', question: text, reason: r.error, answer: res }, fork?.id ?? null).map((a) => a.id)
       res.scenarios.forEach((sc, i) => lines.push({ text: `＋ ${sc.name}: ${describeSpec(sc, profile.age)}`, pathId: ids[i] }))
       // "offline" only when the AI really can't be reached; otherwise its answer failed (say so, and how to get around it)
       const unreachable = /not reachable|timed out|No LLM_API_KEY/i.test(r.error)
       const why = unreachable ? `AI offline (${r.error}): understood with simple keyword rules` : `The AI's answer couldn't be used (${r.error}). I fell back to simple keyword rules${ids.length ? '' : '; try asking for fewer things at once'}`
-      replace(reply, { pending: false, reply: lines.length ? undefined : res.note ?? undefined, lines, muted: `${why}${tgt ? '; changing a path needs the AI, but you can change any number under “The numbers behind”' : ''}.`, answer: ids.length ? null : undefined } as Partial<ChatMsg>)
+      replace(reply, { pending: false, reply: lines.length ? undefined : res.note ?? undefined, lines, muted: `${why}${tgt ? '; changing a path needs the AI, but you can change any number under “Assumptions”' : ''}.`, answer: ids.length ? null : undefined } as Partial<ChatMsg>)
       if (ids.length) setAsked({ question: text, ids, msg: reply })
       setAsking(false)
       setEditing(null)
@@ -466,6 +483,10 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       const base = undone.includes(p.id) ? p.history.at(-1)!.spec : p.spec // an undo in the same turn happens first
       const spec = ed.path ? keepSources(base, ed.path) : ed.add_events?.length ? { ...base, events: addEvents(base.events, ed.add_events) } : null
       if (!spec) continue
+      if (JSON.stringify(spec.events) === JSON.stringify(base.events) && spec.name === base.name) {
+        lines.push({ text: `⛔ No change: “${p.name}” already looked like that, so nothing was changed there.`, pathId: p.id })
+        continue
+      }
       editedSpecs[p.id] = spec
       const keepGlobal = Object.fromEntries(Object.entries(p.overrides).filter(([k]) => k.startsWith('g.')))
       const edits = [...p.edits, { instruction: text, changes: ed.changes, model: r.model, ms: r.ms, prompt: r.prompt }]
@@ -480,26 +501,47 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     // 4) new paths and branches (they get a computed answer)
     const newSpecs: ScenarioSpec[] = d.new_paths.map(({ parent_id: _p, ...sc }) => sc)
     // a branch: the AI names its parent (or the chat is in branch mode); only valid ids count
-    const parentIds = d.new_paths.map((np) => (np.parent_id && byId.has(np.parent_id) ? np.parent_id : (fork?.id ?? null)))
+    const parentIds = d.new_paths.map((np, i) => (np.parent_id && (byId.has(np.parent_id) || (/^new:\d+$/.test(np.parent_id) && Number(np.parent_id.slice(4)) < i)) ? np.parent_id : (fork?.id ?? null)))
     const res: ParseResult = { profile_update: u, scenarios: newSpecs, horizon_years: d.horizon_years, unsupported: d.unsupported, note: d.reply }
     const origin: Origin = { kind: 'ai', question: text, model: r.model, ms: r.ms, cached: r.cached, prompt: r.prompt, answer: res }
-    const ids = addPaths(newSpecs, origin, parentIds)
+    const addedPaths = addPaths(newSpecs, origin, parentIds)
+    const ids = addedPaths.map((a) => a.id)
     newSpecs.forEach((sc, i) => {
-      const parent = parentIds[i] && parentIds[i] !== 'today' ? byId.get(parentIds[i]!) : undefined
-      lines.push({ text: `＋ ${sc.name}${parent ? ` (branch of ${parent.name})` : ''}: ${describeSpec(sc, profile.age)}`, pathId: ids[i] })
+      const pid = parentIds[i]
+      const parentName = pid?.startsWith('new:') ? newSpecs[Number(pid.slice(4))]?.name : pid && pid !== 'today' ? byId.get(pid)?.name : undefined
+      lines.push({ text: `＋ ${sc.name}${parentName ? ` (branch of ${parentName})` : ''}: ${describeSpec(sc, profile.age)}`, pathId: ids[i] })
     })
-    // a purchase without a price changes nothing (prices are not in the data): say so right away, and how to fix it
-    for (const sp of [...newSpecs, ...Object.values(editedSpecs)]) {
-      for (const e of sp.events.filter((x) => (x.type === 'buy_home' || x.type === 'buy_asset') && !(x.amount_chf && x.amount_chf > 0))) {
-        lines.push({ text: `⚠ “${e.label}” in ${sp.name} has no price yet, so it changes nothing. Prices are not in the data: tell me one (e.g. “the flat costs 500k”).` })
-      }
-    }
     // the horizon only changes when the user talks about time, or a new event would fall off the chart
     const touchedEvents = [...newSpecs.flatMap((x) => x.events), ...Object.values(editedSpecs).flatMap((x) => x.events)]
     const needMonths = Math.max(0, ...touchedEvents.map((e) => (e.start_month ?? 0) + (e.duration_months ?? 0)))
     const talksAboutTime = /\b(years?|until|horizon|retire\w*|old|aged?|long[- ]term)\b|\b(at|by|until|till) \d{2}\b/i.test(text)
     const wantYears = talksAboutTime && d.horizon_years ? d.horizon_years : needMonths >= H ? Math.ceil(needMonths / 12) + 2 : null
     if (wantYears) setYears(Math.max(1, Math.min(40, wantYears)))
+
+    // ---- does it actually take effect? Re-simulate what this turn touched, in the NEW state, and say it formally.
+    // (The AI wrote its reply before any simulation; these notices come from the engine.)
+    const profNext = u ? applyUpdates(profile, [{ id: 0, said: text, update: u }]) : profile
+    const macroNext = d.macro_update && Object.values(d.macro_update).some((x) => x != null) ? applyMacroUpdate(macro, d.macro_update) : macro
+    const Hnext = (wantYears ? Math.max(1, Math.min(40, wantYears)) : years) * 12
+    const stateChanged = profNext !== profile || macroNext !== macro || Hnext !== H
+    const toCheck = [
+      ...addedPaths.map((a) => ({ name: a.spec.name, spec: a.spec, overrides: a.overrides })),
+      ...Object.entries(editedSpecs).map(([id, sp]) => ({ name: sp.name, spec: sp, overrides: byId.get(id)?.overrides ?? {} })),
+      ...(stateChanged ? computed.filter((c) => !editedSpecs[c.id] && !removable.includes(c.id)).map((c) => ({ name: c.id === 'today' ? 'the baseline' : c.name, spec: c.spec, overrides: c.overrides })) : []),
+    ]
+    const issues = new Map<string, 'blocked' | 'risk'>()
+    let blockedNew = false
+    toCheck.forEach((x, i) => {
+      const pl = resolve(profNext, params, x.spec, x.overrides, Hnext, loanRate, macroNext)
+      for (const is of effectIssues(x.name, x.spec, pl, simulate(pl, params, profNext, 200), profNext)) {
+        if (is.level === 'risk' && i >= addedPaths.length + Object.keys(editedSpecs).length) continue // untouched paths: only what stops working
+        issues.set(is.text, is.level)
+        if (is.level === 'blocked' && i < addedPaths.length) blockedNew = true
+      }
+    })
+    const notes = [...issues.entries()].sort((a, b) => (a[1] === b[1] ? 0 : a[1] === 'blocked' ? -1 : 1))
+    for (const [t, lvl] of notes.slice(0, 6)) lines.push({ text: `${lvl === 'blocked' ? '⛔ Not taking effect: ' : '⚠ '}${t}` })
+    if (notes.length > 6) lines.push({ text: `(+${notes.length - 6} more notices: see the warnings on the paths)` })
     // the twin's own words may only use numbers it was given (also typed numbers per month / per year)
     const typed = [...text.matchAll(/(\d[\d'’,.]*)\s*(k|m|million)?\b/gi)].map((mm) => Number(mm[1].replace(/['’,]/g, '')) * (/^k$/i.test(mm[2] ?? '') ? 1e3 : mm[2] ? 1e6 : 1)).filter(Number.isFinite)
     // ages and years of the decisions on screen / just made ("a flat at 28") are facts too
@@ -507,11 +549,18 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     const startYear = Number(profile.as_of.slice(0, 4))
     const ages = seenEvents.flatMap((e) => [ageAt(e.start_month ?? 0), ageAt((e.start_month ?? 0) + (e.duration_months ?? 0))])
     const calendar = seenEvents.map((e) => startYear + Math.floor((e.start_month ?? 0) / 12))
-    const v = verifyNumbers(d.reply, { state, paths: pathsNow, text, typed, perMonth: typed.map((x) => x / 12), perYear: typed.map((x) => x * 12), history: historyFor().map((h) => h.text), ages, calendar, endAge })
-    const muted = [d.unsupported.length ? `Not modelled: ${d.unsupported.join('; ')}.` : '', v.unmatched.length ? `ℹ calculated by the twin (not from the simulator): ${v.unmatched.join(', ')}` : ''].filter(Boolean).join(' ')
+    // numbers inside a question ("want me to test 4,000?") are suggestions, not claims
+    const claimsOnly = d.reply.split(/(?<=[.!?])\s+/).filter((x) => !x.trim().endsWith('?')).join(' ')
+    const months = seenEvents.flatMap((e) => [e.start_month ?? 0, e.duration_months ?? 0])
+    const balanceNext = Math.round(profNext.income - profNext.rent - profNext.calib.other_mu)
+    const v = verifyNumbers(claimsOnly, { state, paths: pathsNow, text, typed, perMonth: typed.map((x) => x / 12), perYear: typed.map((x) => x * 12), history: historyFor().map((h) => h.text), ages, calendar, endAge, months, balanceNext })
+    // honesty guard: the twin says it did something, but nothing was applied in this turn
+    const claims = /\b(done|fixed|fixing (it )?now|i'?ve (added|changed|set|moved|split|rebuilt|put|updated|made|created|removed|replaced|renamed)|i (added|changed|set|moved|rebuilt|updated|made|created|replaced)|is now (set|at|in)|are now (set|at))\b/i.test(d.reply)
+    const acted = lines.length > 0 || undone.length > 0
+    const muted = [d.unsupported.length ? `Not modelled: ${d.unsupported.join('; ')}.` : '', v.unmatched.length ? `ℹ calculated by the twin (not from the simulator): ${v.unmatched.join(', ')}` : '', claims && !acted ? '⚠ Nothing was actually changed in this turn. Ask again, or change it yourself in the tile (✏️ Change) or under “Assumptions”.' : ''].filter(Boolean).join(' ')
     // a direct answer only makes sense for a question, not for "add 10 paths"
     const bulk = ids.length >= 3 || (/^\s*(please\s+)?(add|create|make|generate|branch|give|put|build|spin|show|draw)\b/i.test(text) && !text.includes('?'))
-    const answerIt = ids.length > 0 && !bulk
+    const answerIt = ids.length > 0 && !bulk && !blockedNew // never "answer" about a decision that cannot take effect
     replace(reply, {
       pending: false,
       reply: d.reply,
@@ -599,6 +648,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     key, id: c.id, name: c.id === 'today' ? 'If nothing changes' : c.name, parentName: c.parentId && c.parentId !== 'today' ? (byId.get(c.parentId)?.name ?? null) : null,
     timeline: sortedEvents(c.spec).map((e) => ({ icon: iconOf(e), age: ageAt(e.start_month ?? 0), text: e.label })),
     result: c.result, warnings: c.plan.warnings, unknownFromAge: unk ? ageAt(unk.from) : null, canUndo: c.history.length > 0, removable: c.id !== 'today',
+    assumed: c.plan.assumptions.filter((a) => !a.key.startsWith('g.') && !a.key.startsWith('m.') && a.source !== 'you' && !a.key.endsWith('.info') && a.key !== 'learned.delta').length,
   })
   const tA = A ? tileOf(A, 'a', unkA) : null
   const tB = B && B.id !== A?.id ? tileOf(B, 'b', unkB) : null
@@ -902,8 +952,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
           {/* ---------------- everything else, folded ---------------- */}
           <details className="card fold" ref={numbersRef} open={numbers.open} onToggle={(e) => setNumbers((n) => ({ ...n, open: (e.target as HTMLDetailsElement).open }))}>
             <summary>
-              <h2>The numbers behind</h2>
-              <span className="muted small">every number has a source · click a value to change it</span>
+              <h2>Assumptions</h2>
+              <span className="muted small">what the twin filled in for you and why · every number has a source · click a value to change it</span>
             </summary>
             {A && B && A.id !== B.id && (
               <div className="seg">

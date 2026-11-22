@@ -20,8 +20,8 @@ THE NIGHT BEFORE (once, on the laptop you will present with)
                                     cd backend  && pnpm install --frozen-lockfile && cd ..
 3. backend/.env must contain your key:  LLM_API_KEY=...   (never commit this file)
 4. Sanity check (1 minute):         cd frontend && pnpm test && cd ..
-   Must end with "64 passed". (Optional, ~5 min, uses the AI:
-   start the demo first, then  cd frontend && pnpm test:live  -> "54 passed".)
+   Must end with "80 passed". (Optional, ~5 min, uses the AI:
+   start the demo first, then  cd frontend && pnpm test:live  -> "67 passed".)
 
 DEV vs PROD: WHICH COMMAND, WHICH ADDRESS (they are NOT the same)
    node demo.mjs          -> development: the web app on http://localhost:5173
@@ -224,7 +224,7 @@ A: A decision is a list of life events (job, study, move, home...). The app
    money out.
 
 Q: How did you verify the calculations?
-A: Four ways. 64 automated tests (plus 54 tests against the real AI), including UBS's own validation list (zero
+A: Four ways. 80 automated tests (plus 67 tests against the real AI), including UBS's own validation list (zero
    income, higher tuition, loan payoff, transfers). Live checks on screen
    (cash adds up, net worth = assets − debts, debt never negative, same seed =
    same result). A backtest on real 2026 data. And we checked UBS's ledger
@@ -324,6 +324,33 @@ A: Monthly surprises average out over 10 years. Uncertainty about the big
    most" and the break-even. We keep those two kinds of uncertainty apart on
    purpose.
 
+Q: What if I ask for something that cannot work (invest money I don't have,
+   a house with no price, a down payment that isn't there)?
+A: The twin never pretends. After every message the engine re-simulates and
+   the chat says formally "⛔ Not taking effect: …", with how to make it
+   possible (invest less, earn more, a mortgage, later). Ask "how much do I
+   need to earn?" and it answers with a number computed by the engine.
+
+Q: How do investments work? Does the return count as income? Can you sell?
+A: Money moved into investments leaves cash and grows at the economy's return:
+   4% a year by default, UBS's own illustrative rate (financial-concepts.md).
+   The growth goes into net worth, never into cash or income. Our engine
+   reproduces UBS's example exactly (10,000 at 4% for 5 years = 12,167) and
+   their monthly-saving formula; both are automated tests. You can sell
+   (money goes back to cash, never more than you hold), and you can only
+   invest money you actually have (UBS's budget constraint). The return is
+   an economy condition shared by every path, so comparisons stay fair; it is
+   not learned, because the data has no returns, and it is labelled as such.
+
+Q: What does the economy (inflation, rates, recession) change?
+A: One setting for every path (UBS: external conditions). In 2025 francs,
+   inflation matters as the gap between prices and pay: if prices grow 4%
+   and pay 1.5%, living costs grow 2.5% a year faster than income. A rate
+   hike adds to every loan and mortgage rate. A recession cuts pay for people
+   who work, and markets fall. A housing downturn lowers home values (net
+   worth, not cash). Because both paths share it, the comparison shows how
+   each decision holds up under that economy. All are tested.
+
 Q: What about taxes and inflation?
 A: Income in the data is already after tax. Values are in 2025 francs, so
    there is no inflation. Things we cannot model (for example new tax rules)
@@ -394,7 +421,7 @@ E. NUMBERS TO REMEMBER
   Down payment 60k: cash 549k → 495k, net worth stays ≈ 550k.
 - Confidence evidence: "≥95%" statements were right 99.9% of the time
   (19,980 pairs of real people). Calibration: said 50% → 49.9%, said 90% → 87.9%.
-- 500 futures per path · AI answers in ~1–3 s · 64 automated tests + 54 live AI tests.
+- 500 futures per path · AI answers in ~1–3 s · 80 automated tests + 67 live AI tests.
 
 
 ---------------------------------------------------------------------
@@ -511,7 +538,7 @@ UBS's suggested demo order (demo-and-submission.md), all in the script:
 Proposed rubric (judge-scorecard.md), where we score:
   Financial modelling & correctness (25)  exact formulas, live checks, tests
   Scenario & counterfactual (20)          tree, branches, A vs B, economy
-  Technical execution & validation (15)   64 tests + 54 live AI tests, backtest
+  Technical execution & validation (15)   80 tests + 67 live AI tests, backtest
   UX & communication (15)                 chat + tree + plain-English tiles
   Innovation (15)                         section J
   Responsible design (10)                 sources, unknowns, no advice, checks

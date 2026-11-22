@@ -104,7 +104,7 @@ function PathStory({ c }: { c: Extract<HowMadeContent, { what: 'path' }> }) {
           </ul>
         </div>
       ))}
-      <p className="muted small">Then the app filled every empty number from the data (see “The numbers behind”, each with its source) and simulated 500 futures. The AI never calculates money.</p>
+      <p className="muted small">Then the app filled every empty number from the data (see “Assumptions”, each with its source) and simulated 500 futures. The AI never calculates money.</p>
       <details className="tech">
         <summary>Technical details: the exact instructions and the AI’s raw answer</summary>
         {o.kind === 'ai' && (

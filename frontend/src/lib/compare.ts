@@ -86,6 +86,7 @@ function describe(s: Side, profile: Profile, H: number) {
     chance_cash_goes_below_zero_pct: pct(r.probNegCash),
     ...(profile.minCash ? { chance_cash_goes_below_your_floor_pct: pct(belowFloor(r, profile.minCash)) } : {}),
     age_cash_goes_below_zero: r.firstNegMonth != null ? age(r.firstNegMonth) : null,
+    ...(r.investCut.share > 0.05 ? { planned_investing_not_affordable: { futures_pct: pct(r.investCut.share), skipped_total_median_chf: r100(r.investCut.p50), why: 'you can only invest money you have (budget constraint)' } } : {}),
     goals: r.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by_year: g.date.slice(0, 4), chance_pct: pct(g.prob!) })),
     home_or_asset_purchases: r.homeBuys.map((h) => ({ what: h.label, age: age(h.month), price_chf: r100(h.price), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_own_money_pct: pct(h.shortShare) })),
     depends_on_unknown_numbers: s.plan.assumptions.filter((x) => x.source === 'missing').map((x) => x.label),

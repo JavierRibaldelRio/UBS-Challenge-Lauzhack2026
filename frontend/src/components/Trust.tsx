@@ -90,7 +90,7 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         <ul className="small">
           <li>All people are fictional. Not Swiss statistics, not a forecast, not advice.</li>
           <li>The data has no education, abroad or age-salary information. Those numbers are marked <SourceChip s="missing" /> and we show a break-even instead of guessing.</li>
-          <li>Values are in 2025 francs (no inflation). Income is after tax. Investment growth is 0% unless you set it.</li>
+          <li>Values are in 2025 francs (constant purchasing power). Income is after tax. Investments grow 4% a year by default (UBS’s illustrative rate, not learned: the data has no returns); change it in “The economy”.</li>
           <li>The shaded range shows normal ups and downs, not doubts about the assumptions. That’s what “what matters most” is for.</li>
         </ul>
         <div className="legend">

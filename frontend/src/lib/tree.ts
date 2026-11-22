@@ -53,7 +53,7 @@ export function layoutTree(nodes: TreeNode[], collapsed: ReadonlySet<string>) {
 }
 
 /** Events compared by meaning (not by label), so "the same decision" matches across paths. */
-export const eventKey = (e: TwinEvent) => JSON.stringify([e.type, e.start_month ?? 0, e.duration_months, e.monthly_net_income_chf, e.income_change_pct, e.monthly_amount_chf, e.amount_chf, e.annual_tuition_chf, e.city, e.household_type, e.annual_rate_pct, e.drop_pct, e.down_payment_pct, e.depreciation_pct])
+export const eventKey = (e: TwinEvent) => JSON.stringify([e.type, e.start_month ?? 0, e.duration_months, e.monthly_net_income_chf, e.income_change_pct, e.monthly_amount_chf, e.amount_chf, e.annual_tuition_chf, e.city, e.household_type, e.annual_rate_pct, e.drop_pct, e.down_payment_pct, e.depreciation_pct, e.repeat_every_months ?? null])
 
 /** Where does a new path hang in the tree? Under the existing path whose decisions it contains entirely (the most of them). */
 export function inferParent(spec: ScenarioSpec, candidates: { id: string; spec: ScenarioSpec }[], root: string): string {

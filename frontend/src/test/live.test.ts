@@ -506,6 +506,109 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
       expect(paths.length).toBe(count)
     }, 130000)
   })
+  // ---------------- from two real chats (Nov 2026): raises that compound, chains of nodes, investment returns, selling
+  it('chat: "+2% raise every year for 10 years" -> compounds to ×1.02^10 by 30', async () => {
+    const r = await chat('add a path where I start working now and get a 2% raise every year for 10 years')
+    show('yearly raise', r)
+    const evs = r.data.new_paths[0].events as TwinEvent[]
+    const inc = resolve(alexia, params, { name: 'r', catalog_id: null, events: evs }, {}, 120, rate).income
+    expect(inc[119] / inc[0]).toBeGreaterThan(Math.pow(1.02, 9) - 0.01) // at least 9-10 compounding raises
+  }, 60000)
+  it('chat: "add 3 nodes one after another, each a further 2% raise" -> a real chain (new:0, new:1)', async () => {
+    const raise = { id: 'p1', name: '+2% raise', parent_id: 'today', events: [{ type: 'income_change', label: '+2% raise', start_month: 12, income_change_pct: 2 }] }
+    const r = await chat('chain 3 more nodes after the raise path, one after another, each one year later with another +2% raise', { paths: [raise] })
+    show('chain', r)
+    const np = r.data.new_paths
+    expect(np.length).toBe(3)
+    expect(np[0].parent_id).toBe('p1')
+    expect(np[1].parent_id).toBe('new:0')
+    expect(np[2].parent_id).toBe('new:1')
+  }, 60000)
+  it('chat: "invest 200 a month with 7% return" -> an invest event + the return as an economy condition (not lost)', async () => {
+    const zurich = { id: 'p1', name: 'Move to Zurich', parent_id: 'today', events: [{ type: 'relocate', label: 'Move to Zurich', start_month: 12, city: 'Zurich' }] }
+    const r = await chat('to my current branch add 200 a month investing, with 7% return annually', { paths: [zurich], target: 'p1' })
+    show('invest 7%', r)
+    expect(r.data.macro_update?.market_return_pct).toBe(7)
+    const e = r.data.edits.find((x) => x.path_id === 'p1')!
+    expect(evOf(e, [zurich]).some((x) => x.type === 'invest' && x.monthly_amount_chf === 200)).toBe(true)
+  }, 60000)
+  it('chat: "invest 300 a month, then sell 5k of it at 25" -> a negative invest (back to cash)', async () => {
+    const r = await chat('what if I invest 300 a month from now, and then sell 5k of those investments at 25?')
+    show('sell', r)
+    const evs = r.data.new_paths.flatMap((p) => p.events)
+    expect(evs.some((x) => x.type === 'invest' && x.monthly_amount_chf === 300)).toBe(true)
+    const sale = evs.find((x) => x.type === 'invest' && (x.amount_chf ?? 0) < 0)!
+    expect(sale.amount_chf).toBe(-5000)
+    expect(sale.start_month).toBe(60)
+  }, 60000)
+  // ---------------- from two more real chats (Nov 2026): honesty about effects, starting salaries, best branch, long messages
+  const work3 = { id: 'p1', name: 'Start working', parent_id: 'today', events: [{ type: 'start_job', label: 'Start working', start_month: 0 }], net_worth_at_end_median_chf: 745000 }
+  const masters = { id: 'p2', name: "Master's degree", parent_id: 'today', events: [{ type: 'study', label: "Master's", start_month: 0 }], net_worth_at_end_median_chf: 557000 }
+  it('chat: "Can I reach my emergency savings goal by 2029 if I invest 100 a month?" -> builds the path (no refusal)', async () => {
+    const r = await chat('Can I reach my emergency savings goal by 2029 if I invest 100 a month?')
+    show('goal question', r)
+    expect(r.data.new_paths.flatMap((p) => p.events).some((e) => e.type === 'invest' && e.monthly_amount_chf === 100)).toBe(true)
+  }, 60000)
+  it('chat: "starting salary 3000 on all" -> on the master\'s it starts AFTER the degree, not at 20', async () => {
+    const r = await chat('starting salary 3000 a month on all paths', { paths: [work3, masters] })
+    show('starting salary', r)
+    const m = r.data.edits.find((e) => e.path_id === 'p2')!
+    const job = evOf(m, [masters]).find((e) => e.type === 'start_job')!
+    expect(job.monthly_net_income_chf).toBe(3000)
+    expect(job.start_month).toBeGreaterThanOrEqual(24)
+  }, 60000)
+  it('chat: a bare "3000" right after "starting salary 2000 on all" -> it ACTS (no "done" without a change)', async () => {
+    const p1 = { ...work3, events: [{ type: 'start_job', label: 'Start working', start_month: 0, monthly_net_income_chf: 2000 }] }
+    const r = await chat('3000', { paths: [p1], history: [{ role: 'user', text: 'starting salary 2000 a month on all' }, { role: 'twin', text: 'Added a starting salary of 2,000 a month. [actions applied: ✏️ Changed Start working: ✓ salary 2000/month]' }] })
+    show('3000', r)
+    expect(r.data.edits.length + (r.data.profile_update?.monthly_net_income_chf != null ? 1 : 0)).toBeGreaterThan(0)
+  }, 60000)
+  it('chat: "salary 5K" then "baseline" -> a fact about today (income 5000)', async () => {
+    const r = await chat('baseline', { paths: [work3], history: [{ role: 'user', text: 'salary 5K' }, { role: 'twin', text: 'Got it — 5,000 a month. Which path should I put it on: Start working, or all of them? [no path, fact or economy was changed in this turn]' }] })
+    show('baseline', r)
+    expect(r.data.profile_update?.monthly_net_income_chf).toBe(5000)
+    expect(r.data.edits.length).toBe(0)
+  }, 60000)
+  it('chat: "what\'s the best branch?" when the baseline ends highest -> the answer includes the baseline', async () => {
+    const st = { ...STATE, net_income_chf_per_month: 5000, if_nothing_changes: { years_simulated: 10, age_at_end: 30, net_worth_at_end_median_chf: 340000, chance_cash_below_zero_pct: 0, cash_runs_out_at_age: null, goals: [] },
+      all_paths_ranked_by_net_worth_at_end: [{ rank: 1, path: 'BASELINE (if nothing changes)', net_worth_at_end_median_chf: 340000, chance_cash_below_zero_pct: 0 }, { rank: 2, path: 'Start working', net_worth_at_end_median_chf: 118000, chance_cash_below_zero_pct: 0 }, { rank: 3, path: "Master's degree", net_worth_at_end_median_chf: 102000, chance_cash_below_zero_pct: 0 }] }
+    const r = await post<TurnResult>('/api/chat', { ...ctx('whats the best branch out of all'), history: [], state: st, paths: [{ ...work3, net_worth_at_end_median_chf: 118000 }, { ...masters, net_worth_at_end_median_chf: 102000 }], focus_path_id: null, target_path_id: null, fork_from_path_id: null, compare: { A: null, B: null } })
+    show('best', r)
+    expect(r.data.reply).toMatch(/baseline|nothing changes|if nothing/i)
+    expect(r.data.reply).toMatch(/340/)
+  }, 60000)
+  it('chat: investing that cannot happen -> "can I invest successfully now?" is answered NO, with a way to make it possible', async () => {
+    const inv = { id: 'p1', name: 'Invest 2000/month', parent_id: 'today', events: [{ type: 'invest', label: 'Invest', start_month: 0, monthly_amount_chf: 2000 }], net_worth_at_end_median_chf: -116000, planned_investing_skipped_pct: 100, chance_cash_below_zero_pct: 100 }
+    const r = await chat('so can i invest successfully now?', { paths: [inv] })
+    show('invest blocked', r)
+    expect(r.data.reply).toMatch(/\bno\b|not|can't|cannot|isn't|won't/i)
+    expect(r.data.reply).not.toMatch(/builds up nicely|works well|you can invest successfully/i)
+  }, 60000)
+  it('chat: "how much do I have to make to pay the down payment?" -> quotes the engine\'s income_needed', async () => {
+    const home = { id: 'p1', name: 'Buy a home at 40', parent_id: 'today', events: [{ type: 'buy_home', label: 'Home', start_month: 240, amount_chf: 300000, down_payment_pct: 100 }], net_worth_at_end_median_chf: 140000, home_down_payment_missing_pct: [100], income_needed: { income_change_needed_pct: 210, monthly_income_needed_now_chf: 3720, meaning: 'smallest income (in every month) for which cash never goes below zero on this path' } }
+    const r = await chat('how much do i have to make to be able to pay the downpayment', { paths: [home] })
+    show('income needed', r)
+    expect(r.data.reply).toMatch(/3[’',.]?720|3[.,]7\s?k/)
+  }, 60000)
+  it('chat: "my income decreases by 20% each year for 2 years" -> two compounding cuts (× 0.64)', async () => {
+    const r = await chat('add a path: my income decreases by 20% each year for 2 years')
+    show('cuts', r)
+    const evs = r.data.new_paths[0].events as TwinEvent[]
+    const inc = resolve(alexia, params, { name: 'c', catalog_id: null, events: evs }, {}, 120, rate).income
+    expect(inc[30] / alexia.income).toBeCloseTo(0.64, 2)
+  }, 60000)
+  it('chat: a long, five-part message -> every part lands in the right place', async () => {
+    const r = await chat("ok so, a few things. I'm now earning 2,800 net and my rent went up to 1,100. Add two paths: first, a part-time master's at 21 while I keep working at 60%; second, I move to Zurich at 23 and buy a flat for 600k at 30 with 20% down. Also add a goal of 30k saved by 28, and assume a recession in 3 years. Which one looks riskier?")
+    show('long', r)
+    expect(r.data.profile_update?.monthly_net_income_chf).toBe(2800)
+    expect(r.data.profile_update?.monthly_rent_chf).toBe(1100)
+    expect(r.data.new_paths.length).toBe(2)
+    const flat = r.data.new_paths.flatMap((p) => p.events).find((e) => e.type === 'buy_home')!
+    expect(flat.amount_chf).toBe(600000)
+    expect(flat.start_month).toBe(120)
+    expect(r.data.new_goals.some((g) => g.target_chf === 30000 && g.by_month === 96)).toBe(true)
+    expect(r.data.macro_update?.preset === 'recession' || r.data.macro_update?.recession_start_month === 36).toBe(true)
+  }, 90000)
   it('explain: Alexia demo, all numbers traced to the engine', async () => {
     const ps = presets(alexia, params)
     const specs = [ps.find((p) => p.id === 'work')!, ps.find((p) => p.id === 'master')!, ps.find((p) => p.id === 'abroad')!]

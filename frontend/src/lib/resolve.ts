@@ -135,7 +135,7 @@ export function resolve(
   if (startHome) homeValue.fill(startHome)
   const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `average of your ${profile.calib.months} ledger months, seasonality and bonus removed`)
   const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `std-dev of your ${profile.calib.months} ledger months`)
-  const invReturn = A('m.ret', 'Economy: investment return (real, per year)', macro.market_return_pct, '%', macro.market_return_pct ? 'macro' : 'assumption', macro.market_return_pct ? `set by the economy “${macro.name}”` : 'Not in the data (assets are a single snapshot). 0% = no growth. Choose an economy or edit.') / 100
+  const invReturn = A('m.ret', 'Economy: investment return (per year, 2025 francs)', macro.market_return_pct, '%', macro.id === 'base' ? 'assumption' : 'macro', macro.id === 'base' ? 'Not in the data (assets are a single snapshot). 4% = UBS’s illustrative rate (financial-concepts.md §6: 10,000 at 4% for 5 years ≈ 12,167). A modelling assumption, not a forecast; shared by every path. Edit it or pick an economy.' : `set by the economy “${macro.name}”; shared by every path`) / 100
   const invVol = A('m.vol', 'Economy: market ups & downs (per year)', macro.market_vol_pct, '%', macro.market_vol_pct ? 'macro' : 'assumption', macro.market_vol_pct ? `set by the economy “${macro.name}”` : 'Not in the data. 0% = no market noise.') / 100
   profile.loans.forEach((l, i) => {
     const rateNow = l.annual_rate + shift
@@ -222,9 +222,21 @@ export function resolve(
         const byPct = e.monthly_net_income_chf == null
         const pctV = byPct ? A(`${k}.pct`, `${e.label}: income change`, e.income_change_pct ?? 0, '%', e.income_change_pct != null ? tag : 'missing', e.income_change_pct != null ? tagNote : 'Size of the change not given.') : 0
         const newInc = byPct ? base * (1 + pctV / 100) : A(`${k}.income`, `${e.label}: new income`, e.monthly_net_income_chf!, 'CHF/mo', tag, tagNote)
-        for (let t = s; t < end; t++) {
-          income[t] = byPct ? income[t] * (1 + pctV / 100) : newInc
-          if (income[t] <= 0) status[t] = 'unemployed'
+        const every = e.repeat_every_months && e.repeat_every_months > 0 && byPct ? Math.round(e.repeat_every_months) : 0
+        if (every) {
+          // a recurring raise (e.g. +2% every 12 months for 10 years): each step applies to the income BEFORE it, so it
+          // compounds; a raise is kept afterwards. Income growth is an assumption UBS lists (scenario-modelling §11).
+          let steps = 0
+          for (let r = s; r < end; r += every) {
+            for (let t = r; t < H; t++) income[t] *= 1 + pctV / 100
+            steps++
+          }
+          assumptions.push({ key: `${k}.info`, label: `${e.label}: after ${steps} step${steps === 1 ? '' : 's'}`, value: Math.round((Math.pow(1 + pctV / 100, steps) - 1) * 1000) / 10, unit: '% in total (compounded)', source: 'you', note: `${pctV}% every ${every} months, each on top of the last`, month: s })
+        } else {
+          for (let t = s; t < end; t++) {
+            income[t] = byPct ? income[t] * (1 + pctV / 100) : newInc
+            if (income[t] <= 0) status[t] = 'unemployed'
+          }
         }
         changeMonth ??= s
         break
@@ -254,7 +266,8 @@ export function resolve(
           const m = A(`${k}.monthly`, `${e.label}: invested per month`, e.monthly_amount_chf ?? 0, 'CHF/mo', e.monthly_amount_chf != null ? tag : 'missing', e.monthly_amount_chf != null ? tagNote : 'Amount not given.')
           for (let t = s; t < end; t++) contrib[t] += m
         }
-        if (e.amount_chf != null) contrib[s] += A(`${k}.lump`, `${e.label}: lump sum invested`, e.amount_chf, 'CHF', tag, tagNote)
+        // a negative lump sum = selling (money goes back to cash; the engine never sells more than is held)
+        if (e.amount_chf != null) contrib[s] += A(`${k}.lump`, `${e.label}: ${e.amount_chf < 0 ? 'sold (back to cash)' : 'lump sum invested'}`, e.amount_chf, 'CHF', tag, tagNote)
         break
       }
       case 'market_shock': {
@@ -327,6 +340,23 @@ export function resolve(
         break
       }
     }
+  }
+
+  // ---- decisions that cannot work as written (shown on the path and in the chat, never silently ignored)
+  for (const e of spec.events) {
+    const m = Math.round(e.start_month ?? 0)
+    if (m >= H) warnings.push(`“${e.label}” starts at ${Math.floor(ageAt(m))}, after the end of the simulation (${Math.floor(ageAt(H))}): it has no effect. Show more years to include it.`)
+  }
+  const studies = spec.events.filter((e) => e.type === 'study').map((e) => {
+    const s0 = clampM(e.start_month)
+    const sa = profile.study_assumption
+    const d = e.duration_months ?? (sa?.study_duration_years ?? params.anchors.study.duration_years_median) * 12
+    return { s0, end: s0 + Math.round(d), label: e.label }
+  })
+  for (const j of spec.events.filter((e) => e.type === 'start_job')) {
+    const m = clampM(j.start_month)
+    const st = studies.find((x) => m >= x.s0 && m < x.end)
+    if (st) warnings.push(`“${j.label}” starts while studying (“${st.label}” runs until ${Math.floor(ageAt(st.end))}): its salary replaces the student income during the degree. For a salary AFTER the degree, start the job at ${Math.floor(ageAt(st.end))}.`)
   }
 
   // ---- learned spending response to a changed situation (regression delta, personal offset kept)
@@ -425,7 +455,7 @@ export function presets(profile: Profile, params: Params): Preset[] {
     move: `In 12 months, move to ${dest}: rent becomes the median rent there (data)${profile.status !== 'employed' ? ', and start a job' : ''}.`,
     abroad: 'Move abroad now: income CHF 3,700 a month and a CHF 6,500 moving cost (numbers from the UBS starter kit). Rent abroad is unknown, so it stays the same.',
     jobloss: 'No income for 6 months, starting in 12 months. Everything else stays the same.',
-    invest: 'Move CHF 500 a month from cash into investments. Growth is 0% unless you change it.',
+    invest: 'Move CHF 500 a month from cash into investments. They grow at the economy’s return (4% a year by default, UBS’s illustrative rate).',
     crash: 'Investments lose 30% of their value in 24 months (a stress test).',
   }
   return out.map((p) => ({ ...p, desc: desc[p.id] ?? p.spec.name }))
@@ -443,11 +473,11 @@ export function describeSpec(spec: ScenarioSpec, age0: number): string {
       case 'start_job': return `job ${at(e.start_month)}${e.monthly_net_income_chf ? ` (${k(e.monthly_net_income_chf)}/mo)` : ''}`
       case 'study': return `study ${d ? `${d} months` : ''} ${at(e.start_month)}, then a job`.replace('  ', ' ')
       case 'relocate': return `${!e.city || /^abroad$/i.test(e.city.trim()) ? 'move abroad' : `move to ${e.city.replace(/^abroad:\s*/i, '')}`} ${at(e.start_month)}`
-      case 'income_change': return e.income_change_pct === -100 ? `no income ${d ? `for ${d} months ` : ''}${at(e.start_month)}` : e.monthly_net_income_chf != null ? `income ${k(e.monthly_net_income_chf)}/mo ${at(e.start_month)}${until(e)}` : `income ${e.income_change_pct != null ? `${e.income_change_pct > 0 ? '+' : ''}${e.income_change_pct}%` : 'changes'} ${at(e.start_month)}${until(e)}`
+      case 'income_change': return e.repeat_every_months && e.income_change_pct != null ? `income ${e.income_change_pct > 0 ? '+' : ''}${e.income_change_pct}% every ${e.repeat_every_months === 12 ? 'year' : `${e.repeat_every_months} months`} ${at(e.start_month)}${until(e)}` : e.income_change_pct === -100 ? `no income ${d ? `for ${d} months ` : ''}${at(e.start_month)}` : e.monthly_net_income_chf != null ? `income ${k(e.monthly_net_income_chf)}/mo ${at(e.start_month)}${until(e)}` : `income ${e.income_change_pct != null ? `${e.income_change_pct > 0 ? '+' : ''}${e.income_change_pct}%` : 'changes'} ${at(e.start_month)}${until(e)}`
       case 'household_change': return `${e.household_type === 'family' ? 'a child' : e.household_type === 'couple' ? 'move in together' : (e.household_type ?? 'new household').replace('_', ' ')} ${at(e.start_month)}`
       case 'recurring_expense': return `${e.label.toLowerCase().replace(/\s*\d[\d'’,.]*\s*k?\s*(chf)?\s*(a|per|\/)\s*mo(nth)?/i, '')}${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''} ${at(e.start_month)}${until(e)}`
       case 'one_off': return `${e.amount_chf != null && e.amount_chf < 0 ? 'receive' : 'pay'} ${e.amount_chf ? k(Math.abs(e.amount_chf)) : ''} (${e.label.toLowerCase()}) ${at(e.start_month)}`
-      case 'invest': return `invest${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''}${e.amount_chf ? ` ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
+      case 'invest': return e.amount_chf != null && e.amount_chf < 0 && !e.monthly_amount_chf ? `sell ${k(-e.amount_chf)} of investments ${at(e.start_month)}` : `invest${e.monthly_amount_chf ? ` ${k(e.monthly_amount_chf)}/mo` : ''}${e.amount_chf ? ` ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`
       case 'market_shock': return `markets −${e.drop_pct ?? 30}% ${at(e.start_month)}`
       case 'take_loan': return `borrow ${e.amount_chf ? k(e.amount_chf) : ''} ${at(e.start_month)}`
       case 'buy_home': return `buy a home${e.amount_chf ? ` for ${k(e.amount_chf)}` : ''} ${at(e.start_month)}`

@@ -189,8 +189,8 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 64 validation tests (accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
-cd frontend && pnpm test:live                # 54 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
+cd frontend && pnpm test                     # 80 validation tests (accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
+cd frontend && pnpm test:live                # 67 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 cd ml && uv sync --frozen && uv run train.py # re-train from pre_docs/Data -> rewrites frontend/src/model/*.json (~5 s, deterministic)
 curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow
@@ -313,7 +313,7 @@ mise.toml          pinned toolchain
 
 - Synthetic data: incomes don't depend on age (≈ CHF 8k net at every age), spending barely depends on income — so "start working at 20" looks very rich. The salary pill is editable.
 - No education/abroad data → degree premium and abroad numbers are UNKNOWN (we show break-even instead of guessing).
-- Constant 2025 CHF (no inflation); net income (taxes already inside); investment return 0% unless set.
+- Constant 2025 CHF (no inflation); net income (taxes already inside); investment return 4% a year (UBS's illustrative rate from financial-concepts.md; editable, shared by every path).
 - The band shows month-to-month variability, not uncertainty about the assumptions (that's the drivers panel). Not a forecast, not advice.
 
 ### 2.8 What we built vs. reused (LauzHack rule)

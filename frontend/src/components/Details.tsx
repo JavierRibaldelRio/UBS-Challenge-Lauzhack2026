@@ -29,7 +29,12 @@ export function AssumptionList({ items, overrides, onChange }: { items: Assumpti
   return (
     <div className="alist">
       {own.length === 0 && <p className="muted">This path changes nothing: it uses the person’s numbers as they are today.</p>}
-      {own.map((a) => (
+      {own.some((a) => a.source !== 'you') && <div className="alist-sub">Filled in for you: you didn’t say it, so the twin assumed it. The grey line says why.</div>}
+      {own.filter((a) => a.source !== 'you').map((a) => (
+        <Row key={a.key} a={a} overridden={overrides[a.key] != null} onChange={(v) => onChange(a.key, v)} />
+      ))}
+      {own.some((a) => a.source === 'you') && <div className="alist-sub">You said</div>}
+      {own.filter((a) => a.source === 'you').map((a) => (
         <Row key={a.key} a={a} overridden={overrides[a.key] != null} onChange={(v) => onChange(a.key, v)} />
       ))}
       {eco.length > 0 && (

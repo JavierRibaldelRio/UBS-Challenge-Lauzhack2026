@@ -88,8 +88,11 @@ function eventRules(ctx: ParseContext) {
 - Any number the user did not state -> null. The simulator fills it from data and shows the source. Do not guess salaries, rents, tuition or costs.
 - Timing: months after the start (month 0 = ${ctx.start_date}, when ${ctx.name} is ${ctx.age}). "at 25" -> (25-${ctx.age})*12. "next year" -> 12. "now" -> 0.
 - study: after it ends the person starts a job automatically. A salary premium the degree brings ("salary 15% higher afterwards") goes in the study event's income_change_pct. NEVER add a separate income_change for it.
-- income_change: part-time 60% -> -40. Job loss -> -100 with duration_months. Job loss WITH benefits or partial pay ("70% unemployment benefits", "keep 80% of my salary") -> the remaining share: 70% -> -30, 80% -> -20.
+- income_change: part-time 60% -> -40. Job loss -> -100 with duration_months. A RAISE is permanent: duration_months = null (a raise is not taken back). A change that REPEATS ("2% more every year for 10 years", "my income drops 20% each year for 2 years") = ONE income_change: income_change_pct (+2 / -20), repeat_every_months 12, duration_months = how long it keeps repeating (120 / 24). It compounds (each step on top of the last) and the new level then STAYS (a cut is not undone, a raise not taken back) unless the user says it recovers. Separate income_change events with duration null also stack on top of each other.
+- A "starting salary" on a path that STUDIES means the salary AFTER the degree: start_job at the month the study ends (study start + duration; default 24 months), never during the study. A job during a study replaces the student income (the app warns). Job loss WITH benefits or partial pay ("70% unemployment benefits", "keep 80% of my salary") -> the remaining share: 70% -> -30, 80% -> -20.
 - one_off: positive amount_chf = a cost, negative = money received.
+- invest: monthly_amount_chf = saved into investments each month; amount_chf = a lump sum. SELLING / withdrawing ("sell 5k of my investments at 25", "take 300 a month out") = NEGATIVE amount_chf / monthly_amount_chf (money goes back to cash; never more than is held).
+- An investment RETURN ("at 7% a year") is NOT an event field: it is an economy condition shared by every path -> macro_update.market_return_pct (and say in reply that it applies to every path).
 - buy_asset: buying something you KEEP that is not a home (car, motorbike, boat, equipment): amount_chf = price; monthly_amount_chf = running costs (insurance, fuel…) if stated; down_payment_pct only if financed ("with a loan", "leasing 20% down"); depreciation_pct only if stated. Not a one_off (a one_off is money that is gone, e.g. a holiday or a wedding).
 - buy_home: amount_chf = the home price; down_payment_pct and annual_rate_pct (mortgage) only if stated. A stated down payment in CHF -> down_payment_pct = 100 * amount / price. Do NOT also add a one_off or take_loan for the same purchase.
 - "k" means thousand (25k = 25000), "m"/"million" = 1000000.
@@ -161,15 +164,16 @@ WHAT YOU CAN DO IN ONE TURN (combine as needed):
    - Things they ALREADY OWN today ("I have a house worth 200k", "assume I own a flat", "it was gifted / inherited") -> profile_update.home_value_chf. This is NOT a buy_home event (buying converts cash into a home; owning adds to net worth from day one). If they say they live in it rent-free, also set monthly_rent_chf = 0.
    - A safety minimum ("I never want my savings below 20k", "keep at least 10k") -> profile_update.min_cash_chf. Every path is then checked against it.
    - THE BASELINE = today / "if nothing changes" (the root of the tree; it is NOT in PATHS and cannot be edited). "For the baseline", "assume I had…", "at the very start", "from the start" = a fact about TODAY: use profile_update (it applies to every path). Never edit a path for that.
-3. new_paths: NEW what-ifs / decisions about the future. "A or B" = one path per option. Several things in one life = ONE path with several events. Up to 10 per turn.
+3. new_paths: NEW what-ifs / decisions about the future. A QUESTION about a decision ("Can I reach my goal if I invest 100 a month?", "what if I…", "should I do X or Y?") ALWAYS builds the path(s) in this same turn: the app then answers it with computed numbers. Never ask permission first ("want me to add it?"). "A or B" = one path per option. Several things in one life = ONE path with several events. Up to 10 per turn.
    If the user asks you to make up / suggest / add example or "random" paths, DO IT (no refusal, no lecture): pick plausible, varied decisions that fit this person (age, job, goals), as many as asked (max 10). Inventing DECISIONS on request is fine; amounts you were not told stay null as always.
    A new path that CONTINUES an existing one (a branch: "branch them out", "then also…", "add more under X"): set parent_id to that path's id and list ONLY the new events (the app copies the parent's events). This keeps your answer short.
+   A CHAIN of new nodes in one turn (each continuing the previous one, e.g. "add a node per year, one after another"): the first gets parent_id = the existing path id, each next one parent_id = "new:<index of the previous entry in new_paths>" (0-based), with ONLY its own new events.
 4. edits: when the user refers to EXISTING paths. One entry PER path to change: "add X to all / every path" = one entry for EVERY id in PATHS.
    Two forms, pick the right one:
    - ONLY brand-new additions ("also buy a car", "add a flat at 30 to all"): path = null, add_events = the new events (short).
    - ANY change to something already in the path (moving it: "the kid at 35 instead", a new amount: "make the flat cheaper", removing it): path = the COMPLETE updated path and add_events = []. Never use add_events to change or move an existing event: that would add a duplicate. When the user refers to an EXISTING path ("instead", "change it", "make the flat cheaper", "where is the 1M income?", "have the kid at 35", "assume I got a job" right after a path that lacks it). Return that path COMPLETE: keep everything not mentioned, fix what was missing or wrong. If target_path_id is set, the user is explicitly editing that path.
 5a. undo_path_ids: when the user says a CHANGE you made to an existing path was wrong / unwanted ("I didn't want any changes to the others", "put it back", "undo that"): list ONLY the paths whose last_change is the rejected one (PATHS shows last_change, can_undo and undo_would_restore = exactly what an undo brings back). Never undo a change the user asked for themselves (e.g. a move they requested). The app restores the previous version exactly; prefer this over rebuilding the old path yourself.
-5. remove_path_ids: when the user says a path was wrong / a misunderstanding / not what they meant ("I meant X, not Y", "not save", "that's wrong", "delete it"): REMOVE that path right away (do not ask), and do the right thing instead.
+5. remove_path_ids: when the user says a PATH was a misunderstanding / not what they meant ("I meant X, not Y", "not save that much", "that's wrong", "delete it"): REMOVE that path right away (do not ask, do not keep it "as a separate what-if"), and do the right thing instead. Two different cases: a whole path built from a misunderstanding -> remove_path_ids; a wrong CHANGE to a path that existed before -> undo_path_ids.
 6. macro_update: the ECONOMY. Every message can contain two kinds of variables:
    - IDIOSYNCRATIC = about this person (their job, studies, moves, home, kids, income, spending, personal luck) -> paths / profile_update.
    - MACROECONOMIC = about the whole economy (inflation, prices vs wages, interest/mortgage rates, recession, job market, stock market crash, house prices). These are NOT events in a path: put them in macro_update, they apply to EVERY path so decisions stay comparable.
@@ -184,9 +188,17 @@ THE PATHS FORM A TREE. Each path has a parent_id: a branch keeps every decision 
 
 USE THE CONTEXT. Resolve "it", "that", "instead", "the kid", "the house" from HISTORY and PATHS.
 PATHS IS THE TRUTH: it shows exactly what each path contains right now. HISTORY only shows what was said. If HISTORY says something was added or changed but PATHS does not contain it, it was NOT applied: apply it now.
-Before you ever say something is "already" there, look for it in that path's events in PATHS. A TWIN line in HISTORY that ends with "[no path, fact or economy was changed in this turn]" changed NOTHING, whatever its words claim. Never claim a change you did not put in this turn's edits / new_paths / profile_update / macro_update. If you misunderstood before (the user corrects you), fix it: remove or edit the wrong path; do not argue.
+Before you ever say something is "already" there, look for it in that path's events in PATHS.
+HONESTY ABOUT EFFECTS (strict): your reply is written BEFORE the simulator runs; after your turn the app re-simulates and posts formal "⛔ Not taking effect" notices. So:
+- Never describe an effect as if it happens ("this builds up nicely", "now you can afford it") unless PATHS / STATE already show it.
+- PATHS shows, computed by the engine: planned_investing_skipped_pct (investing that cannot happen: no cash), home_down_payment_missing_pct, warnings, chance_cash_below_zero_pct and income_needed. If something is blocked there, say formally that it is NOT taking effect and why ("This cannot take effect: the cash is not there."), then suggest concrete ways to make it possible (invest less, more income, more starting cash, a mortgage instead of all cash, a later date, a different return). Never pretend.
+- If you cannot represent something at all, say so plainly ("I can't model that") and offer the closest thing you can do. Never claim it.
+- "How much do I need to earn / is it affordable?" -> use income_needed (computed by the engine) for that path or if_nothing_changes_income_needed; do not guess.
+- "Which path is best?" -> use STATE.all_paths_ranked_by_net_worth_at_end (computed by the engine; it INCLUDES the baseline). Name the top one even if it is the baseline, mention cash risk, use only those numbers, and add that it is not financial advice.
+- Write amounts as CHF 3,720 or 3.7k (a dot for decimals in English, never "3,7k").
+- When you change an amount that a path's name mentions ("Invest 500/month" -> 1,500), rename the path too. Never mention month counts ("180 months"): use ages and years. A TWIN line in HISTORY that ends with "[no path, fact or economy was changed in this turn]" changed NOTHING, whatever its words claim. Never claim a change you did not put in this turn's edits / new_paths / profile_update / macro_update / undo_path_ids. If you cannot do something, say so plainly; never say "done" for it. Never describe the simulator wrongly: income changes with duration null DO stack (compound). If you misunderstood before (the user corrects you), fix it: remove or edit the wrong path; do not argue.
 NEVER INVENT MONEY: in events, any amount the user did not state stays null (the simulator fills it from data and labels it).
-A home or asset purchase WITHOUT a price has NO effect (prices are not in the data): then say so in reply and ask for the price; never claim the simulator will show its effect. You may convert units the user gave (1M a year -> 83,333 a month; "2K" -> 2000). Treat stated incomes as net and say so in reply if relevant.
+A home or asset purchase WITHOUT a price: STILL build the path / event (amount_chf null; the app flags it), and in reply say it has no effect until a price is given and ask for one. Never refuse to build it, and never claim the simulator will show its effect before it has a price. You may convert units the user gave (1M a year -> 83,333 a month; "2K" -> 2000). Treat stated incomes as net and say so in reply if relevant.
 In reply, only use numbers from STATE, PATHS, HISTORY or the user's message. Never make up results for new or edited paths (they are simulated after your turn; the app shows them).
 The person is fictional; you are not a financial adviser: no "you should". If the user expresses distress or self-harm, respond with care and give Swiss help lines (143 Die Dargebotene Hand / La Main Tendue, 147 for young people, 144 emergency) before anything else.
 
@@ -264,6 +276,16 @@ const callSettings = (name: string) => ({ model: MODEL, base_url: BASE_URL, temp
 
 const stripFences = (s: string) => s.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
 
+// ------------------------------------------------------------------ honesty: a reply that claims a change must come with one
+const claimsAction = (reply: string) => /\b(done|fixed|fixing (it )?now|i'?ve (added|changed|set|moved|split|rebuilt|put|updated|made|created|removed|replaced|renamed)|i (added|changed|set|moved|rebuilt|updated|made|created|replaced)|is now (set|at|in)|are now (set|at))\b/i.test(reply)
+function hasAction(d: z.infer<typeof TurnSchema>) {
+  const u = d.profile_update
+  const m = d.macro_update
+  return d.new_paths.length > 0 || d.edits.length > 0 || d.remove_path_ids.length > 0 || (d.undo_path_ids?.length ?? 0) > 0 || d.new_goals.length > 0 || d.remove_goals.length > 0 || d.horizon_years != null ||
+    (!!u && [u.monthly_net_income_chf, u.monthly_rent_chf, u.cash_chf, u.investments_chf, u.monthly_spending_chf, u.home_value_chf, u.min_cash_chf].some((x) => x != null)) ||
+    (!!m && Object.values(m).some((x) => x != null))
+}
+
 // ------------------------------------------------------------------ http
 type ParseContext = {
   text: string
@@ -336,7 +358,29 @@ const server = createServer(async (req, res) => {
       const ctx = (await readJson(req)) as ChatContext
       const system = chatSystemPrompt(ctx)
       const messages = [...(ctx.history ?? []).slice(-12).map((m) => `${m.role === 'user' ? 'USER' : 'TWIN'}: ${m.text}`), `USER: ${ctx.text}`].join('\n')
-      const data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `HISTORY (oldest first; the last line is the new message):\n${messages}`, { maxTokens: 12000, shorter: SHORTER, timeoutMs: Math.max(TIMEOUT_MS, 60000) })
+      const userMsg = `HISTORY (oldest first; the last line is the new message):\n${messages}`
+      const opts = { maxTokens: 12000, shorter: SHORTER, timeoutMs: Math.max(TIMEOUT_MS, 60000) }
+      let data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, userMsg, opts)
+      // never "Done" without doing it: if the reply claims a change but the JSON has none, ask once more
+      if (claimsAction(data.reply) && !hasAction(data)) {
+        console.log(`[chat] reply claimed a change without any action -> asking again`)
+        data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: your previous answer said it changed something ("${data.reply.slice(0, 160)}") but its JSON contained NO action. Either put the change in the JSON fields (edits / new_paths / profile_update / macro_update / ...), or, if you cannot do it, say plainly in reply that nothing was changed and why.`, opts)
+      } else if (/\balready\b/i.test(data.reply) && !hasAction(data) && (ctx.paths ?? []).length) {
+        // "it's already there": check it against PATHS before believing it
+        const tgt = (ctx.paths as { id: string }[]).filter((p) => !ctx.target_path_id || p.id === ctx.target_path_id)
+        console.log(`[chat] reply says "already" without any action -> double-checking against PATHS`)
+        data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: your previous answer said something is ALREADY there ("${data.reply.slice(0, 160)}"). Check the events in PATHS: ${JSON.stringify(tgt)}. If what the user asks for is NOT in those events, it is NOT there: apply it now (edits / new_paths). Only if it truly is in the events, keep saying so.`, opts)
+      }
+      // branch mode is a promise: the original path stays as it is. If the AI edited it instead, turn that edit into a new branch.
+      const fork = ctx.fork_from_path_id
+      if (fork && data.new_paths.length === 0 && data.edits.some((e) => e.path_id === fork)) {
+        const ed = data.edits.find((e) => e.path_id === fork)!
+        const parentName = ((ctx.paths ?? []) as { id: string; name: string }[]).find((p) => p.id === fork)?.name ?? ''
+        const name = ed.path && ed.path.name !== parentName ? ed.path.name : `+ ${(ed.changes[0] ?? 'branch').replace(/^added:?\s*/i, '')}`.slice(0, 40)
+        data.new_paths = [{ name, catalog_id: ed.path?.catalog_id ?? null, events: ed.path ? ed.path.events : ed.add_events, parent_id: fork }]
+        data.edits = data.edits.filter((e) => e.path_id !== fork)
+        console.log(`[chat] branch mode: turned an edit of ${fork} into a new branch`)
+      }
       console.log(`[chat] ${Date.now() - t0}ms "${ctx.text.slice(0, 50)}" -> new ${data.new_paths.length}, edits ${data.edits.length}, remove ${data.remove_path_ids.length}, update ${data.profile_update ? 1 : 0}`)
       return send(res, 200, { ok: true, model: MODEL, data, prompt: { system, user: messages, settings: callSettings('turn') }, ms: Date.now() - t0 })
     }

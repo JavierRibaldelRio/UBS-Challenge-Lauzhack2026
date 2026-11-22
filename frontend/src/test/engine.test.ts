@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { breakEven, drivers, verifyNumbers } from '../lib/analysis'
 import { makeEvent, medianLoanRate, presets, resolve } from '../lib/resolve'
-import { checks, runPath, simulate } from '../lib/sim'
+import { checks, NO_KNOBS, runPath, simulate } from '../lib/sim'
 import { offlineParse } from '../lib/fallback'
 import { verdict } from '../lib/answer'
 import { suggestQuestions } from '../lib/suggest'
@@ -47,8 +47,9 @@ describe('scenario logic', () => {
     expect(simulate(z, params, alexia, 100).probNegCash).toBe(1)
   })
   it('investing moves cash to investments without changing net worth (0% return)', () => {
-    const inv = plan(alexia, { name: 'i', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 500 })] })
-    expect(Math.abs(endNW(inv) - endNW(plan(alexia, quo)))).toBeLessThan(1e-6)
+    const zero = { ...BASE_MACRO, market_return_pct: 0 }
+    const inv = resolve(alexia, params, { name: 'i', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 500 })] }, {}, 120, rate, zero)
+    expect(Math.abs(endNW(inv) - endNW(resolve(alexia, params, quo, {}, 120, rate, zero)))).toBeLessThan(1e-6)
   })
   it('loan repaid: debt never negative, interest costs money', () => {
     const l = plan(alexia, { name: 'l', catalog_id: null, events: [makeEvent({ type: 'take_loan', label: 'l', amount_chf: 10000, duration_months: 24 })] })
@@ -180,7 +181,9 @@ describe('answer confidence (computed, not AI)', () => {
   })
   it('investing at 0% return vs nothing: counted as a tie, not as "30% ends higher"', () => {
     const inv = { name: 'Invest 100', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 100 })] }
-    const v = verdict('What if I invest 100 a month?', cp(alexia, inv), cp(alexia, quo), alexia, params, 120, rate)
+    const zero = { ...BASE_MACRO, market_return_pct: 0 }
+    const cz = (s: ScenarioSpec) => { const pl = resolve(alexia, params, s, {}, 120, rate, zero); return { id: s.name, name: s.name, spec: s, overrides: {}, plan: pl, result: simulate(pl, params, alexia) } }
+    const v = verdict('What if I invest 100 a month?', cz(inv), cz(quo), alexia, params, 120, rate, zero)
     expect(v.ties).toBe(1)
     expect(v.reasons[0]).toMatch(/practically the same/)
   })
@@ -408,5 +411,147 @@ describe('editing the time on a link', () => {
     expect(shiftBranch(nodes, 'wf', -50)!.get('wf')!.events.find((e) => e.type === 'buy_home')!.start_month).toBe(0)
     expect(shiftBranch(nodes, 'today', 3)).toBeNull()
     expect(shiftBranch(nodes, 'wf', 5)!.size).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------- investments, raises, and the learned model: checked against UBS's own formulas
+describe('investments follow UBS’s formulas exactly (scenario-modelling §5, financial-concepts §6)', () => {
+  const r = Math.pow(1.04, 1 / 12) - 1 // the economy's 4% a year, as a monthly rate
+  it('a lump sum: 10,000 at 4% for 5 years = 10,000 × 1.04^5 ≈ 12,167 (UBS’s own example)', () => {
+    const pl = plan(alexia, quo, { 'g.invest': 10000 })
+    const o = runPath(pl, params, null)
+    expect(o.invest[59]).toBeCloseTo(10000 * Math.pow(1.04, 5), 6)
+    expect(Math.round(o.invest[59])).toBe(12167)
+  })
+  it('monthly saving: 100 a month for 10 years = A((1+r)^n − 1)/r (contributions at the end of each month)', () => {
+    const pl = plan(alexia, { name: 'i', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 100 })] }, { 'g.cash': 1e6 })
+    expect(runPath(pl, params, null).invest[119]).toBeCloseTo((100 * (Math.pow(1 + r, 120) - 1)) / r, 6)
+  })
+  it('returns grow net worth, never cash and never income; at 4% investing ends higher than not investing', () => {
+    const inv = plan(alexia, { name: 'i', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 100 })] }, { 'g.cash': 1e6 })
+    const a = runPath(inv, params, null)
+    const b = runPath(plan(alexia, quo, { 'g.cash': 1e6 }), params, null)
+    expect(a.cash[119]).toBeCloseTo(b.cash[119] - 12000, 6) // 120 × 100 left cash, nothing came back
+    expect(a.nw[119] - b.nw[119]).toBeCloseTo((100 * (Math.pow(1 + r, 120) - 1)) / r - 12000, 6) // the gain = the return
+    expect(inv.income).toEqual(plan(alexia, quo).income)
+    for (const c of checks(inv, params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+  it('budget constraint (scenario-modelling §14): you cannot invest money you do not have', () => {
+    // Alexia runs out of cash at 20: planned investing is skipped, so investing cannot look like free money
+    const inv = plan(alexia, { name: 'i', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'i', monthly_amount_chf: 500 })] })
+    const r = simulate(inv, params, alexia)
+    const none = simulate(plan(alexia, quo), params, alexia)
+    expect(r.investCut.share).toBe(1)
+    expect(r.endNW.p50 - none.endNW.p50).toBeLessThan(2000) // before this rule: +13k from "investing" money she never had
+    for (const c of checks(inv, params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+  it('selling: money goes back to cash, net worth unchanged that month, and never more than is held', () => {
+    const base = plan(alexia, quo, { 'g.invest': 10000 })
+    const sell = (amt: number) => plan(alexia, { name: 's', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'Sell', start_month: 12, amount_chf: amt })] }, { 'g.invest': 10000 })
+    const o = runPath(base, params, null)
+    const s1 = runPath(sell(-4000), params, null)
+    expect(s1.invest[12]).toBeCloseTo(o.invest[12] - 4000, 6)
+    expect(s1.cash[12]).toBeCloseTo(o.cash[12] + 4000, 6)
+    expect(s1.nw[12]).toBeCloseTo(o.nw[12], 6)
+    const all = runPath(sell(-1e9), params, null) // sell far more than exists: capped at what is held
+    expect(all.invest[12]).toBeCloseTo(0, 6)
+    expect(all.cash[12]).toBeCloseTo(o.cash[12] + o.invest[12], 6)
+    for (const c of checks(sell(-1e9), params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+})
+
+describe('raises', () => {
+  const inc = (events: TwinEvent[]) => plan(alexia, { name: 'r', catalog_id: null, events }).income
+  it('+2% every year for 10 years compounds: income × 1.02^10 (one event)', () => {
+    const i = inc([makeEvent({ type: 'income_change', label: 'Raise', income_change_pct: 2, repeat_every_months: 12, duration_months: 120 })])
+    expect(i[119]).toBeCloseTo(alexia.income * Math.pow(1.02, 10), 6)
+    expect(i[12]).toBeCloseTo(alexia.income * Math.pow(1.02, 2), 6)
+  })
+  it('separate permanent raises stack (×1.02 × 1.02); a raise WITH a duration is temporary', () => {
+    const two = inc([makeEvent({ type: 'income_change', label: 'r1', income_change_pct: 2, start_month: 12 }), makeEvent({ type: 'income_change', label: 'r2', income_change_pct: 2, start_month: 24 })])
+    expect(two[30]).toBeCloseTo(alexia.income * 1.0404, 6)
+    const temp = inc([makeEvent({ type: 'income_change', label: 't', income_change_pct: 2, start_month: 12, duration_months: 12 })])
+    expect(temp[30]).toBeCloseTo(alexia.income, 6)
+  })
+})
+
+describe('the model learned by ml/train.py does real work', () => {
+  const flat: Params = { ...params, season: Object.fromEntries(Object.keys(params.season).map((k) => [k, Array(12).fill(0)])) as Params['season'], bonus: {}, shock_quantiles: params.shock_quantiles.map(() => 0) }
+  const job = presets(alexia, params).find((p) => p.id === 'work')!.spec
+  it('without the learned seasons, bonus and surprises the results change, and the uncertainty band almost vanishes', () => {
+    const learned = simulate(plan(alexia, job), params, alexia)
+    const none = simulate(plan(alexia, job), flat, alexia)
+    expect(Math.abs(learned.endNW.p50 - none.endNW.p50)).toBeGreaterThan(1000) // e.g. December bonuses, expensive Februaries
+    const w = (x: typeof learned) => x.endNW.p90 - x.endNW.p10
+    expect(w(none)).toBeLessThan(w(learned) * 0.8) // the band comes from what was learned
+  })
+  it('defaults come from the data: a new job pays the median of real peers of that age', () => {
+    const a = plan(alexia, job).assumptions.find((x) => x.label.includes('net salary'))!
+    expect(a.source).toBe('data')
+    expect(a.value).toBeCloseTo(params.anchors.income_by_status.employed.by_age_band['20-24'].median, 6)
+  })
+})
+
+// ---------------------------------------------------------------- UBS technical-validation edge cases + "does it take effect?"
+import { effectIssues, incomeNeeded } from '../lib/effects'
+
+describe('UBS technical-validation edge cases', () => {
+  it('zero interest rate: no division by zero, the loan is repaid to exactly 0', () => {
+    const l = plan(alexia, { name: 'l', catalog_id: null, events: [makeEvent({ type: 'take_loan', label: 'l', amount_chf: 12000, annual_rate_pct: 0, duration_months: 24 })] })
+    const o = runPath(l, params, null)
+    expect(o.nw.every(Number.isFinite)).toBe(true)
+    expect(o.debt[30]).toBeCloseTo(0, 6)
+    for (const c of checks(l, params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+  it('negative investment return: the portfolio shrinks consistently, accounting still adds up', () => {
+    const bad = { ...BASE_MACRO, id: 'custom', market_return_pct: -10 }
+    const pl = resolve(alexia, params, quo, { 'g.invest': 10000 }, 120, rate, bad)
+    expect(runPath(pl, params, null).invest[11]).toBeCloseTo(9000, 6)
+    for (const c of checks(pl, params, alexia)) expect(c.ok, c.name).toBe(true)
+  })
+  it('"my income drops 20% each year for 2 years": two compounding cuts (× 0.64), then it stays there', () => {
+    const i = plan(alexia, { name: 'c', catalog_id: null, events: [makeEvent({ type: 'income_change', label: 'Cut', income_change_pct: -20, repeat_every_months: 12, duration_months: 24 })] }).income
+    expect(i[6]).toBeCloseTo(alexia.income * 0.8, 6)
+    expect(i[18]).toBeCloseTo(alexia.income * 0.64, 6)
+    expect(i[119]).toBeCloseTo(alexia.income * 0.64, 6)
+  })
+  it('decisions that cannot work as written are flagged: a job during a study; an event after the end', () => {
+    const w = plan(alexia, { name: 'x', catalog_id: null, events: [makeEvent({ type: 'study', label: "Master's" }), makeEvent({ type: 'start_job', label: 'Job 3000', monthly_net_income_chf: 3000 }), makeEvent({ type: 'one_off', label: 'Party', amount_chf: 1000, start_month: 200 })] }).warnings
+    expect(w.some((x) => /starts while studying/.test(x))).toBe(true)
+    expect(w.some((x) => /after the end of the simulation/.test(x))).toBe(true)
+  })
+})
+
+describe('does it take effect? (engine-checked notices after every chat turn)', () => {
+  const sim = (spec: ScenarioSpec, p: Profile = alexia, o = {}) => {
+    const pl = plan(p, spec, o)
+    return { pl, r: simulate(pl, params, p, 200) }
+  }
+  it('a healthy path has no notices', () => {
+    const job = presets(alexia, params).find((p) => p.id === 'work')!.spec
+    const { pl, r } = sim(job)
+    expect(effectIssues('Start working', job, pl, r, alexia)).toEqual([])
+  })
+  it('investing without the cash, a house without a price, a down payment that is not there: all "not taking effect"', () => {
+    const inv: ScenarioSpec = { name: 'Invest', catalog_id: null, events: [makeEvent({ type: 'invest', label: 'Invest', monthly_amount_chf: 500 })] }
+    const a = sim(inv)
+    expect(effectIssues('Invest', inv, a.pl, a.r, alexia).some((x) => x.level === 'blocked' && /cannot happen/.test(x.text))).toBe(true)
+    const nop: ScenarioSpec = { name: 'Flat', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'Flat', start_month: 60 })] }
+    const b = sim(nop)
+    expect(effectIssues('Flat', nop, b.pl, b.r, alexia).some((x) => x.level === 'blocked' && /no price/.test(x.text))).toBe(true)
+    const big: ScenarioSpec = { name: 'Flat', catalog_id: null, events: [makeEvent({ type: 'buy_home', label: 'Flat', start_month: 60, amount_chf: 300000, down_payment_pct: 100 })] }
+    const c = sim(big)
+    expect(effectIssues('Flat', big, c.pl, c.r, alexia).some((x) => x.level === 'blocked' && /own money/.test(x.text))).toBe(true)
+  })
+  it('income needed (goal-seek): none when already fine; when not, that income really keeps cash >= 0', () => {
+    const job = presets(alexia, params).find((p) => p.id === 'work')!.spec
+    expect(incomeNeeded(plan(alexia, job), params)).toBeNull()
+    const n = incomeNeeded(plan(alexia, quo), params)!
+    expect(n.pct).toBeGreaterThan(0)
+    expect(Number.isFinite(n.pct)).toBe(true)
+    const o = runPath(plan(alexia, quo), params, null, { ...NO_KNOBS, income: 1 + n.pct / 100 })
+    expect(Math.min(...o.cash)).toBeGreaterThanOrEqual(0)
+    const o2 = runPath(plan(alexia, quo), params, null, { ...NO_KNOBS, income: 1 + (n.pct - 2) / 100 })
+    expect(Math.min(...o2.cash)).toBeLessThan(0) // and it is the smallest such income (within 2%)
   })
 })

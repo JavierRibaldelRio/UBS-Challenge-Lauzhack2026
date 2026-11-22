@@ -22,8 +22,8 @@ export type Macro = {
 }
 
 const BASE: Macro = {
-  id: 'base', name: 'Today’s economy', catalog: null, desc: 'Prices and pay move together, rates as today, no market growth assumed, no recession.',
-  inflation_pct: 0, wage_growth_pct: 0, rate_shift_pct: 0, market_return_pct: 0, market_vol_pct: 0, recession: null, crash: null, housing_drop: null, recession_risk_per_year_pct: 0,
+  id: 'base', name: 'Today’s economy', catalog: null, desc: 'Prices and pay move together, rates as today, investments grow 4% a year (UBS’s illustrative rate), no recession.',
+  inflation_pct: 0, wage_growth_pct: 0, rate_shift_pct: 0, market_return_pct: 4, market_vol_pct: 0, recession: null, crash: null, housing_drop: null, recession_risk_per_year_pct: 0,
 }
 
 export const MACRO_PRESETS: Macro[] = [

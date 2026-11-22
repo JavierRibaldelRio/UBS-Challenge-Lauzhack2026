@@ -41,13 +41,15 @@ export type SimResult = {
   endNWPaths: Float64Array
   /** lowest cash of every simulated future (to test any liquidity floor, e.g. "never below 20k") */
   minCashPaths: Float64Array
+  /** planned investing that could not happen because the money was not there: share of futures, typical amount */
+  investCut: { share: number; p50: number }
   /** a few single futures (bumpy), drawn behind the smooth median line */
   samples: { nw: Float64Array; cash: Float64Array }[]
   /** home purchases: can the down payment actually be paid from cash in each future? */
   homeBuys: { month: number; down: number; cashBeforeP50: number; shortShare: number; label: string; kind: 'home' | 'asset'; price: number; loan: number }[]
 }
 
-export type PathOut = { cash: Float64Array; nw: Float64Array; liquid: Float64Array; invest: Float64Array; home: Float64Array; debt: Float64Array }
+export type PathOut = { cash: Float64Array; nw: Float64Array; liquid: Float64Array; invest: Float64Array; home: Float64Array; debt: Float64Array; investCut: number }
 
 /** One path. deterministic=true -> expected values, no noise (used for drivers, break-even, checks). */
 export function runPath(plan: Plan, params: Params, rand: (() => number) | null, knobs: Knobs = NO_KNOBS, ledger?: LedgerRow[]): PathOut {
@@ -62,9 +64,11 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
   let v = plan.startInvest
   const debt = plan.loans.map((l) => (l.isNew ? 0 : l.principal))
   const muShift = rand ? plan.muSe * normal(rand) : 0
-  const retM = (plan.invReturn + knobs.retShift) / 12
+  // effective monthly rate: 12 months compound to exactly the annual rate (UBS scenario-modelling §5: FV = PV(1+r)^n)
+  const retM = Math.pow(1 + Math.max(-0.99, plan.invReturn + knobs.retShift), 1 / 12) - 1
   const volM = plan.invVol / Math.sqrt(12)
   let recUntil = -1 // random recession (economy) running until this month
+  let cut = 0 // planned investing that could not happen (no money available)
 
   for (let t = 0; t < H; t++) {
     // always draw the same 4 numbers per month (keeps paths aligned across branches)
@@ -116,13 +120,21 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
       pay += p
     })
 
-    const contrib = plan.contrib[t]
-    const cashBefore = c
-    const down = plan.homeDown[t] // own money put into a home (cash -> home, net worth unchanged)
-    c = c + inc + bonus + loanIn - spend - plan.extra[t] - oneOff - contrib - pay - down
+    // investments: last month's value grows first, then this month's money moves in (end of period, as in UBS's
+    // annuity formula FV = PV(1+r)^n + A((1+r)^n-1)/r). A negative amount = selling: never more than what is held.
     const vBefore = v
     const r = retM + (rand ? volM * zRet : 0)
-    v = (v + contrib) * (1 + r)
+    v = v * (1 + r)
+    const cashBefore = c
+    const down = plan.homeDown[t] // own money put into a home (cash -> home, net worth unchanged)
+    const available = c + inc + bonus + loanIn - spend - plan.extra[t] - oneOff - pay - down
+    // UBS budget constraint (scenario-modelling §14): investment contributions only from money that is actually there.
+    // Selling: never more than is held.
+    const planned = plan.contrib[t]
+    const contrib = planned < 0 ? Math.max(planned, -Math.max(0, v)) : Math.min(planned, Math.max(0, available))
+    if (planned > 0 && contrib < planned - 1e-9) cut += planned - contrib
+    v += contrib
+    c = available - contrib
     const shock = plan.shocks.find((s) => s.month === t)
     if (shock) v *= 1 - shock.drop
     if (recStarts) v *= 0.8 // markets fall when a random recession starts
@@ -135,7 +147,7 @@ export function runPath(plan: Plan, params: Params, rand: (() => number) | null,
     debtA[t] = d
     ledger?.push({ t, cashBefore, cashAfter: c, inflow: inc + bonus + loanIn, outflow: spend + plan.extra[t] + oneOff + contrib + pay + down, contrib, interest, investGain: v - vBefore - contrib, debt: d, nw: nw[t], spend, revalue: plan.revalue[t] })
   }
-  return { cash, nw, liquid, invest: investA, home: homeA, debt: debtA }
+  return { cash, nw, liquid, invest: investA, home: homeA, debt: debtA, investCut: cut }
 }
 
 export type LedgerRow = { t: number; cashBefore: number; cashAfter: number; inflow: number; outflow: number; contrib: number; interest: number; investGain: number; debt: number; nw: number; spend: number; revalue: number }
@@ -156,6 +168,8 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
   const goalHits = goalMonths.map(() => 0)
   const goalLiquid = goalMonths.map(() => new Float64Array(paths))
   let neg = 0
+  let cutN = 0
+  const cutAmt = new Float64Array(paths)
 
   for (let p = 0; p < paths; p++) {
     const o = runPath(plan, params, rand, knobs)
@@ -168,6 +182,8 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
       if (o.cash[t] < mn) mn = o.cash[t]
       if (fn < 0 && o.cash[t] < 0) fn = t
     }
+    if (o.investCut > 0) cutN++
+    cutAmt[p] = o.investCut
     endNW[p] = o.nw[H - 1]
     endCash[p] = o.cash[H - 1]
     minCash[p] = mn
@@ -219,6 +235,7 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
     meanPath: { cash: Array.from(det.cash), nw: Array.from(det.nw) },
     endNWPaths: endNW,
     minCashPaths: minCash,
+    investCut: { share: cutN / paths, p50: band(cutAmt).p50 },
     samples,
     homeBuys,
   }

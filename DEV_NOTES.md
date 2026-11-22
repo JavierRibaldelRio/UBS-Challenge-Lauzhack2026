@@ -35,7 +35,7 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
 - **uncertainty:** ranges, drivers, break-even, unknowns, economy (C10);
 - **goal tracking** (C11);
 - **explains itself:** answers, stories, "how did the twin get this?" (C12, C18);
-- **validated:** live checks, backtest, 64 + 54 tests (C15, C19);
+- **validated:** live checks, backtest, 80 + 67 tests (C15, C19);
 - **transparent:** every number tagged data / learned / you / assumption / unknown / economy (C16, C17);
 - **responsible:** no advice, "in this simulation", fictional (C20).
 
@@ -180,12 +180,25 @@ For every month `t`:
 ```
 income    = planned income (+ maybe a December bonus, drawn from what we learned)
 spending  = (rent + usual spending + uncertainty about "usual") × (1 + seasonal %) + surprise
-cash      = cash + income + new loans − spending − extra costs − one-off costs − money moved to investments − loan payments
-invest    = (invest + money moved in) × (1 + return) × (1 − market shock)
+available = cash + income + new loans − spending − extra costs − one-off costs − loan payments − down payments
+invest    = invest × (1 + r)  then  + money moved in (end of month)   × (1 − market shock)
+            money moved in ≤ available cash (budget constraint) ; selling (negative) ≤ what is held
+cash      = available − money moved in
 debt      = debt + interest − loan payment          (never below 0)
-net worth = cash + invest − debt
+net worth = cash + invest + homes/assets − debt
 ```
-All amounts are CHF per month, in 2025 francs (no inflation). Income is after tax.
+All amounts are CHF per month, in 2025 francs (constant purchasing power). Income is after tax.
+
+### Investments (all checked against UBS's own formulas in `pnpm test`)
+- **Return** r = the economy's yearly return, applied as the monthly rate (1 + R)^(1/12) − 1, so 12 months compound to exactly R. Default **R = 4%**, UBS's illustrative rate (`financial-concepts.md` §6: "CHF 10,000 at 4% for five years ≈ CHF 12,167"); the test reproduces 12,167 exactly. Monthly saving matches UBS's annuity formula FV = A((1+r)^n − 1)/r exactly (`scenario-modelling.md` §5, contributions at the end of each period).
+- **Where the return goes:** into the investments' value, so into **net worth**. Never into cash, never into income. Cash only changes when money is moved in or out.
+- **The return is an economy condition** (UBS §2 lists "investment returns" under external conditions w): one setting shared by every path, so two paths are compared under the same markets. "Invest 200 at 7%" sets the economy's return to 7% for every path, and the chat says so. With "Uncertain economy" it also has ups and downs (volatility) and random recessions.
+- **Selling / withdrawals** (UBS catalog S068, S098): a negative `invest` amount moves value back to cash; never more than is held; net worth unchanged that month.
+- **Budget constraint** (UBS `scenario-modelling.md` §14): money is only invested if it is there. When cash is short, the planned amount is skipped (the tile says "investing skipped when cash is short"). Before this rule, a broke person "investing" 500/mo looked 13k richer from money she never had.
+- **Not learned from data:** the CSVs hold one snapshot of investments, no returns, so `train.py` cannot learn them honestly. That is why the return is a labelled, editable assumption with UBS's illustrative value, not a learned number.
+
+### Raises
+A raise is permanent (no duration). `income_change` with `repeat_every_months: 12` = a yearly raise that compounds (+2% for 10 years = ×1.02^10 ≈ +21.9%). Separate permanent raises also stack (×1.02 × 1.02). A change WITH a duration is temporary (job loss, part-time for a while). UBS lists income growth as an assumption to make explicit (`scenario-modelling.md` §11).
 
 ### Many futures (Monte Carlo)
 - We run **500 futures** per path. Each draws different surprise months, bonuses and (if set) market returns from the learned patterns.
@@ -220,11 +233,11 @@ Input: the person + a list of **events** (from the LLM, a preset button, or the 
 | `start_job` | status → employed, income → salary | median salary for employed people of that age band (**data**) |
 | `study` | status → student for N months, tuition every 6 months, then a job | length and tuition from `scenario-assumptions.csv` (**data**); salary premium = 0% (**unknown**) |
 | `relocate` | new rent (and income if given) from that month | known Swiss city: median rent there (**data**); abroad: keeps current values (**unknown**); moving cost 0 (**unknown**) |
-| `income_change` | income × (1 + %) for a while or forever | % not given → 0 (**unknown**) |
+| `income_change` | income × (1 + %) for a while or forever; with `repeat_every_months` a recurring raise that compounds | % not given → 0 (**unknown**) |
 | `household_change` | single / couple / family / shared housing | median rent for that household in that city (**data**) |
 | `recurring_expense` | extra monthly cost | amount not given → 0 (**unknown**) |
 | `one_off` | single cost (>0) or money in (<0) | 0 (**unknown**) |
-| `invest` | monthly amount and/or lump sum moved into investments | 0 (**unknown**) |
+| `invest` | monthly amount and/or lump sum moved into investments (only if the cash is there); negative = selling | 0 (**unknown**) |
 | `market_shock` | investments fall by X% | 30% (**assumption**) |
 | `take_loan` | cash now, monthly repayments | median rate of the 283 loans (**data**); 5-year term (**assumption**) |
 | `buy_home` | own money (down payment) leaves cash, a mortgage is paid to the seller, the home is added to net worth, rent stops, upkeep starts. Interest-only mortgage | price: **unknown** (must be set; without a price nothing happens and the card warns "needs a price"); down payment 20%, mortgage 2%, upkeep 1%/yr (**assumption**) |
@@ -441,6 +454,16 @@ PC first (no phone layout on purpose). One screen, three parts: **chat on the le
 - **A home you already own** ("assume I had a house worth 200k at 20, gifted"): `profile_update.home_value_chf` → `Profile.home` → `Plan.startHome`, counted in net worth from day one (never cash; house-price drops apply). This is NOT a `buy_home` event: buying converts cash into a home and leaves net worth flat. "For the baseline / from the start" always means a fact about today, applied to every path.
 - **A cash floor** ("I never want my savings below 20k"): `profile_update.min_cash_chf` → `Profile.minCash`, a user-defined constraint (C_t ≥ C_min, UBS interaction 4). Every path shows "stays above your floor" / "below your floor in X%"; the cash chart draws the floor; "cash trouble" and "fits your goals better" include it (`belowFloor`, `breach` in `lib/compare.ts`).
 
+### Honesty: nothing is claimed that does not take effect
+The AI writes its reply BEFORE anything is simulated, so honesty is enforced by code, not by trust:
+- **Backend (`/api/chat`):** a reply that claims a change ("Done", "I've added…") without any action in its JSON, or says something is "already" there without checking, is sent back once: do it, or say plainly that nothing changed. In branch mode, an edit of the parent is turned into a new branch (the original stays as it was).
+- **App, after every turn:** everything the turn touched (and every path, if a fact or the economy changed) is re-simulated in the NEW state and the chat gets formal notices from the engine (`lib/effects.ts`): "⛔ Not taking effect: …" (investing with no cash, a purchase with no price, a down payment that is not there, a job during a study, an event after the end of the chart, an edit that changed nothing) and "⚠ …" (cash runs out, below your floor), each with how to make it possible. A decision that cannot take effect gets no "direct answer". If the twin still says "done" with nothing applied, the chat says so.
+- **Facts for questions, computed by the engine:** `income_needed` per path (goal-seeking: the smallest income for which cash never goes below zero; UBS ai-and-technology §30) and `all_paths_ranked_by_net_worth_at_end` (including the baseline), so "how much do I need to earn?" and "which is best?" are answered with real numbers.
+- **Number check:** numbers inside a question ("want me to test 4,000?") are suggestions, not claims, and are not flagged.
+
+### Assumptions panel
+"Assumptions" (folded; "📋 Assumptions (N)" on each tile) lists every number of a path in two groups: **Filled in for you** (you did not say it: source chip + one grey line saying why, e.g. "median of 69 employed people aged 20–24 (synthetic-profiles.csv)") and **You said**. Click any value to change it.
+
 ### How decisions combine (several at the same moment)
 Events are applied in time order; ties keep their order (a branch's own events come after its parent's). Decisions that SET something from that month take the latest one (job → salary, move → rent, household → rent, study → student income); decisions that ADD stack (costs, one-offs, investing, loans, purchases, market drops); income changes multiply (−10% twice = −19%). Nothing is silently dropped. The engine and the data are monthly (the ledger is 24 monthly rows per person); the charts show one point per year for readability.
 
@@ -488,8 +511,8 @@ Everything the twin could do before still works from here: what-ifs (new paths),
 
 | command | what it checks | needs |
 |---|---|---|
-| `cd frontend && pnpm test` | 64 tests: owned home (+200k net worth from day one, checks pass), cash floor, merged edits, link-time editing, scenario tree (parent inference, branches keep decisions, layout incl. 500 nodes), A/B comparison (cash decides first, offline text only uses checked numbers), down-payment check (broke student can't pay, worker can; "can I afford" = no), answer confidence (clear case = high, unknown premium = not high, near-tie = low, goal 0% = high, 0%-return investing = tie, afford questions), suggestions fit every one of the 1,200 people, French/Swiss number formats, accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
-| `cd frontend && pnpm test:live` | 54 tests with the **real LLM** (all pass, twice in a row): a real 7-turn conversation replayed with the app's rules and re-simulated (house without a price, priced, moved, "assume I had a house" as a fact, wrong edit undone, gifted, cash floor); bulk requests from a real transcript (10 random paths, 13 edits, branch out), A/B texts (every number traced, the computed leaning respected, no advice words), one-path story, branching (`fork_from_path_id`); 7 conversation-with-context cases from a real transcript; 23 earlier ones: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
+| `cd frontend && pnpm test` | 80 tests: UBS edge cases (zero interest rate, negative return), repeated income cuts, effect notices, income-needed goal-seek, investments vs UBS's formulas (12,167 exactly; annuity), selling, budget constraint, compounding raises, the learned model matters (without it the results change and the band shrinks), owned home (+200k net worth from day one, checks pass), cash floor, merged edits, link-time editing, scenario tree (parent inference, branches keep decisions, layout incl. 500 nodes), A/B comparison (cash decides first, offline text only uses checked numbers), down-payment check (broke student can't pay, worker can; "can I afford" = no), answer confidence (clear case = high, unknown premium = not high, near-tie = low, goal 0% = high, 0%-return investing = tie, afford questions), suggestions fit every one of the 1,200 people, French/Swiss number formats, accounting identities for every preset on 3 different people, home purchase (net worth unchanged, cash drops), age-appropriate presets, offline parser, the edge cases from `pre_docs/evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers), real ledger inside the range, overrides, break-even, reproducibility, number checker | nothing |
+| `cd frontend && pnpm test:live` | 67 tests with the **real LLM** (10 full runs: 9 × 67/67, 1 × 66/67): honesty (blocked investing answered "no", income needed quoted, best branch includes the baseline, a bare "3000" acts, a long five-part message), starting salary after the degree, −20% a year for 2 years; yearly raise compounds, a chain of new nodes, "invest at 7%" = economy return, selling; a real 7-turn conversation replayed with the app's rules and re-simulated (house without a price, priced, moved, "assume I had a house" as a fact, wrong edit undone, gifted, cash floor); bulk requests from a real transcript (10 random paths, 13 edits, branch out), A/B texts (every number traced, the computed leaning respected, no advice words), one-path story, branching (`fork_from_path_id`); 7 conversation-with-context cases from a real transcript; 23 earlier ones: 11 simple questions checked field by field; 10 very complex sentences, each parsed, simulated, **answered**, all numbers verified and the confidence copied exactly; a full explanation check. Passed 3 full runs in a row (66/66) after the last fixes | backend running with a key |
 | `cd backend && pnpm typecheck` | backend types | nothing |
 | `cd frontend && pnpm build` | frontend types and production build | nothing |
 | `cd ml && uv run train.py` | re-trains and prints the data checks and backtest | uv |
@@ -513,7 +536,7 @@ Everything the twin could do before still works from here: what-ifs (new paths),
 
 ## 10. Known limits and next ideas
 
-**Limits:** synthetic data (see section 1 quirks), 2025 francs, after-tax income only, investment return 0% unless set, the band shows normal ups and downs, not doubt about the assumptions.
+**Limits:** synthetic data (see section 1 quirks), 2025 francs, after-tax income only, investment return 4% a year (UBS's illustrative rate, editable), the band shows normal ups and downs, not doubt about the assumptions.
 
 **Next ideas, by owner:**
 - **ML:** fit investment return and volatility from public index data (`pre_docs/resources_2/data/financial-markets-data.md`); try a better spending model and keep it only if the backtest improves; show a small backtest chart.
