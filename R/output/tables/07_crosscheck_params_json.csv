@@ -1,0 +1,7 @@
+"quantity","params_json","this_eda","note"
+"shock lag-1 autocorrelation",-0.0482,-0.0490647,""
+"P(bonus) employed",0.5374,0.552053,"same detection rule"
+"median bonus size employed",0.6069,0.59472,"same detection rule"
+"Feb extra spending employed (share of income)",0.0935,0.0559253,"different baseline: EDA is vs same-year regular months"
+"Aug extra spending employed (share of income)",0.0801,0.0482412,"as above"
+"ledger negative months",772,772,""

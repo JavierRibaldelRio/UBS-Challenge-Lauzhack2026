@@ -1,0 +1,7 @@
+"employment_status","n","n_ever_negative","share","median_first_negative_month","median_cash_t0_if_negative","n_negative_nf_mean"
+"employed",682,1,0.00146628,22,2484.69,8
+"self_employed",106,1,0.00943396,4,3017.35,8
+"part_time",120,3,0.025,16,22655.4,36
+"retired",216,4,0.0185185,13.5,12894.5,81
+"student",39,32,0.820513,11,23202.4,39
+"unemployed",37,20,0.540541,12,35896.2,37

@@ -1,0 +1,7 @@
+"employment_status","n_clients","bartlett_K2","bartlett_df","bartlett_p"
+"employed",682,1745.12,681,1.67478e-94
+"self_employed",106,494.134,105,9.62707e-52
+"part_time",120,361.098,119,3.25199e-26
+"retired",216,448.346,215,1.52468e-18
+"student",39,117.208,38,5.24606e-10
+"unemployed",37,115.957,36,2.46205e-10
