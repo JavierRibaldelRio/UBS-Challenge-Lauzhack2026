@@ -282,6 +282,13 @@ const stripFences = (s: string) => s.trim().replace(/^```(?:json)?\s*/i, '').rep
 
 // ------------------------------------------------------------------ honesty: a reply that claims a change must come with one
 const claimsAction = (reply: string) => /\b(done|fixed|fixing (it )?now|i'?ve (added|changed|set|moved|split|rebuilt|put|updated|made|created|removed|replaced|renamed)|i (added|changed|set|moved|rebuilt|updated|made|created|replaced)|is now (set|at|in)|are now (set|at))\b/i.test(reply)
+/** An edit with no full path and no added events changes nothing: drop it, so it never counts as "done". */
+function dropEmptyEdits<T extends z.infer<typeof TurnSchema>>(d: T): T {
+  const n = d.edits.length
+  d.edits = d.edits.filter((e) => e.path != null || e.add_events.length > 0)
+  if (d.edits.length < n) console.log(`[chat] dropped ${n - d.edits.length} empty edit(s) (no path, no added events)`)
+  return d
+}
 function hasAction(d: z.infer<typeof TurnSchema>) {
   const u = d.profile_update
   const m = d.macro_update
@@ -364,16 +371,22 @@ const server = createServer(async (req, res) => {
       const messages = [...(ctx.history ?? []).slice(-12).map((m) => `${m.role === 'user' ? 'USER' : 'TWIN'}: ${m.text}`), `USER: ${ctx.text}`].join('\n')
       const userMsg = `HISTORY (oldest first; the last line is the new message):\n${messages}`
       const opts = { maxTokens: 12000, shorter: SHORTER, timeoutMs: Math.max(TIMEOUT_MS, 60000) }
-      let data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, userMsg, opts)
+      let data = dropEmptyEdits(await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, userMsg, opts))
       // never "Done" without doing it: if the reply claims a change but the JSON has none, ask once more
       if (claimsAction(data.reply) && !hasAction(data)) {
         console.log(`[chat] reply claimed a change without any action -> asking again`)
         data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: your previous answer said it changed something ("${data.reply.slice(0, 160)}") but its JSON contained NO action. Either put the change in the JSON fields (edits / new_paths / profile_update / macro_update / ...), or, if you cannot do it, say plainly in reply that nothing was changed and why.`, opts)
+        dropEmptyEdits(data)
+        if (claimsAction(data.reply) && !hasAction(data)) {
+          console.log(`[chat] still claimed a change without any action -> honest reply`)
+          data.reply = 'I could not apply that change, so nothing was changed. Could you say it again, with the path and the amount?'
+        }
       } else if (/\balready\b/i.test(data.reply) && !hasAction(data) && (ctx.paths ?? []).length) {
         // "it's already there": check it against PATHS before believing it
         const tgt = (ctx.paths as { id: string }[]).filter((p) => !ctx.target_path_id || p.id === ctx.target_path_id)
         console.log(`[chat] reply says "already" without any action -> double-checking against PATHS`)
         data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: your previous answer said something is ALREADY there ("${data.reply.slice(0, 160)}"). Check the events in PATHS: ${JSON.stringify(tgt)}. If what the user asks for is NOT in those events, it is NOT there: apply it now (edits / new_paths). Only if it truly is in the events, keep saying so.`, opts)
+        dropEmptyEdits(data)
       }
       // a price the user DID give must not be dropped ("buy a flat for 400k at 28" -> amount_chf 400000)
       const stated = [...ctx.text.matchAll(/(\d[\d'’,.]*)\s*(k|m|million)?\b/gi)].map((m) => Number(m[1].replace(/['’,]/g, '')) * (/^k$/i.test(m[2] ?? '') ? 1e3 : m[2] ? 1e6 : 1)).filter((v) => Number.isFinite(v) && v >= 10000)
@@ -381,6 +394,7 @@ const server = createServer(async (req, res) => {
       if (unpriced && stated.length === 1) {
         console.log(`[chat] a purchase lost the price the user gave (${stated[0]}) -> asking again`)
         data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: the user DID give the price: ${stated[0]} CHF. Put it in amount_chf of that purchase, and do not ask for the price.`, opts)
+        dropEmptyEdits(data)
       }
       // branch mode is a promise: the original path stays as it is. If the AI edited it instead, turn that edit into a new branch.
       const fork = ctx.fork_from_path_id

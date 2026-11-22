@@ -76,3 +76,12 @@ Thumbs.db
 *.bak
 *.local
 
+
+# ===================================
+# Not for the public repo
+# ===================================
+
+# UBS challenge material + synthetic data (private; copy it here to re-train, see README §1.6)
+pre_docs/
+# local demo script / speaker notes
+demo.txt

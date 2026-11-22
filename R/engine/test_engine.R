@@ -3,12 +3,17 @@
 # test_engine.R - validation tests and example runs for the deterministic engine
 # Run from the repo root:  Rscript R/engine/test_engine.R
 # Writes only to R/engine/output/. Exits with status 1 if any test fails.
+# Needs the UBS synthetic data in pre_docs/Data/ (not committed, private challenge material;
+# copy UBS's challenge "Data/" folder there, see README section 1.6).
 # =============================================================================
 
 source(file.path(dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))), "engine.R"))
 OUT_DIR <- file.path(ENGINE_DIR, "output")
 dir.create(OUT_DIR, showWarnings = FALSE)
 DATA_DIR <- file.path(dirname(R_DIR), "pre_docs", "Data")
+if (!file.exists(file.path(DATA_DIR, "synthetic-profiles.csv")))
+  stop("UBS synthetic data not found in ", DATA_DIR, ". It is not committed (private challenge material): ",
+       "copy UBS's challenge 'Data/' folder to pre_docs/Data/ (README section 1.6).", call. = FALSE)
 options(width = 150)
 
 theta   <- load_theta(file.path(R_DIR, "output", "model_parameters.csv"))

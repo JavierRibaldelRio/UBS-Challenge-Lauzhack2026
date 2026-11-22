@@ -2,6 +2,8 @@
 # =============================================================================
 # AI Financial Twin (UBS x LauzHack 2026) - Exploratory Data Analysis
 #
+# Data    : the UBS synthetic CSVs are NOT in this repo (private challenge material). To reproduce,
+#           copy UBS's challenge "Data/" folder to pre_docs/Data/ (git-ignored); see README §1.6.
 # Purpose : find out what the synthetic CSVs in pre_docs/Data/ can and cannot
 #           support, and estimate the parameters of ONE generic monthly model.
 #           This script does NOT simulate anything.
@@ -34,6 +36,9 @@ get_r_dir <- function() {
 R_DIR <- get_r_dir()
 ROOT  <- dirname(R_DIR)
 DATA  <- file.path(ROOT, "pre_docs", "Data")
+if (!file.exists(file.path(DATA, "synthetic-profiles.csv")))
+  stop("UBS synthetic data not found in ", DATA, ". It is not committed (private challenge material): ",
+       "copy UBS's challenge 'Data/' folder to pre_docs/Data/ to re-estimate (README section 1.6).", call. = FALSE)
 OUT   <- file.path(R_DIR, "output")
 TAB   <- file.path(OUT, "tables")
 dir.create(TAB, recursive = TRUE, showWarnings = FALSE)

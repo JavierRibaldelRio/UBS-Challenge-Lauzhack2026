@@ -517,7 +517,7 @@
   <h2><span class="num">13</span> Where everything lives</h2>
   <div class="scroll"><table style="min-width:600px">
     <tr><th>Folder</th><th>What</th><th>Tech</th></tr>
-    <tr><td><code>pre_docs/</code></td><td>UBS challenge material and data</td><td>CSV, Markdown</td></tr>
+    <tr><td><code>pre_docs/</code></td><td>UBS challenge material and data (not committed: private; copy it there to re-train, README §1.6)</td><td>CSV, Markdown</td></tr>
     <tr><td><code>R/</code></td><td>the spending model (<code>eda.R</code>) and the inflation &amp; unemployment forecast (<code>macro.R</code>)</td><td>R (lme4, tidyverse)</td></tr>
     <tr><td><code>ml/train.py</code></td><td>data checks, defaults and peer ranges, the people</td><td>Python, pandas (pinned with uv)</td></tr>
     <tr><td><code>backend/</code></td><td>AI gateway: <code>/api/chat</code> (the conversation) <code>/api/compare</code> (the A/B texts) <code>/api/answer</code> (+ <code>/api/explain</code>, <code>/api/parse</code>, <code>/api/edit</code>)</td><td>Node, OpenAI-compatible SDK, zod schemas</td></tr>
@@ -525,7 +525,7 @@
     <tr><td><code>frontend/src/components/</code></td><td>chat, scenario tree, A/B tiles &amp; comparison, year-by-year charts, sensitivity, “how did the twin get this?”</td><td>React, Recharts</td></tr>
     <tr><td><code>demo.mjs</code></td><td>starts everything: <code>node demo.mjs --prod</code> → <code>http://localhost:4173/?demo</code> (dev: <code>node demo.mjs</code> → :5173; both use the backend on :8000)</td><td>Node</td></tr>
   </table></div>
-  <p class="small muted">Full details: <code>DEV_NOTES.md</code> (how to change anything) · <code>README.md</code> (setup) · <code>demo.txt</code> (3-minute script + FAQ).</p>
+  <p class="small muted">Full details: <code>DEV_NOTES.md</code> (how to change anything) · <code>README.md</code> (setup).</p>
 </section>
 
 <footer>Fictional people and synthetic data (UBS × LauzHack 2026). Results depend on the assumptions shown. Not a forecast, not financial advice. <br />“Don’t predict the future. Make it explorable.”</footer>

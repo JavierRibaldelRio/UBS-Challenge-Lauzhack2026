@@ -88,7 +88,9 @@ Setup and run commands are in the [README](README.md#1-run-the-demo).
 
 ## 1. The data (`pre_docs/Data/`)
 
-Given by UBS. All fictional.
+Given by UBS. All fictional. **Not committed**: it is private challenge material, and `pre_docs/` is git-ignored. The app runs on the
+committed `frontend/src/model/*.json`. To re-train, copy UBS's challenge `Data/` folder to `pre_docs/Data/` ([README §1.6](README.md#16-reproducing-the-models-needs-the-ubs-data)).
+Citations like `pre_docs/docs/scenario-modelling.md §2` in these notes refer to UBS's challenge repository.
 
 | File | What's in it | How we use it |
 |---|---|---|
@@ -101,7 +103,7 @@ Given by UBS. All fictional.
 | `scenario-catalog.csv` | 120 scenario ideas | the LLM tags each path with the closest idea (`catalog_id`) |
 
 **Quirks (good to know, and to say in Q&A):**
-- The README in `pre_docs/Data` lists files that don't exist (transactions, life-events, alexia-profile.json).
+- The README in `pre_docs/Data` listed files that didn't exist when we built the model (transactions, life-events, alexia-profile.json). UBS uploaded `life-events.csv` and `synthetic-transactions.zip` late in the event; the model does not use them.
 - The ledger only has the **net** flow per month, so we treat income as constant and say *spending = income − net flow*.
 - Income does **not** depend on age (about CHF 8k net for employed people at every age). So "start working at 20" looks very rich. The salary is editable.
 - Spending barely depends on income. Nobody in the data has an education level or lives abroad.
