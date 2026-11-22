@@ -1,6 +1,6 @@
 // End-to-end test WITH the real LLM: question -> /api/parse -> resolver -> Monte Carlo -> facts -> /api/explain -> number check.
 // Needs the backend running with a key:  cd backend && pnpm start   then   cd frontend && pnpm test:live
-import { readFileSync } from 'node:fs'
+import { loadModel } from './load'
 import { describe, expect, it } from 'vitest'
 import { breakEven, buildFacts, drivers, verifyNumbers } from '../lib/analysis'
 import { answerFacts, verdict } from '../lib/answer'
@@ -8,11 +8,10 @@ import { cities, medianLoanRate, presets, resolve } from '../lib/resolve'
 import { simulate } from '../lib/sim'
 import { compareFacts, goalFit, type CompareResult, type Side } from '../lib/compare'
 import { addEvents } from '../lib/tree'
-import type { AnswerResult, EditResult, ExplainResult, Params, ParseResult, Profile, TurnResult, TwinEvent } from '../lib/types'
+import type { AnswerResult, EditResult, ExplainResult, ParseResult, Profile, TurnResult, TwinEvent } from '../lib/types'
 
 const API = process.env.API ?? 'http://localhost:8000'
-const params: Params = JSON.parse(readFileSync('src/model/params.json', 'utf8'))
-const profiles: Profile[] = JSON.parse(readFileSync('src/model/profiles.json', 'utf8'))
+const { params, profiles } = loadModel()
 const alexia = profiles.find((p) => p.id === 'P00001')!
 const rate = medianLoanRate(profiles)
 

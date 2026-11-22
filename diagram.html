@@ -116,13 +116,13 @@
     <text class="st" x="36" y="100">24 months of bank history each</text>
 
     <rect class="bx" x="355" y="34" width="250" height="84" rx="14" stroke="var(--learned)" />
-    <text class="tt" x="371" y="62">🧠 Training (ml/train.py)</text>
-    <text class="st" x="371" y="82">learns spending habits, bonuses,</text>
-    <text class="st" x="371" y="100">surprises · tests itself on 2026</text>
+    <text class="tt" x="371" y="62">🧠 Models (R/eda.R, R/macro.R)</text>
+    <text class="st" x="371" y="82">spending by status, city, month;</text>
+    <text class="st" x="371" y="100">bonuses, surprises · tested on 2026</text>
 
     <rect class="bx" x="690" y="34" width="250" height="84" rx="14" stroke="var(--learned)" />
     <text class="tt" x="706" y="62">📦 Model files</text>
-    <text class="st" x="706" y="82">params.json + profiles.json</text>
+    <text class="st" x="706" y="82">spending, macro, params, profiles</text>
     <text class="st" x="706" y="100">bundled into the web app</text>
 
     <path class="ln" d="M270,76 L353,76" /><path class="ln" d="M605,76 L688,76" />
@@ -161,7 +161,7 @@
     <path class="ln" d="M180,224 L208,224" /><path class="ln" d="M385,224 L413,224" /><path class="ln" d="M590,224 L618,224" /><path class="ln" d="M780,224 L808,224" />
     <!-- model files feed resolver + engine -->
     <path class="ln" d="M780,118 L700,174" /><path class="ln" d="M740,118 L520,174" />
-    <text class="lb" x="800" y="150">defaults + learned habits</text>
+    <text class="lb" x="800" y="150">defaults + estimated behaviour</text>
 
     <!-- row 3 -->
     <rect class="bx" x="810" y="320" width="130" height="90" rx="14" stroke="var(--out)" />
@@ -214,11 +214,11 @@
       <svg viewBox="0 0 530 230" style="width:100%;height:auto" role="img" aria-label="A scenario tree: today branches into paths; a branch continues its parent; the time is on the links">
         <style>.nd{fill:var(--card);stroke:var(--border);stroke-width:1.5}.na{stroke:#15803d;stroke-width:2.5}.nb{stroke:#2563eb;stroke-width:2.5}.lk{fill:none;stroke:var(--muted);stroke-opacity:.55;stroke-width:2}.t1{font-size:12px;font-weight:700;fill:var(--text)}.t2{font-size:10.5px;fill:var(--muted)}.pill{fill:var(--card);stroke:#2563eb;stroke-opacity:.5}</style>
         <text class="t2" x="14" y="86" style="font-weight:800;letter-spacing:.12em">BASELINE</text>
-        <rect class="nd" x="10" y="94" width="140" height="44" rx="10"/><text class="t1" x="20" y="113">Today · no change</text><text class="t2" x="20" y="129">CHF −116k · cash runs out</text>
+        <rect class="nd" x="10" y="94" width="140" height="44" rx="10"/><text class="t1" x="20" y="113">Today · no change</text><text class="t2" x="20" y="129">CHF −147k · cash runs out</text>
         <path class="lk" d="M150,116 C178,116 178,46 206,46"/><path class="lk" d="M150,116 C178,116 178,116 206,116"/><path class="lk" d="M150,116 C178,116 178,186 206,186"/>
-        <rect class="nd na" x="206" y="24" width="140" height="44" rx="10"/><text class="t1" x="216" y="43">A · Start working</text><text class="t2" x="216" y="59">CHF 745k · cash OK</text>
-        <rect class="nd" x="206" y="94" width="140" height="44" rx="10"/><text class="t1" x="216" y="113">Master's degree</text><text class="t2" x="216" y="129">CHF 557k</text>
-        <rect class="nd" x="206" y="164" width="140" height="44" rx="10"/><text class="t1" x="216" y="183">Move abroad</text><text class="t2" x="216" y="199">CHF 199k</text>
+        <rect class="nd na" x="206" y="24" width="140" height="44" rx="10"/><text class="t1" x="216" y="43">A · Start working</text><text class="t2" x="216" y="59">CHF 710k · cash OK</text>
+        <rect class="nd" x="206" y="94" width="140" height="44" rx="10"/><text class="t1" x="216" y="113">Master's degree</text><text class="t2" x="216" y="129">CHF 526k</text>
+        <rect class="nd" x="206" y="164" width="140" height="44" rx="10"/><text class="t1" x="216" y="183">Move abroad</text><text class="t2" x="216" y="199">CHF 168k</text>
         <path class="lk" d="M346,46 L384,46" style="stroke:#2563eb;stroke-opacity:.6"/><rect class="pill" x="341" y="37" width="48" height="18" rx="9"/><text class="t2" x="349" y="50" style="fill:#2563eb;font-weight:700">+8 yrs</text>
         <rect class="nd nb" x="384" y="24" width="140" height="44" rx="10"/><text class="t1" x="394" y="43">B · + flat at 28</text><text class="t2" x="394" y="59">keeps the job decision</text>
       </svg>
@@ -261,19 +261,19 @@
     <div class="tile layer" style="--c: #e11d48">
       <span class="pill">IDIOSYNCRATIC · per person, per path</span>
       <h3>👤 The person</h3>
-      <p class="small">Income, rent, usual spending (learned from their own 24 months), their decisions (study, job, move, home, kid, loan…) and their personal luck (surprise expenses, December bonus). Each path is one set of decisions.</p>
+      <p class="small">Income, rent, usual spending (estimated from 28,800 months: status, city, calendar month), their decisions (study, job, move, home, kid, loan…) and their personal luck (surprise expenses, December bonus). Each path is one set of decisions.</p>
     </div>
     <div class="tile layer" style="--c: #0e7490">
       <span class="pill">MACROECONOMIC · shared by every path</span>
       <h3>🌍 The economy</h3>
-      <p class="small">Inflation vs pay, interest rates, market returns, recessions, house prices. One setting for every path, so decisions are compared fairly. Presets follow UBS’s scenarios (S101 inflation, S103 rate hike, S104 recession, S108 housing, S110 crisis) plus an “uncertain economy” with random recessions.</p>
+      <p class="small">Inflation vs pay, unemployment, interest rates, market returns, recessions, house prices. One setting for every path, so decisions are compared fairly. “Forecast (Swiss data)” draws inflation and unemployment for each future from a model of Swiss data 1991–2025 (employees can lose their job and get Swiss unemployment benefit). Stress-test presets follow UBS’s scenarios (S101 inflation, S103 rate hike, S104 recession, S108 housing, S110 crisis) plus an “uncertain economy” with random recessions.</p>
     </div>
   </div>
   <div class="chat">
     <div class="b me">what if I do a master’s and there’s a recession in 2 years?</div>
     <div class="b tw">＋ Master’s degree (a path: idiosyncratic) · 🌍 Economy for every path: recession at 22 (macroeconomic)</div>
   </div>
-  <p class="small muted">In the Monte Carlo, each simulated future draws <b>personal luck</b> (learned from data) and, in an uncertain economy, <b>economy luck</b>: a recession in future #17 hits every path in future #17.</p>
+  <p class="small muted">In the Monte Carlo, each simulated future draws <b>personal luck</b> (estimated from data) and, in the forecast or uncertain economy, <b>economy luck</b>: a recession or a job loss in future #17 hits every path in future #17.</p>
 </section>
 
 <!-- =============================================================== 3 data -->
@@ -290,33 +290,33 @@
     <tr><td><code>scenario-assumptions.csv</code></td><td>study length and tuition for 120 people</td><td>default tuition and length of a master’s</td></tr>
     <tr><td><code>scenario-catalog.csv</code></td><td>120 scenario ideas</td><td>the AI tags each path with the closest idea</td></tr>
   </table></div>
-  <div class="callout small"><b>What makes it <i>this</i> person’s twin:</b> their age, city, job, household, income, rent, cash, investments, loans and goals come from these files, and their <b>own usual spending and how much it varies</b> is learned from their 24 months of bank history (Alexia: CHF 1,336/month besides rent, ± 426). Everyone gets the same formulas; nobody gets the same inputs.</div>
+  <div class="callout small"><b>What makes it <i>this</i> person’s twin:</b> their age, city, job, household, income, rent, cash, investments, loans and goals come from these files, and <b>how much their own months vary</b> comes from their 24 months of bank history. Their usual spending level is that of people with the same status in the same city: in the data a personal habit adds only ±CHF 16/month and does not carry over from one year to the next. Everyone gets the same formulas; nobody gets the same inputs.</div>
 </section>
 
 <!-- =============================================================== 4 learn -->
 <section class="card sec" id="learn">
-  <h2><span class="num">4</span> What the model learns from 28,800 months</h2>
+  <h2><span class="num">4</span> What the models estimate (in R)</h2>
   <div class="grid3">
-    <div class="tile"><h3>🎁 December bonus</h3><div class="big">54%</div><p class="small muted">of employed people get one in a given year; typical size 61% of a month’s pay. Found by an outlier test against each person’s other months.</p></div>
-    <div class="tile"><h3>📅 Expensive months</h3><div class="big">+34%</div><p class="small muted">extra spending for students in February (August is high too). Only effects that are statistically clear are kept.</p></div>
-    <div class="tile"><h3>🎲 Surprise expenses</h3><div class="big">real shape</div><p class="small muted">Sampled from the 28,800 real “surprises”, not a textbook bell curve: sometimes a big expense. No memory month to month (correlation −0.05).</p></div>
-    <div class="tile"><h3>👤 Your own habit</h3><div class="big">per person</div><p class="small muted">Usual spending and its ups and downs from your 24 months, plus how sure we are about that average.</p></div>
-    <div class="tile"><h3>📈 Response to change</h3><div class="big">R² 0.05 · 0.80</div><p class="small muted">Spending <i>level</i> barely depends on income here (so we start from your own history); spending <i>volatility</i> is well explained (used when your situation changes).</p></div>
+    <div class="tile"><h3>📅 Status × month</h3><div class="big">+373</div><p class="small muted">CHF extra spending (besides rent) for employed people in February; +357 in August. One value per job status and calendar month, from a mixed model chosen among four by BIC (<code>R/eda.R</code>).</p></div>
+    <div class="tile"><h3>🏙️ City</h3><div class="big">−121 … +176</div><p class="small muted">CHF/month vs the average city, from Fribourg to Zurich. Moving city moves spending by the difference. Students’ tuition-like Feb/Sep peaks are left out when a degree pays tuition explicitly.</p></div>
+    <div class="tile"><h3>🎁 December bonus</h3><div class="big">55%</div><p class="small muted">of employed people get one in a given year; typical size 60% of a month’s pay (self-employed: 27%).</p></div>
+    <div class="tile"><h3>🎲 Surprises</h3><div class="big">your spread</div><p class="small muted">A bell curve around each person’s own month-to-month spread (pulled toward people like them), wider in Feb, Aug and Dec. No personal habit that lasts: ±CHF 16/month.</p></div>
+    <div class="tile"><h3>🌍 Economy forecast</h3><div class="big">VAR(1)</div><p class="small muted">Swiss inflation and unemployment 1991–2025 (World Bank, <code>R/macro.R</code>). Tested 2005–2024: 1 year ahead the 80% range held 70% (inflation) and 95% (unemployment) of the time.</p></div>
     <div class="tile"><h3>👥 Peer ranges</h3><div class="big">10th–90th %</div><p class="small muted">E.g. employed people aged 20–24 earn CHF 4,963 to 10,519 (median 8,070, 69 people). Used to test how robust an answer is.</p></div>
   </div>
 
-  <h3 style="margin-top:6px">What <code>ml/train.py</code> writes, and where the app uses it</h3>
+  <h3 style="margin-top:6px">What the model files hold, and where the app uses them</h3>
   <div class="scroll"><table style="min-width:640px">
-    <tr><th>In the model files</th><th>Learned from</th><th>Used in the app</th></tr>
-    <tr><td>Expensive months (per job status)</td><td>calendar-month effects, kept only if |t| &gt; 3</td><td>every simulated month (engine)</td></tr>
-    <tr><td>December bonus</td><td>outlier Decembers vs each person’s other months</td><td>each future’s December (engine)</td></tr>
-    <tr><td>Surprise shape (201 points)</td><td>28,800 real monthly surprises</td><td>the random part of spending in every future</td></tr>
-    <tr><td>Two regressions</td><td>spending level and its ups &amp; downs vs income, rent, age, household, status</td><td>when a decision changes the situation (resolver)</td></tr>
-    <tr><td>Medians + peer ranges</td><td>salary by job × age, rent by city × household, tuition</td><td>every number you didn’t give; the peer-range confidence test</td></tr>
-    <tr><td>Your own habit (profiles.json)</td><td>your 24 months: usual spending and how sure we are</td><td>your starting point; the real balance = black dots</td></tr>
-    <tr><td>Backtest + calibration</td><td>trained on 2025, predicted 2026 for 1,200 people</td><td>“Can you trust this?” and the confidence thresholds</td></tr>
+    <tr><th>In the model files</th><th>Estimated from</th><th>Used in the app</th></tr>
+    <tr><td>Spending by status × month, city offsets (spending.json)</td><td>mixed model on 28,800 months (<code>R/eda.R</code>)</td><td>every simulated month; relocate and job changes (resolver)</td></tr>
+    <tr><td>December bonus (spending.json)</td><td>chance and 10 typical sizes per status</td><td>each future’s December (engine)</td></tr>
+    <tr><td>Spread of surprises (spending.json)</td><td>each person’s spread, shrunk toward similar people; ×k in Feb/Aug/Dec</td><td>the random part of spending in every future</td></tr>
+    <tr><td>Inflation &amp; unemployment (macro.json)</td><td>World Bank data 1991–2025 (<code>R/macro.R</code>) + Swiss benefit rules</td><td>the “Forecast (Swiss data)” economy</td></tr>
+    <tr><td>Medians + peer ranges (params.json)</td><td>salary by job × age, rent by city × household, tuition (<code>ml/train.py</code>)</td><td>every number you didn’t give; the peer-range confidence test</td></tr>
+    <tr><td>People (profiles.json)</td><td>each person’s rows: state, goals, real 24-month balance</td><td>your starting point; the real balance = black dots</td></tr>
+    <tr><td>Backtest + calibration (backtest.json)</td><td>estimated on 2025, the app predicted 2026 for 1,200 people</td><td>“Can you trust this?” and the confidence thresholds</td></tr>
   </table></div>
-  <p class="small muted">It does <b>not</b> learn “what if I do a master’s”: nobody in the data does one. Decisions are applied by exact formulas; the data teaches how normal months behave. Run once, ~5 s, fixed seed: the same files every time.</p>
+  <p class="small muted">It does <b>not</b> learn “what if I do a master’s”: nobody in the data does one. Decisions are applied by exact formulas; the data teaches how normal months behave. Estimated once in R, imported with <code>pnpm model:import</code>, fixed seeds: the same files every time.</p>
 </section>
 
 
@@ -324,14 +324,14 @@
 <section class="card sec" id="month">
   <h2><span class="num">5</span> Inside one simulated month</h2>
   <div class="eq">
-    <b>income</b> = planned net income <span class="chip c-luck">+ maybe a December bonus 🎲</span><br />
-    <b>spending</b> = (rent + your usual spending <span class="chip c-luck">± uncertainty 🎲</span>) × (1 + seasonal %) <span class="chip c-luck">+ surprise 🎲</span><br />
+    <b>income</b> = planned net income <span class="chip c-luck">+ maybe a December bonus 🎲</span> <span class="chip c-luck">(forecast economy: maybe a job loss → benefit 🎲)</span><br />
+    <b>spending</b> = rent + usual spending for your status, city and month <span class="chip c-luck">± surprise 🎲</span> <span class="muted">(× prices vs pay in the forecast economy)</span><br />
     <b>cash</b> = cash <span class="chip c-in">+ income</span> <span class="chip c-in">+ new loans</span> <span class="chip c-out">− spending − extra costs − one-off costs − loan payments</span> <span class="chip c-tr">− money moved to investments − down payment</span><br />
     <b>investments</b> = (investments + money moved in) × (1 + return) × (1 − market shock)<br />
     <b>debt</b> = debt + interest − payment <span class="muted">(never below 0)</span><br />
     <b>net worth</b> = cash + investments + assets (home, car…) − debt
   </div>
-  <div class="legend"><span><span class="chip c-in">green</span> money in</span><span><span class="chip c-out">red</span> money out</span><span><span class="chip c-tr">blue</span> moves between your own pockets: changes cash, <b>not</b> net worth</span><span><span class="chip c-luck">purple</span> learned luck</span></div>
+  <div class="legend"><span><span class="chip c-in">green</span> money in</span><span><span class="chip c-out">red</span> money out</span><span><span class="chip c-tr">blue</span> moves between your own pockets: changes cash, <b>not</b> net worth</span><span><span class="chip c-luck">purple</span> luck (estimated)</span></div>
   <p class="small muted">Example: buying a 600k flat with 20% own money. Cash −120k, debt +480k (mortgage), assets +600k: net worth stays flat, the money just changed form. A car works the same way, then loses value every year. The engine also checks, in every future, that the 120k is actually there.</p>
 </section>
 
@@ -369,10 +369,10 @@
     <div class="tile">
       <h3>✦ AI #2: explaining back, for A and B</h3>
       <div class="chat">
-        <div class="b tw"><b>So far</b> In UBS’s data your bank balance went from CHF 8k to −17k in two years… <b>Ahead</b> In this simulation you reach about CHF 745k at 30 and cash stays above zero…</div>
+        <div class="b tw"><b>So far</b> In UBS’s data your bank balance went from CHF 8k to −17k in two years… <b>Ahead</b> In this simulation you reach about CHF 710k at 30 and cash stays above zero…</div>
         <div class="b tw">On cash, Start working is clearly calmer… In this simulation, Start working fits your goals better: the master’s runs out of cash in 100% of futures. More money is not automatically the better fit. <i>Not financial advice.</i></div>
       </div>
-      <p class="small muted">Gets only the final numbers (and the verdicts the app computed). Rules: plain, warm words; use only these numbers; never pick a different “better fit” than the computed one; never “you should”. The app checks every number (understands “557k”, “12’000”, “35%”, French spacing). Typical speed: 1–3 seconds.</p>
+      <p class="small muted">Gets only the final numbers (and the verdicts the app computed). Rules: plain, warm words; use only these numbers; never pick a different “better fit” than the computed one; never “you should”. The app checks every number (understands “526k”, “12’000”, “35%”, French spacing). Typical speed: 1–3 seconds.</p>
     </div>
   </div>
 </section>
@@ -413,7 +413,7 @@
     <div class="tile" style="align-content:center">
       <p>Example: the master’s salary premium. The data has no education field, so <b>nobody knows it</b>. The tag says <span class="tag t-missing">unknown</span>, and the twin assumes “no change” (0%).</p>
       <p>On the chart, the path turns <b>dotted</b> from the month that number starts to matter (the end of the degree), a <b>?</b> marks it, and a <b>hatched band</b> shows how far it could go (illustrative range, clearly labelled).</p>
-      <p>Two ways to make it solid: type the number into “The numbers behind”, or say it (“the degree raises my salary by 20%”). And instead of guessing, the twin shows the <b>break-even</b>: “the master’s only catches up if it raises the salary by 24%.”</p>
+      <p>Two ways to make it solid: type the number into “The numbers behind”, or say it (“the degree raises my salary by 20%”). And instead of guessing, the twin shows the <b>break-even</b>: “the master’s only catches up if it raises the salary by 23%.”</p>
     </div>
   </div>
 </section>
@@ -434,7 +434,7 @@
       <div class="b tw">Hi Alexia!</div>
     </div>
     <div class="grid3" style="grid-template-columns:1fr">
-      <div class="tile"><h3>👁 Understands your state</h3><p class="small">Starts from the person’s data plus their learned habits, and can explain it when you ask (“what are my financials?”). It sees the whole conversation and every path, so follow-ups land on the right thing.</p></div>
+      <div class="tile"><h3>👁 Understands your state</h3><p class="small">Starts from the person’s data, and can explain it when you ask (“what are my financials?”). It sees the whole conversation and every path, so follow-ups land on the right thing.</p></div>
       <div class="tile"><h3>🧠 Updates itself</h3><p class="small">Facts about today (“my rent went up to 1,100”) change the twin’s state; every path recomputes; undo anytime.</p></div>
       <div class="tile"><h3>✏️ Reacts to follow-ups</h3><p class="small">Change any path in your own words. Only what you asked changes; numbers you set by hand are kept; every version can be undone.</p></div>
       <div class="tile"><h3>🗣 Explains trade-offs</h3><p class="small">Direct answers, plain-English stories, what matters most, break-even, unknowns, and “how did the twin get this?” for every reply.</p></div>
@@ -445,7 +445,7 @@
 <!-- =============================================================== 11 trust -->
 <section class="card sec" id="trust">
   <h2><span class="num">11</span> Why you can trust the numbers</h2>
-  <p class="muted small">The training script re-learned everything on 2025 only, predicted 2026 for all 1,200 people, and compared with what really happened in the data.</p>
+  <p class="muted small">The R model was estimated on 2025 only; the app’s own simulator predicted 2026 for all 1,200 people, and we compared with what really happened in the data.</p>
   <div class="grid2">
     <div class="tile">
       <h3>“X% of results fall in this range”</h3>
@@ -460,8 +460,8 @@
   </div>
   <div class="grid3">
     <div class="tile"><h3>✓ Accounting, live</h3><p class="small">Cash adds up every month; moving money between pockets never changes net worth; debt never negative; same seed → same result. Checked on every change.</p></div>
-    <div class="tile"><h3>✓ Better than a simple average</h3><p class="small">Typical miss CHF 2,281 vs 2,445; cash-crunch prediction score 0.0012 vs 0.0025 (lower is better).</p></div>
-    <div class="tile"><h3>✓ Tests</h3><p class="small">64 automatic tests (UBS’s validation list: zero income, higher tuition, loan payoff…; the tree; the comparison) + 54 tests against the real AI, including real conversations replayed turn by turn. All pass.</p></div>
+    <div class="tile"><h3>✓ Better than a simple average</h3><p class="small">Typical miss CHF 1,831 vs 2,445; cash-crunch prediction score 0.0006 vs 0.0025 (lower is better).</p></div>
+    <div class="tile"><h3>✓ Tests</h3><p class="small">95 automatic tests (UBS’s validation list: zero income, higher tuition, loan payoff…; the tree; the comparison; parity with the R model; the economy forecast; the backtest) + 67 tests against the real AI, including real conversations replayed turn by turn. All pass.</p></div>
   </div>
 </section>
 
@@ -485,12 +485,12 @@
     <tr><td><b>x</b></td><td>financial state</td><td>cash, investments, homes, debts, income, rent, spending, job, household, goals: from the person’s rows in UBS’s CSVs</td></tr>
     <tr><td><b>F</b></td><td>transition</td><td>exact monthly bookkeeping; cash identity and net worth = assets − debts checked live</td></tr>
     <tr><td><b>a</b></td><td>decisions</td><td>the nodes of the tree: job, study, move, home, child, loan, investing… each number labelled with its source</td></tr>
-    <tr><td><b>w</b></td><td>external conditions</td><td>the economy (inflation, rates, recession, markets, house prices): one setting shared by every path</td></tr>
-    <tr><td><b>θ</b></td><td>parameters</td><td>learned by <code>ml/train.py</code> (§4) and backtested (§11)</td></tr>
+    <tr><td><b>w</b></td><td>external conditions</td><td>the economy (inflation, unemployment, rates, recession, markets, house prices): one setting shared by every path; “Forecast (Swiss data)” = estimated from Swiss data</td></tr>
+    <tr><td><b>θ</b></td><td>parameters</td><td>estimated in R (<code>R/eda.R</code>, <code>R/macro.R</code>, §4) and backtested (§11)</td></tr>
   </table></div>
   <div class="grid3">
-    <div class="tile"><h3>Data → Model → Scenarios → Explain</h3><p class="small">The four building blocks from UBS’s deck: UBS’s synthetic ledger → formulas + learned behaviour → the tree and A vs B → plain-English tiles with checked numbers.</p></div>
-    <div class="tile"><h3>A twin, not a calculator</h3><p class="small">Starts from this person’s data and own habits; updates itself from what you tell it (“I now earn 1,500”, “I own a 200k flat”, “never below 5k”); remembers the conversation; fixes its own mistakes (undo); every path recomputes.</p></div>
+    <div class="tile"><h3>Data → Model → Scenarios → Explain</h3><p class="small">The four building blocks from UBS’s deck: UBS’s synthetic ledger → formulas + estimated behaviour → the tree and A vs B → plain-English tiles with checked numbers.</p></div>
+    <div class="tile"><h3>A twin, not a calculator</h3><p class="small">Starts from this person’s data; updates itself from what you tell it (“I now earn 1,500”, “I own a 200k flat”, “never below 5k”); remembers the conversation; fixes its own mistakes (undo); every path recomputes.</p></div>
     <div class="tile"><h3>UBS capabilities C01–C20</h3><p class="small">State, personalization, updating, scenarios, counterfactuals, life events, constraints (incl. your own cash floor), comparison, uncertainty &amp; sensitivity, goals, explainability, interactivity, validation, transparency, provenance, reproducibility, responsible support.</p></div>
   </div>
 </section>
@@ -500,12 +500,12 @@
   <h2><span class="num">✓</span> Checked against UBS’s brief</h2>
   <div class="scroll"><table style="min-width:600px">
     <tr><th>UBS asks</th><th></th><th>How</th></tr>
-    <tr><td><b>MUST</b> · Fictional client profile</td><td>✅</td><td>1,200 fictional people from UBS’s data; their own learned spending habit</td></tr>
+    <tr><td><b>MUST</b> · Fictional client profile</td><td>✅</td><td>1,200 fictional people from UBS’s data; spending for their status, city and month, their own spread</td></tr>
     <tr><td><b>MUST</b> · One working scenario</td><td>✅</td><td>12 event types (home, car, job, study…), combined freely, in plain words or one click</td></tr>
     <tr><td><b>MUST</b> · Before / after comparison</td><td>✅</td><td>baseline vs any path, any two paths side by side (A/B): tiles, year-by-year charts, UBS’s four measures, a computed “fits your goals better”</td></tr>
     <tr><td><b>MUST</b> · Transparent assumptions</td><td>✅</td><td>every number tagged and editable; unknowns dotted; the AI’s prompt visible; scenario report in UBS’s template</td></tr>
     <tr><td><b>BONUS</b> · Conversational AI</td><td>✅</td><td>a chat that answers, acts, remembers, edits, and checks its numbers</td></tr>
-    <tr><td><b>BONUS</b> · Sensitivity &amp; uncertainty</td><td>✅</td><td>calibrated Monte Carlo (personal + economy luck), the sensitivity card (what moves the result; “what if it’s off by…”, where A and B flip), break-even, peer ranges, unknown ranges, economy stress tests</td></tr>
+    <tr><td><b>BONUS</b> · Sensitivity &amp; uncertainty</td><td>✅</td><td>calibrated Monte Carlo (personal + economy luck, incl. a Swiss inflation &amp; unemployment forecast), the sensitivity card (what moves the result; “what if it’s off by…”, where A and B flip), break-even, peer ranges, unknown ranges, economy stress tests</td></tr>
     <tr><td>Examples · scenario tree, constraints, sensitivity chart</td><td>✅</td><td>the tree with time on the links; cash below zero, down payment and your own cash floor as constraints; the sensitivity card</td></tr>
     <tr><td>Responsible AI</td><td>✅</td><td>synthetic data only, every number sourced, unknowns shown, AI numbers checked, “in this simulation”, “Not financial advice”</td></tr>
     <tr><td>“Help someone understand a decision”</td><td>✅</td><td>direct answers with a computed confidence and a plain-English story</td></tr>
@@ -518,7 +518,8 @@
   <div class="scroll"><table style="min-width:600px">
     <tr><th>Folder</th><th>What</th><th>Tech</th></tr>
     <tr><td><code>pre_docs/</code></td><td>UBS challenge material and data</td><td>CSV, Markdown</td></tr>
-    <tr><td><code>ml/train.py</code></td><td>learns habits, runs the backtest, writes the model files</td><td>Python, numpy, pandas (pinned with uv)</td></tr>
+    <tr><td><code>R/</code></td><td>the spending model (<code>eda.R</code>) and the inflation &amp; unemployment forecast (<code>macro.R</code>)</td><td>R (lme4, tidyverse)</td></tr>
+    <tr><td><code>ml/train.py</code></td><td>data checks, defaults and peer ranges, the people</td><td>Python, pandas (pinned with uv)</td></tr>
     <tr><td><code>backend/</code></td><td>AI gateway: <code>/api/chat</code> (the conversation) <code>/api/compare</code> (the A/B texts) <code>/api/answer</code> (+ <code>/api/explain</code>, <code>/api/parse</code>, <code>/api/edit</code>)</td><td>Node, OpenAI-compatible SDK, zod schemas</td></tr>
     <tr><td><code>frontend/src/lib/</code></td><td>resolver, engine, answers &amp; confidence, unknowns, checks</td><td>TypeScript, runs in the browser</td></tr>
     <tr><td><code>frontend/src/components/</code></td><td>chat, scenario tree, A/B tiles &amp; comparison, year-by-year charts, sensitivity, “how did the twin get this?”</td><td>React, Recharts</td></tr>
@@ -532,7 +533,7 @@
 
 <script>
 (() => {
-  // calibration bars (numbers from frontend/src/model/params.json)
+  // calibration bars (numbers from frontend/src/model/backtest.json)
   const bars = (id, rows, color) => {
     document.getElementById(id).innerHTML = rows.map(([said, real]) => `
       <div class="bar"><span class="muted">said ${said}%</span>
@@ -543,8 +544,8 @@
         <b style="color:${color}">${real}%</b>
       </div>`).join('')
   }
-  bars('cal1', [[10, 9.3], [30, 28.3], [50, 49.9], [70, 68.8], [80, 78.5], [90, 87.9]], 'var(--learned)')
-  bars('cal2', [[11, 11.1], [35, 34.0], [66, 66.9], [88, 91.5], [99.8, 99.9]], 'var(--out)')
+  bars('cal1', [[10, 10.4], [30, 30.3], [50, 50.1], [70, 69.4], [80, 78.3], [90, 89.1]], 'var(--learned)')
+  bars('cal2', [[12, 8.7], [34, 32.4], [66, 63.2], [89, 89.3], [99.9, 99.9]], 'var(--out)')
 
   // illustrative fan of futures (seeded, so it looks the same every time)
   let s = 7; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647)

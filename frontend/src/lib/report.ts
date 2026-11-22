@@ -31,7 +31,7 @@ export function scenarioReport(o: { profile: Profile; path: P; baseline: P; macr
     jurisdiction: 'Switzerland (synthetic data); incomes are net of tax as given in the data; no tax model',
     assumptions: path.plan.assumptions.map((a) => ({ what: a.label, value: Math.round(a.value * 100) / 100, unit: a.unit, source: a.source, note: a.note })),
     model: {
-      idiosyncratic: 'the person: income, rent, own spending habit (learned from 24 months of their ledger), life decisions as events, personal luck (surprise expenses, December bonus) sampled from what was learned on 28,800 months',
+      idiosyncratic: 'the person: income, rent, usual spending (mixed model estimated in R on 28,800 months: status, city, calendar month + a small personal offset), life decisions as events, personal luck (surprise expenses, December bonus) drawn from that model',
       macroeconomic: `the economy, shared by every path: ${macro.name}${macro.catalog ? ` (${macro.catalog})` : ''}${describeMacro(macro, pr.age).length ? ': ' + describeMacro(macro, pr.age).join('; ') : ''}`,
       method: 'deterministic monthly accounting x_{t+1}=F(x_t,a_t,w_t;θ) + Monte Carlo, 500 futures per path with common random numbers (same luck for every path), fixed seed',
     },
@@ -46,10 +46,10 @@ export function scenarioReport(o: { profile: Profile; path: P; baseline: P; macr
     },
     validation: {
       live_accounting_checks: o.checks.map((c) => ({ check: c.name, ok: c.ok })),
-      backtest: `trained on 2025, tested on 2026 for ${bt.profiles} people: 80% range caught ${Math.round(bt.coverage_80_year_end * 1000) / 10}% of real results`,
+      backtest: `estimated on 2025, tested on 2026 for ${bt.profiles} people: 80% range caught ${Math.round(bt.coverage_80_year_end * 1000) / 10}% of real results`,
       data_checks: o.params.data_checks,
     },
-    limitations: ['all people and data are fictional (UBS synthetic data), not Swiss statistics', 'the data has no decisions, education or abroad information: decision effects are explicit assumptions, unknowns are marked', 'the economy presets are illustrative stress tests, not forecasts', 'not financial advice'],
+    limitations: ['all people and data are fictional (UBS synthetic data), not Swiss statistics', 'the data has no decisions, education or abroad information: decision effects are explicit assumptions, unknowns are marked', 'the economy presets are illustrative stress tests, not forecasts; “Forecast (Swiss data)” models national inflation and unemployment (World Bank data), not this person’s own risk', 'not financial advice'],
   }
 }
 

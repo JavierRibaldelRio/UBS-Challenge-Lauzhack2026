@@ -5,7 +5,7 @@ import type { Assumption, Source } from '../lib/types'
 
 export const SOURCE: Record<Source, { label: string; help: string }> = {
   data: { label: 'from data', help: 'Read from the challenge CSV files (or a median of them).' },
-  learned: { label: 'learned', help: 'Learned by our model from 24 months of this person’s ledger.' },
+  learned: { label: 'learned', help: 'Estimated in R from 24 months of ledger data of all 1,200 people (by status, city and month, with a small personal adjustment).' },
   you: { label: 'you', help: 'Set by you (typed, edited, or said in the question).' },
   assumption: { label: 'assumption', help: 'Not in the data. A labelled default you can change.' },
   missing: { label: 'unknown', help: 'Nobody knows this. We use "no change". Click to set it.' },

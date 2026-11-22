@@ -85,8 +85,8 @@ B. THE SCRIPT (3:00)
 - SAY: "Every possible life is a node in this tree, starting from the BASELINE:
   today, if nothing changes. A branch continues the one before it; left to
   right is not time: the time is written on the links, like "+8 yrs". Click any two to compare:
-  the first turns green, the second blue. Start working ends at about 745,000
-  francs at 30, the master's at about 557,000."
+  the first turns green, the second blue. Start working ends at about 710,000
+  francs at 30, the master's at about 526,000."
 - DO: point at the "So far / Ahead" text in the two tiles.
 - SAY: "Each tile tells Alexia what is going on in her words: what happened so
   far, from the real data, and what tends to happen next. The AI writes it, but
@@ -105,9 +105,9 @@ B. THE SCRIPT (3:00)
 - DO: point at the red row "salary premium from degree: 0 %, unknown".
 - SAY: "But how much more a master's pays, the data simply does not say.
   So we don't guess. We compute the break-even: the master's only catches up
-  if it raises her salary by 24 percent." (It is also in the comparison box.)
+  if it raises her salary by 23 percent." (It is also in the comparison box.)
 - DO: click "0 % ✎", type 30, press Enter. Scroll up to the tiles.
-- THEY SEE: Master's ≈ CHF 795k, now ABOVE Start working (745k).
+- THEY SEE: Master's ≈ CHF 765k, now ABOVE Start working (710k).
   But "Fits your goals better" still says Start working.
 - SAY: "With 30 percent more salary the master's ends with more money. But it
   still runs out of cash while she studies, in every simulated future. So the
@@ -133,8 +133,8 @@ B. THE SCRIPT (3:00)
 [2:30 – 3:00]  WHY YOU CAN TRUST IT
 - DO: scroll down, click "Can you trust this?".
 - SAY: "Three reasons to trust it. One: the accounting is checked live,
-  5 out of 5. Two: we trained our model only on 2025 and predicted 2026 for
-  all 1,200 people. Our 8-in-10 range caught 78.5 percent of what really
+  5 out of 5. Two: we estimated our model only on 2025 and predicted 2026 for
+  all 1,200 people. Our 8-in-10 range caught 78.2 percent of what really
   happened. Three: every number has a source, and the AI's numbers are
   verified."
 - SAY: "We don't predict the future. We make it explorable. Thank you."
@@ -168,20 +168,21 @@ C. IF SOMETHING GOES WRONG
 D. QUESTIONS JUDGES WILL PROBABLY ASK (short answers)
 ---------------------------------------------------------------------
 Q: Is this really a "twin", or just a calculator?
-A: It starts from this person's data and learned habits (24 months of bank
-   history), and it stays alive: you can tell it what changed today ("I now earn
+A: It starts from this person's data (24 months of bank history: income,
+   rent, savings, goals, how much their months jump around), and it stays alive: you can tell it what changed today ("I now earn
    1,500") and it updates itself; you can change any path in a follow-up and
    undo it; it answers questions with a confidence it computes, explains the
    trade-offs, and marks clearly what it does not know (dotted lines, "?").
 
 Q: What kinds of variables does the model have?
 A: Two, exactly as UBS defines a twin (decisions vs external conditions).
-   IDIOSYNCRATIC = the person: their income, rent, spending habit, their
+   IDIOSYNCRATIC = the person: their income, rent, spending, their
    decisions (each path), and their personal luck (surprise expenses,
-   bonuses), learned from their own 24 months of bank history.
-   MACROECONOMIC = the economy: inflation vs pay, interest rates, markets,
-   recessions, house prices. One setting for EVERY path (the "The economy"
-   bar, presets = UBS scenarios S101-S110), so decisions are compared under
+   bonuses), estimated from the 28,800 months of bank history.
+   MACROECONOMIC = the economy: inflation vs pay, unemployment, interest rates,
+   markets, recessions, house prices. One setting for EVERY path (the "The
+   economy" bar: "Forecast (Swiss data)" draws inflation and unemployment from
+   a model of Swiss data; stress tests = UBS scenarios S101-S110), so decisions are compared under
    the same conditions. In one message the chat splits them: "master's, and a
    recession in 2 years" -> the master's is a path, the recession is the economy.
 
@@ -213,9 +214,9 @@ Q: Which assumptions affect the result most?
 A: The Sensitivity card (under the charts). Left: what moves the result
    most (each input ±10%), for A and B. Right: pick an input and see both paths
    from −30% to +30%, and where their order flips. For the master's, income matters most (±83k for
-   a 10% change), then other spending (±15k) and rent (±11k). The biggest
+   a 10% change), then other spending (±18k) and rent (±11k). The biggest
    unknown is the degree's salary premium; that's why we show the break-even
-   (24%).
+   (23%).
 
 Q: How does a decision change the financial state?
 A: A decision is a list of life events (job, study, move, home...). The app
@@ -236,11 +237,13 @@ A: We never hide it. The tile says "cash runs out at 20", the node turns red, an
    data's own "requires financing" flag. We don't secretly borrow money.
 
 Q: Where is the AI? Where is the machine learning?
-A: Three places. 1) Machine learning on 28,800 months of data: seasonal
-   spending (February and August are expensive), the December bonus (54% of
-   employed people, about 61% of a month's pay), the real pattern of surprise
-   expenses, each person's normal spending, and how spending changes when life
-   changes. 2) Monte Carlo uses that to simulate 500 futures per path.
+A: Three places. 1) Statistical models estimated in R: a mixed model on the
+   28,800 months of data (spending by job status, city and calendar month:
+   February and August are expensive; the December bonus, 55% of employed
+   people, about 60% of a month's pay; how much months jump around), and,
+   for the "Forecast (Swiss data)" economy, a model of Swiss inflation and
+   unemployment from public data, both tested on years they had not seen.
+   2) Monte Carlo uses them to simulate 500 futures per path.
    3) An LLM turns words into events, and numbers into words.
 
 Q: Why didn't you train a model to predict outcomes directly?
@@ -266,7 +269,7 @@ A: We agree. Monte Carlo only handles normal month-to-month luck, and we
    checked against real data that it does that honestly. What really decides
    "master's or work" is the assumptions. For that we use what the docs
    suggest: sensitivity ("what matters most"), break-even (a small
-   optimization: "the master's needs +24% salary"), robustness against real
+   optimization: "the master's needs +23% salary"), robustness against real
    peer ranges, and clearly marked unknowns. Decisions are applied to an
    explicit model of income, costs and debt (a causal "do" on the plan), not
    learned from correlations.
@@ -303,7 +306,7 @@ Q: What if the AI is down?
 A: The app still works: keyword rules for questions, a template for the
    explanation, and cached answers. The buttons never need the AI.
 
-Q: Why does "start working" end so rich (745k)?
+Q: Why does "start working" end so rich (710k)?
 A: That comes from UBS's synthetic data: employed people earn about 8,000
    net a month at every age, and spending barely rises with income. We label
    it "from data", say it openly, and the salary can be edited in one click.
@@ -315,8 +318,8 @@ A: No. All people are fictional, from UBS's synthetic dataset. No real client
 Q: How did you measure uncertainty, and is it honest?
 A: 500 simulated futures per path with a fixed seed, and every path uses the
    same random months, so differences come from the decision, not luck. We
-   tested it: trained on 2025, predicted 2026 for 1,200 people. The 8-in-10
-   range caught 78.5% (ideal 80%), the middle half caught 49.8% (ideal 50%).
+   tested it: estimated on 2025, predicted 2026 for 1,200 people. The 8-in-10
+   range caught 78.2% (ideal 80%), the middle half caught 50.1% (ideal 50%).
 
 Q: Why is the shaded band so thin?
 A: Monthly surprises average out over 10 years. Uncertainty about the big
@@ -408,20 +411,20 @@ E. NUMBERS TO REMEMBER
 - Alexia: 20, Lausanne, student, CHF 8,000 saved, earns CHF 1,200/month,
   rent CHF 900/month.
 - If nothing changes: cash runs out at 20 (her real ledger goes negative in
-  month 9); about CHF −116k at 30.
-- Start working ≈ CHF 745k · Master's ≈ CHF 557k (−189k) · Move abroad ≈ CHF 199k.
+  month 9); about CHF −147k at 30.
+- Start working ≈ CHF 710k · Master's ≈ CHF 526k (−184k) · Move abroad ≈ CHF 168k.
 - Fits goals better (computed): Start working, decided by cash (Master's: cash
   below zero in 100% of futures). Still true with +30% premium.
-- Master's break-even: +24% salary from 22. With +30%: ≈ CHF 795k (≈ +50k vs
+- Master's break-even: +23% salary from 22. With +30%: ≈ CHF 765k (≈ +55k vs
   working), but it still runs out of cash while studying.
 - Data: 1,200 people × 24 months = 28,800 months; 0 accounting errors.
-- Backtest: 78.5% inside the 80% range, 49.8% inside the 50% range.
-- "Work now, job loss at 25, flat for 300k at 28": ≈ CHF 705k, ≈ 41k less than
+- Backtest: 78.2% inside the 80% range, 50.1% inside the 50% range.
+- "Work now, job loss at 25, flat for 300k at 28": ≈ CHF 667k, ≈ 42k less than
   Start working. Low confidence (4% more salary would flip it).
-  Down payment 60k: cash 549k → 495k, net worth stays ≈ 550k.
+  Down payment 60k: cash 521k → 467k, net worth stays ≈ 527k.
 - Confidence evidence: "≥95%" statements were right 99.9% of the time
-  (19,980 pairs of real people). Calibration: said 50% → 49.9%, said 90% → 87.9%.
-- 500 futures per path · AI answers in ~1–3 s · 80 automated tests + 67 live AI tests.
+  (19,980 pairs of real people). Calibration: said 50% → 50.1%, said 90% → 89.1%.
+- 500 futures per path · AI answers in ~1–3 s · 95 automated tests + 67 live AI tests.
 
 
 ---------------------------------------------------------------------
@@ -434,47 +437,54 @@ AVOID: "predict", "will happen", "she should", "we recommend", "best choice",
 
 
 ---------------------------------------------------------------------
-G. WHAT ml/train.py PRODUCES, AND HOW THE APP USES IT
+G. WHERE THE MODEL COMES FROM, AND HOW THE APP USES IT
 ---------------------------------------------------------------------
-Run once, offline (cd ml && uv run train.py, ~5 s, fixed seed = identical files
-every time). It reads UBS's CSVs (1,200 people x 24 months = 28,800 rows) and
-writes two files that are BUNDLED into the web app (no download at demo time):
+Estimated once, offline, in R (fixed seeds = identical files every time), then
+imported into the web app (no download at demo time):
+  Rscript R/eda.R     spending model from UBS's CSVs (1,200 people x 24 months)
+  Rscript R/macro.R   inflation + unemployment model from World Bank data
+  cd frontend && pnpm model:import   R/output/*.csv -> src/model/*.json
+  cd frontend && pnpm backtest       re-runs the 2025 -> 2026 test
 
-frontend/src/model/params.json  (what was learned + the evidence)
+frontend/src/model/spending.json  (R/eda.R: mixed model, chosen among 4 by BIC)
   WHAT                          FROM THE DATA                     USED BY THE APP IN
-  season[status][month]         extra spending per calendar      sim.ts: every simulated month
-                                month, per job status; kept only  (students +34% in February)
-                                if statistically clear (|t|>3)
+  base[status][month]           spending (without rent) per job   resolve.ts: every simulated month
+                                status and calendar month         (employed +373 in Feb, +357 in Aug)
+  city_offset                   Fribourg −121 … Zurich +176/month resolve.ts: relocate events
+  student_month_excess          students' tuition-like Feb/Sep    resolve.ts: left out inside a study
+                                peaks (+1,045 / +835)             event (tuition is paid explicitly)
   bonus[status]                 chance + size of a December       sim.ts: December of each future
-                                bonus (employed: 54%, ~61% of a   (drawn at random)
-                                month's pay)
-  shock_quantiles (201 points)  the REAL shape of surprise         sim.ts: the random part of
-                                expenses (skewed, not a bell       spending in every future
-                                curve; no month-to-month memory)
-  regressions.other_spending    how spending changes with income,  resolve.ts: when a decision changes
-  regressions.spending_volatility rent, age, household, status     someone's situation (job, child…),
-                                (CV R² 0.05 and 0.80)              spending and its ups and downs follow
-  anchors (medians + 10th/90th) salary by job x age band, rent by  resolve.ts: every number the user did
-                                city x household, tuition, study   not give ("median of 69 people aged
-                                length                             20-24"); answer.ts: peer-range test
-  backtest + calibration        trained on 2025 only, predicted    "Can you trust this?" panel; the
-                                2026 for all 1,200 people          confidence rules (≥95% = high)
-  data_checks                   UBS ledger: 0 identity errors,      trust panel
-                                0 continuity errors
-  catalog                       UBS's 120 scenario ideas           the AI tags each path with the
-                                                                   closest one (catalog_id)
-frontend/src/model/profiles.json  (one record per person)
-  starting cash, investments, loans, income, rent, goals (with priority), study
-  assumptions, the REAL 24-month bank balance (black dots on the cash chart),
-  and the person's OWN learned spending level + its uncertainty (calib).
+                                bonus (employed 55%, ~60% of a    (drawn at random)
+                                month's pay; self-employed 27%)
+  log_sigma, k[status][month]   how much months jump around, by   sim.ts: the random part of
+                                status and income; ×1.5 in Feb/Aug spending in every future
+  clients (one per person)      their own spread, their personal  resolve.ts / sim.ts: the person's
+                                offset (tiny: ±16 CHF, no lasting  starting point
+                                personal habit in the data)
+frontend/src/model/macro.json  (R/macro.R, only for "Forecast (Swiss data)")
+  VAR(1) on Swiss inflation and unemployment 1991–2025 (World Bank, CC BY 4.0):
+  every future draws its own years; employees can lose their job (national rate,
+  ~7 months to find a new one) and get Swiss unemployment benefit (70/80% of pay,
+  up to 18 months). Tested 2005–2024: 1 year ahead the 80% range held 70% of the
+  time for inflation, 95% for unemployment.
+frontend/src/model/params.json + profiles.json  (ml/train.py)
+  medians + 10th/90th percentiles (salary by job x age band, rent by city x
+  household, tuition, study length: "median of 69 people aged 20-24"), data
+  checks (0 identity errors, 0 continuity errors), UBS's 120 scenario ideas, and
+  per person: starting cash, investments, loans, income, rent, goals (with
+  priority), study assumptions, the REAL 24-month bank balance (black dots).
+frontend/src/model/backtest.json  (pnpm backtest)
+  estimated on 2025 only, the app's own simulator predicted 2026 for all 1,200
+  people: "Can you trust this?" panel and the confidence rules (≥95% = high).
 
 What it does NOT do: it does not predict "what if I do a master's". Nobody in
 the data does a master's or moves, so that cannot be learned honestly.
 Decisions are applied by exact formulas; the data teaches how normal months
-behave (seasons, bonuses, surprises, habits) and the typical values.
-Proof it works: trained on 2025, the "8 in 10" range caught 78.5% of real 2026
-results (ideal 80), the middle half 49.8% (ideal 50); "A ends higher than B"
-statements were right 99.9% of the time when we said ≥95% (19,980 pairs).
+behave (status, city, month, bonuses, surprises) and the typical values.
+Proof it works: estimated on 2025, the "8 in 10" range caught 78.2% of real
+2026 results (ideal 80), the middle half 50.1% (ideal 50); typical error CHF
+1,831 vs 2,445 for a simple average; "A ends higher than B" statements were
+right 99.9% of the time when we said ≥95% (19,980 pairs).
 
 
 ---------------------------------------------------------------------
@@ -490,12 +500,12 @@ UBS (scenario-modelling.md §2):  x(t+1) = F( x(t), a(t), w(t); θ ),
                      loan, investing…), each number labelled with its source
   w  external        the economy (inflation, rates, recession, markets, house
                      conditions   prices), ONE setting shared by every path
-  θ  parameters      learned by train.py (section G)
+  θ  parameters      estimated in R (section G)
 UBS deck, "a digital twin is more than a dashboard": DATA (UBS's synthetic
-ledger) -> MODEL (formulas + learned behaviour) -> SCENARIOS (the tree, A vs B)
+ledger) -> MODEL (formulas + estimated behaviour) -> SCENARIOS (the tree, A vs B)
 -> EXPLAIN (plain-English tiles and comparison, every number checked).
-It is a TWIN, not a calculator: it starts from this person's data and their
-own learned habits, it UPDATES itself ("I now earn 1,500", "I own a 200k
+It is a TWIN, not a calculator: it starts from this person's data (status, city,
+income, rent, savings, goals, their own spending spread), it UPDATES itself ("I now earn 1,500", "I own a 200k
 flat", "never below 5k"), it keeps a memory of the conversation, and every
 path recomputes from the new state.
 UBS capability list (ai-and-technology.md §2): C01 state, C02 personal habits,
@@ -565,7 +575,7 @@ INNOVATIVE
     safety, then goals, then money), so more money is not automatically
     "better", as UBS's FAQ asks.
   - Unknowns are shown, not hidden: dotted lines, a break-even ("pays off only
-    if salary +24%"), and a sensitivity chart.
+    if salary +23%"), and a sensitivity chart.
   - A living twin: it updates itself from what you tell it and fixes its own
     mistakes (undo, remove, correct) in the conversation.
 IMPACT

@@ -78,7 +78,7 @@ export const EditSchema = z.object({
 
 /** The ECONOMY (macroeconomic variables, shared by every path). Null = keep as is. */
 export const MacroUpdateSchema = z.object({
-  preset: z.enum(['base', 'uncertain', 'inflation', 'rates', 'recession', 'housing', 'crisis']).nullable().describe('A ready-made economy, or null'),
+  preset: z.enum(['base', 'forecast', 'uncertain', 'inflation', 'rates', 'recession', 'housing', 'crisis']).nullable().describe('A ready-made economy, or null'),
   inflation_pct: num, wage_growth_pct: num, rate_shift_pct: num, market_return_pct: num, market_vol_pct: num,
   recession_start_month: int, recession_months: int, recession_income_drop_pct: num,
   crash_month: int, crash_drop_pct: num, housing_drop_month: int, housing_drop_pct: num, recession_risk_per_year_pct: num,

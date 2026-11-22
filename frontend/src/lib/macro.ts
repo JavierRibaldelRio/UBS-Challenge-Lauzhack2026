@@ -3,6 +3,7 @@
 // The person's own variables (income, rent, spending habit, life decisions, personal luck) are IDIOSYNCRATIC and live in the paths.
 //
 // The synthetic data covers 24 calm months, so it cannot calibrate the economy. Base = "today's economy unchanged".
+// "Forecast (Swiss data)" draws inflation and unemployment from a model fitted in R on public Swiss data (R/macro.R).
 // The other presets are labelled stress tests modelled on UBS's scenario catalog (S101–S110). Every number is editable.
 
 export type Macro = {
@@ -19,6 +20,8 @@ export type Macro = {
   crash: { month: number; drop_pct: number } | null // investments fall
   housing_drop: { month: number; drop_pct: number } | null // home values fall
   recession_risk_per_year_pct: number // random recessions in the Monte Carlo (same for all paths in one future)
+  /** inflation + unemployment forecast (R/macro.R), drawn per simulated future; null fields = the R model's labelled assumptions */
+  forecast?: { job_search_months: number | null; real_wage_growth_pct: number | null } | null
 }
 
 const BASE: Macro = {
@@ -28,6 +31,7 @@ const BASE: Macro = {
 
 export const MACRO_PRESETS: Macro[] = [
   BASE,
+  { ...BASE, id: 'forecast', name: 'Forecast (Swiss data)', desc: 'Inflation and unemployment follow a model fitted on Swiss data 1991–2025 (World Bank). Each simulated future gets its own path: prices can run ahead of pay for a while, and employees can lose their job (benefits 70–80% of pay for up to 18 months, about 7 months to find a new one). The rate is national, not your personal chance.', forecast: { job_search_months: null, real_wage_growth_pct: null } },
   { ...BASE, id: 'uncertain', name: 'Uncertain economy', desc: 'Each simulated future can hit a recession: about 1 year in 10 (Switzerland had two in ~20 years: 2009, 2020). A recession cuts pay 10% for a year and markets 20%. Illustrative.', recession_risk_per_year_pct: 10, market_return_pct: 3, market_vol_pct: 12 },
   { ...BASE, id: 'inflation', name: 'High inflation', catalog: 'S101', desc: 'Prices rise 4% a year, pay only 1.5%: everyday life gets 2.5% more expensive every year. Illustrative stress test.', inflation_pct: 4, wage_growth_pct: 1.5 },
   { ...BASE, id: 'rates', name: 'Rate hike', catalog: 'S103', desc: 'Every loan and mortgage costs 2 percentage points more. Illustrative stress test.', rate_shift_pct: 2 },
@@ -49,6 +53,7 @@ export function describeMacro(m: Macro, age0: number): string[] {
   if (m.crash) out.push(`markets −${m.crash.drop_pct}% ${at(m.crash.month)}`)
   if (m.housing_drop) out.push(`home values −${m.housing_drop.drop_pct}% ${at(m.housing_drop.month)}`)
   if (m.recession_risk_per_year_pct) out.push(`random recessions: ${m.recession_risk_per_year_pct}% chance per year`)
+  if (m.forecast) out.push('inflation & unemployment drawn from a model of Swiss data (1991–2025), a different path in each simulated future; employees can lose their job')
   return out
 }
 

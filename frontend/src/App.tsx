@@ -23,8 +23,13 @@ import { addEvents, eventKey, inferParent, shiftBranch, withParentEvents } from 
 import type { Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
 import { unknownImpact } from './lib/unknowns'
 import { effectIssues, incomeNeeded } from './lib/effects'
+import { buildModel, type BaseParams, type BaseProfile } from './lib/model'
+import type { Backtest, MacroModel, SpendingFile } from './lib/types'
 import paramsJson from './model/params.json'
 import profilesJson from './model/profiles.json'
+import spendingJson from './model/spending.json'
+import macroJson from './model/macro.json'
+import backtestJson from './model/backtest.json'
 
 type Version = { spec: ScenarioSpec; overrides: Overrides }
 type PathEdit = { instruction: string; changes: string[]; model?: string; ms?: number; prompt?: PromptInfo }
@@ -89,9 +94,10 @@ const madeBy = (o: Origin) => (o.kind === 'today' ? 'the data, unchanged' : o.ki
 
 type CompareState = { key: string; status: 'ai' | 'offline'; data: CompareResult; model?: string; prompt?: PromptInfo; ms?: number; verify?: { total: number; unmatched: string[] } }
 
-// Model artifacts are bundled (built by ml/train.py) -> no runtime fetch that could fail during a demo.
+// Model artifacts are bundled (see lib/model.ts) -> no runtime fetch that could fail during a demo.
+const MODEL = buildModel(paramsJson as unknown as BaseParams, profilesJson as unknown as BaseProfile[], spendingJson as unknown as SpendingFile, macroJson as unknown as MacroModel, backtestJson as unknown as Backtest)
 export default function App() {
-  return <Twin params={paramsJson as unknown as Params} profiles={profilesJson as unknown as Profile[]} />
+  return <Twin params={MODEL.params} profiles={MODEL.profiles} />
 }
 
 function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
@@ -283,7 +289,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     id: 0,
     role: 'twin',
     lines: [
-      { text: `Hi, I'm ${dataProfile.name}'s financial twin. I start from UBS's data about ${dataProfile.name} (age ${dataProfile.age}, ${dataProfile.city}, income, rent, savings, goals) and learned ${dataProfile.name}'s spending habits from 24 months of bank history.` },
+      { text: `Hi, I'm ${dataProfile.name}'s financial twin. I start from UBS's data about ${dataProfile.name} (age ${dataProfile.age}, ${dataProfile.city}, income, rent, savings, goals). Spending comes from a model of 24 months of bank history of all 1,200 people: what someone in ${dataProfile.name}'s situation (status, city, month) spends.` },
       { text: 'Ask me “what if…”, tell me what changed (“I now earn 1,500”), or add a path with “+ New path”. Every path is a node: click two to compare them (first = A, green; second = B, blue).' },
     ],
   }
@@ -303,7 +309,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     if (pair[0].id === pair[1].id) return null
     return computeVerdict(asked.question, asPath(pair[0]), asPath(pair[1]), profile, params, H, loanRate, macro)
   }, [asked, byId, today, profile, params, H, loanRate, macro])
-  const economy = useMemo(() => ({ name: macro.name, ubs_scenario: macro.catalog, conditions: describeMacro(macro, profile.age), note: macro.id === 'base' ? 'today’s economy, nothing special' : 'illustrative economy scenario, shared by every path' }), [macro, profile.age])
+  const economy = useMemo(() => ({ name: macro.name, ubs_scenario: macro.catalog, conditions: describeMacro(macro, profile.age), note: macro.id === 'base' ? 'today’s economy, nothing special' : macro.forecast ? 'inflation and unemployment drawn from a model of Swiss data (1991–2025): each simulated future has its own economy, the same for every path; employees can lose their job (national rate, not a personal risk)' : 'illustrative economy scenario, shared by every path' }), [macro, profile.age])
   const ansKey = useMemo(() => (verdictAsked ? JSON.stringify({ ...answerFacts(verdictAsked, profile, params, H), economy }) : ''), [verdictAsked, profile, params, H, economy])
   const answerSeq = useRef(0)
   const askedRef = useRef(asked)
@@ -359,7 +365,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       chance_cash_below_zero_pct: Math.round(today.result.probNegCash * 100), cash_runs_out_at_age: ageOut(today.result.firstNegMonth),
       goals: today.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, chance_pct: Math.round(g.prob! * 100) })),
     },
-    where_numbers_come_from: 'UBS synthetic data; usual spending learned from 24 months of this person\'s bank history',
+    where_numbers_come_from: 'UBS synthetic data; usual spending from a model estimated in R on 24 months of all 1,200 people (status, city, calendar month + a small personal offset)',
   })
   /** every path the AI may need, capped so the prompt stays small even with a huge tree */
   const pathsFor = (extra: (string | null | undefined)[] = []) => {
@@ -1045,6 +1051,8 @@ function editMacro(m: Macro, key: string, v: number): Macro {
   if (key === 'm.rec' && n.recession) n.recession = { ...n.recession, income_drop_pct: Math.abs(v) }
   if (key === 'm.crash' && n.crash) n.crash = { ...n.crash, drop_pct: Math.abs(v) }
   if (key === 'm.house' && n.housing_drop) n.housing_drop = { ...n.housing_drop, drop_pct: Math.abs(v) }
+  if (key === 'm.dur' && n.forecast) n.forecast = { ...n.forecast, job_search_months: Math.max(1, v) }
+  if (key === 'm.wage' && n.forecast) n.forecast = { ...n.forecast, real_wage_growth_pct: v }
   return n
 }
 

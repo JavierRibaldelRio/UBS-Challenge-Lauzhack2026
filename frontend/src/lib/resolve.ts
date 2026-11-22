@@ -1,19 +1,35 @@
 // Turns "profile + list of events" into a month-by-month PLAN.
 // Every number used gets an Assumption record saying where it came from:
 //   data       = read from the challenge CSVs (or a median of them)
-//   learned    = fitted by ml/train.py from the 24-month ledger
+//   learned    = estimated in R (R/eda.R) from the 24-month ledgers of the 1,200 people
 //   you        = typed by the user (or stated in the chat)
 //   assumption = not in the data, a labelled default (editable)
 //   missing    = nobody knows; default is "no change" and the UI asks you to set it
+//   macro      = the economy (shared by every path)
+import { chf } from './fmt'
 import { BASE_MACRO, type Macro } from './macro'
-import type { Assumption, Household, Params, Profile, Regression, ScenarioSpec, Source, Status, TwinEvent } from './types'
+import type { Assumption, Household, MacroModel, Params, Profile, ScenarioSpec, Source, Status, TwinEvent } from './types'
+
+/** The "Forecast (Swiss data)" economy: inflation and unemployment drawn per simulated future (R/macro.R). */
+export type MacroPlan = {
+  model: MacroModel
+  findRate: number // chance per month of finding a job again (1 / average duration)
+  realWageGrowth: number // pay growth above last year's inflation (share per year)
+  exposed: Uint8Array // 1 = an employee this month (can lose the job; the self-employed are not insured)
+  replacement: Float64Array // benefit as a share of pay, if the job is lost this month
+  maxBenefitMonths: Int32Array // how long the benefit is paid, if the job is lost this month
+  benefitCap: number // CHF/month: insured earnings cap
+  afterIncome: Float64Array // income once benefits run out (typical income of unemployed people of that age, data)
+}
 
 export type Plan = {
   months: number
   income: Float64Array
   rent: Float64Array
-  otherMu: Float64Array // expected non-rent spending
-  otherSd: Float64Array // month-to-month spending std-dev
+  otherMu: Float64Array // expected non-rent spending this calendar month (R model)
+  otherSd: Float64Array // month-to-month spending std-dev this calendar month
+  unempMu: Float64Array // the same if unemployed this month (only used by the forecast economy)
+  unempSd: Float64Array
   extra: Float64Array // recurring extra costs
   oneOff: Float64Array // single costs (>0) / money in (<0), incl. tuition
   contrib: Float64Array // cash -> investments transfers
@@ -22,6 +38,7 @@ export type Plan = {
   revalue: Float64Array // value changes with no money moving (depreciation, house-price drops): part of the net-worth check
   purchases: { month: number; price: number; down: number; loan: number; label: string; kind: 'home' | 'asset' }[]
   macroRisk: number // yearly chance of a random recession (economy), drawn per simulated future
+  macro: MacroPlan | null // inflation + unemployment forecast (economy "Forecast (Swiss data)")
   status: Status[]
   household: Household[]
   city: string[]
@@ -31,7 +48,7 @@ export type Plan = {
   startInvest: number
   /** a home owned from the start (told in the chat) */
   startHome: number
-  muSe: number // standard error of the personal spending level (parameter uncertainty)
+  muSe: number // uncertainty (SD) of the personal spending offset u (parameter uncertainty)
   invReturn: number // expected real annual return
   invVol: number // annual volatility
   /** month from which the decision changes income (used for break-even) */
@@ -43,22 +60,7 @@ export type Plan = {
 export type Overrides = Record<string, number>
 
 export const BAND = (age: number) => `${Math.floor(age / 5) * 5}-${Math.floor(age / 5) * 5 + 4}`
-
-export function regPredict(reg: Regression, x: { income: number; rent: number; age: number; household: string; status: string }) {
-  let y = 0
-  reg.features.forEach((f, i) => {
-    let v = 0
-    if (f === 'intercept') v = 1
-    else if (f === 'income') v = x.income
-    else if (f === 'sqrt_income') v = Math.sqrt(Math.max(0, x.income))
-    else if (f === 'rent') v = x.rent
-    else if (f === 'age') v = x.age
-    else if (f.startsWith('household=')) v = x.household === f.slice(10) ? 1 : 0
-    else if (f.startsWith('status=')) v = x.status === f.slice(7) ? 1 : 0
-    y += reg.coefficients[i] * v
-  })
-  return y
-}
+const chf0 = (x: number) => `${x < 0 ? '−' : '+'}CHF ${Math.round(Math.abs(x))}/mo`
 
 export function incomeAnchor(params: Params, status: Status, age: number) {
   const s = params.anchors.income_by_status[status]
@@ -119,6 +121,7 @@ export function resolve(
   const homeDown = new Float64Array(H)
   const homeValue = new Float64Array(H)
   const revalue = new Float64Array(H)
+  const inStudy = new Uint8Array(H) // months inside a study event (its tuition is explicit)
   const purchases: Plan['purchases'] = []
   const shocks: Plan['shocks'] = []
   const loans: Plan['loans'] = []
@@ -133,8 +136,8 @@ export function resolve(
   // a home they already own (told in the chat, not in the data): part of net worth from day one, never cash
   const startHome = profile.home ? A('g.home', 'Home you already own', profile.home, 'CHF', 'you', 'you told the twin (a fact about today); value kept constant in 2025 francs') : 0
   if (startHome) homeValue.fill(startHome)
-  const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `average of your ${profile.calib.months} ledger months, seasonality and bonus removed`)
-  const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `std-dev of your ${profile.calib.months} ledger months`)
+  const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `in a regular month (not Feb / Aug / Dec): typical for a ${profile.status.replace('_', '-')} person in ${profile.city} + your own offset (${chf0(profile.calib.u)}); R model on 1,200 people × ${profile.calib.months} months`)
+  const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `in a regular month: your own spread over ${profile.calib.months} months, pulled toward people like you (R model); larger in Feb / Aug / Dec`)
   const invReturn = A('m.ret', 'Economy: investment return (per year, 2025 francs)', macro.market_return_pct, '%', macro.id === 'base' ? 'assumption' : 'macro', macro.id === 'base' ? 'Not in the data (assets are a single snapshot). 4% = UBS’s illustrative rate (financial-concepts.md §6: 10,000 at 4% for 5 years ≈ 12,167). A modelling assumption, not a forecast; shared by every path. Edit it or pick an economy.' : `set by the economy “${macro.name}”; shared by every path`) / 100
   const invVol = A('m.vol', 'Economy: market ups & downs (per year)', macro.market_vol_pct, '%', macro.market_vol_pct ? 'macro' : 'assumption', macro.market_vol_pct ? `set by the economy “${macro.name}”` : 'Not in the data. 0% = no market noise.') / 100
   profile.loans.forEach((l, i) => {
@@ -178,8 +181,13 @@ export function resolve(
         for (let t = s; t < end; t++) {
           status[t] = 'student'
           income[t] = incDuring
+          inStudy[t] = 1
         }
         for (let t = s; t < end; t += 6) oneOff[t] += tuition / 2
+        // students in the data spend more in Feb and Sep (tuition-like): here the tuition above is paid explicitly
+        let peaks = 0
+        for (let t = s; t < end; t++) peaks += params.spending.student_month_excess[t % 12]
+        if (peaks > 0) assumptions.push({ key: `${k}.info`, label: `${e.label}: students’ Feb / Sep peaks left out`, value: Math.round((peaks / (end - s)) * 12), unit: 'CHF/yr', source: 'learned', note: `students in the data spend about ${chf(params.spending.student_month_excess[1])} more in February and ${chf(params.spending.student_month_excess[8])} more in September (tuition-like); the tuition above is paid explicitly, so these are not counted twice (R model)`, month: s })
         if (end < H) {
           curMonth = end // the salary after studying (and its unknown premium) only matters from here
           const anc = incomeAnchor(params, 'employed', ageAt(end))
@@ -359,22 +367,35 @@ export function resolve(
     if (st) warnings.push(`“${j.label}” starts while studying (“${st.label}” runs until ${Math.floor(ageAt(st.end))}): its salary replaces the student income during the degree. For a salary AFTER the degree, start the job at ${Math.floor(ageAt(st.end))}.`)
   }
 
-  // ---- learned spending response to a changed situation (regression delta, personal offset kept)
-  const regO = params.regressions.other_spending
-  const regV = params.regressions.spending_volatility
-  const x0 = { income: profile.income, rent: profile.rent, age: profile.age, household: profile.household, status: profile.status }
-  const f0 = regPredict(regO, x0)
-  const v0 = Math.max(50, regPredict(regV, x0))
+  // ---- monthly non-rent spending: the model estimated in R (R/eda.R -> model_parameters.csv), month by month
+  //   otherMu[t] = base[status, calendar month] + city offset + your offset u (+ your correction, if you gave one)
+  //                − students' Feb / Sep peaks inside a study event (its tuition is explicit)
+  //   otherSd[t] = your regular-month spread × how the spread changes with status and income × month multiplier k
+  // Income, household and age do not move the level: in the data they add nothing once status and city are known.
+  const S = params.spending
+  const cityOff = (c: string) => S.city_offset[c] ?? 0 // abroad / unknown city: the average Swiss city
+  const shiftMu = otherBase - profile.calib.model_mu // 0 unless the person told the twin their usual spending
+  const level = (st: Status, c: string) => S.base_regular[st] + cityOff(c) + profile.calib.u + shiftMu // regular month
+  const logSig = (st: Status, inc: number) => S.log_sigma.status[st] + S.log_sigma.log_income * Math.log(Math.max(1, inc))
+  const sig0 = logSig(profile.status, profile.income)
+  const sdRatio = (st: Status, inc: number) => Math.min(4, Math.max(0.25, Math.exp(logSig(st, inc) - sig0)))
+  const muAt = (t: number, st: Status) => Math.max(0, S.base[st][t % 12] + cityOff(city[t]) + profile.calib.u + shiftMu - (inStudy[t] ? S.student_month_excess[t % 12] : 0))
+  // unemployment benefit as a share of pay if the job were lost this month (Swiss law, AVIG Art. 22; forecast economy)
+  const L = params.macro_model.labour
+  const replAt = (t: number) => (household[t] === 'family' || income[t] <= L.low_salary_threshold_month ? L.replacement_higher : L.replacement)
   const otherMu = new Float64Array(H)
   const otherSd = new Float64Array(H)
+  const unempMu = new Float64Array(H) // if this month were spent unemployed (forecast economy)
+  const unempSd = new Float64Array(H)
   for (let t = 0; t < H; t++) {
-    const x = { income: income[t], rent: rent[t], age: ageAt(t), household: household[t], status: status[t] }
-    otherMu[t] = Math.max(0, otherBase + regPredict(regO, x) - f0)
-    otherSd[t] = sdBase * Math.min(4, Math.max(0.25, Math.max(50, regPredict(regV, x)) / v0))
+    otherMu[t] = muAt(t, status[t])
+    otherSd[t] = sdBase * sdRatio(status[t], income[t]) * S.k[status[t]][t % 12]
+    unempMu[t] = muAt(t, 'unemployed')
+    unempSd[t] = sdBase * sdRatio('unemployed', income[t] * replAt(t)) * S.k.unemployed[t % 12]
   }
-  const dEnd = otherMu[H - 1] - otherBase
+  const dEnd = level(status[H - 1], city[H - 1]) - level(profile.status, profile.city)
   if (spec.events.length && Math.abs(dEnd) >= 1) {
-    assumptions.push({ key: 'learned.delta', label: 'Spending response to the new situation', value: Math.round(dEnd), unit: 'CHF/mo', source: 'learned', note: `regression on 1,200 profiles (CV R² ${regO.selected_cv_r2.toFixed(2)}): how non-rent spending differs with income, status, household, age` })
+    assumptions.push({ key: 'learned.delta', label: 'Spending response to the new situation', value: Math.round(dEnd), unit: 'CHF/mo', source: 'learned', note: `a regular month at the end (${status[H - 1].replace('_', '-')}${city[H - 1] !== profile.city ? `, ${city[H - 1]}` : ''}) vs today: how non-rent spending differs by status and city in the data (R model on 1,200 people × 24 months); your own offset is kept` })
   }
 
   // ---- the ECONOMY (macroeconomic, shared by every path). The person's own variables above are idiosyncratic.
@@ -387,6 +408,8 @@ export function resolve(
       rent[t] *= f
       otherMu[t] *= f
       otherSd[t] *= f
+      unempMu[t] *= f
+      unempSd[t] *= f
       extra[t] *= f
       if (oneOff[t] > 0) oneOff[t] *= f // costs like tuition rise too (UBS FAQ: never inflate some expenses but not others)
     }
@@ -414,12 +437,48 @@ export function resolve(
   }
   if (macro.recession_risk_per_year_pct) assumptions.push({ key: 'm.risk', label: 'Economy: chance of a recession each year', value: macro.recession_risk_per_year_pct, unit: '%', source: 'macro', note: `in each simulated future a recession can start (pay −10% for 12 months, markets −20%), the same for every path · ${macroNote}` })
 
+  // ---- the economy FORECAST (R/macro.R): inflation and unemployment drawn per simulated future in sim.ts
+  let macroPlan: MacroPlan | null = null
+  if (macro.forecast) {
+    curMonth = 0
+    const M = params.macro_model
+    const bt1 = (v: string) => M.backtest.find((b) => b.variable === v && b.horizon === 1)
+    const cov = (v: string) => Math.round((bt1(v)?.coverage80 ?? NaN) * 100)
+    const fc1 = (v: string) => M.forecast.find((f) => f.variable === v && f.year === M.start.year + 1)
+    const r1 = (x: number | undefined) => (x == null ? '?' : (Math.round(x * 10) / 10).toFixed(1))
+    assumptions.push({
+      key: 'm.fc.info', label: 'Economy: inflation & unemployment forecast', value: Math.round(M.start.unemployment_pct * 10) / 10, unit: `% unemployed in ${M.start.year}`, source: 'macro',
+      note: `model of Swiss data 1991–${M.start.year} (World Bank; ILO unemployment). ${M.start.year} = observed (inflation ${r1(M.start.inflation_pct)}%); after that each simulated future draws its own year by year. ${M.start.year + 1}: inflation ${r1(fc1('inflation_pct')?.p50)}% (80% range ${r1(fc1('inflation_pct')?.p10)} to ${r1(fc1('inflation_pct')?.p90)}), unemployment ${r1(fc1('unemployment_pct')?.p50)}% (${r1(fc1('unemployment_pct')?.p10)} to ${r1(fc1('unemployment_pct')?.p90)}). Tested on 2005–2024, one year ahead: the 80% range held ${cov('inflation_pct')}% of the time for inflation, ${cov('unemployment_pct')}% for unemployment`,
+    })
+    const dur = A('m.dur', 'Economy: months to find a new job (average)', macro.forecast.job_search_months ?? L.duration_months, 'months', macro.forecast.job_search_months != null ? 'you' : 'assumption', `${M.labour_sources.duration_months}. The national unemployment rate sets the chance of losing a job (the same for every employee): an aggregate figure, not your personal risk`)
+    const g = A('m.wage', 'Economy: pay growth above inflation', macro.forecast.real_wage_growth_pct ?? L.real_wage_growth * 100, '%/yr', macro.forecast.real_wage_growth_pct != null ? 'you' : 'assumption', 'Pay follows LAST year’s inflation (Swiss wage rounds) plus this; prices follow the forecast, so costs run ahead of pay while inflation is rising. Cash keeps its value in today’s francs, as in every economy') / 100
+    assumptions.push({
+      key: 'm.ui.info', label: 'Economy: unemployment benefit', value: L.replacement * 100, unit: '% of pay', source: 'macro',
+      note: `${L.replacement_higher * 100}% with children or pay ≤ ${chf(L.low_salary_threshold_month)}/month; paid up to ${L.max_months_standard} months (${L.max_months_young} under 25 without children, ${L.max_months_55plus} from 55); insured pay up to ${chf(L.insured_salary_cap_year)}/yr; afterwards the typical income of unemployed people in the data. Employees only: the self-employed are not insured (Swiss law, AVIG Art. 22 and 27; applied to net pay as an approximation)`,
+    })
+    const exposed = new Uint8Array(H)
+    const replacement = new Float64Array(H)
+    const maxBenefitMonths = new Int32Array(H)
+    const afterIncome = new Float64Array(H)
+    for (let t = 0; t < H; t++) {
+      exposed[t] = status[t] === 'employed' || status[t] === 'part_time' ? 1 : 0
+      replacement[t] = replAt(t)
+      const age = ageAt(t)
+      maxBenefitMonths[t] = Math.round(age >= 55 ? L.max_months_55plus : age < 25 && household[t] !== 'family' ? L.max_months_young : L.max_months_standard)
+      afterIncome[t] = incomeAnchor(params, 'unemployed', age).value
+    }
+    macroPlan = { model: M, findRate: 1 / Math.max(1, dur), realWageGrowth: g, exposed, replacement, maxBenefitMonths, benefitCap: L.insured_salary_cap_year / 12, afterIncome }
+  }
+
   return {
     macroRisk: macro.recession_risk_per_year_pct / 100,
+    macro: macroPlan,
+    unempMu,
+    unempSd,
     revalue,
     purchases,
     months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, homeDown, homeValue, status, household, city, shocks, loans,
-    startCash, startInvest, startHome, muSe: sdBase / Math.sqrt(Math.max(1, profile.calib.months)), invReturn, invVol, changeMonth, assumptions, warnings,
+    startCash, startInvest, startHome, muSe: profile.calib.u_sd, invReturn, invVol, changeMonth, assumptions, warnings,
   }
 }
 

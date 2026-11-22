@@ -498,6 +498,14 @@ client_sigma <- client_static |>
             sigma_reg_shrunk = exp(w_shrink * log(sd_reg_within) + (1 - w_shrink) * fitted(vol_lm)))
 cat(sprintf("\nlog-sigma: residual var %.4f = true between-client var %.4f + sampling var %.4f -> shrinkage weight on own data %.2f\n",
             summary(vol_lm)$sigma^2, tau2, var_log_sd_sampling, w_shrink))
+# For simulation: a sample SD is biased low on the log scale, E[log s] = log sigma + (digamma(df/2) - log(df/2)) / 2
+# (chi-square), and the regression on log(s) inherits the same bias, so the shrunk sigma does too. sd() above
+# divides by n - 1 = 17 while df = 16, a further factor sqrt(16/17). sigma_reg_sim = shrunk sigma with both undone
+# (~ +6%); the frontend's Monte Carlo uses it (backtest: 80% coverage 0.76 -> 0.78 with the 2025-only fit).
+log_sd_bias <- function(df) (digamma(df / 2) - log(df / 2)) / 2
+sim_factor_full <- exp(-log_sd_bias(16) - 0.5 * log(16 / 17))
+client_sigma$sigma_reg_sim <- client_sigma$sigma_reg_shrunk * sim_factor_full
+cat(sprintf("sigma_reg_sim = sigma_reg_shrunk x %.4f (small-sample bias of log SD undone)\n", sim_factor_full))
 
 bart <- resid_panel |> filter(regular) |> group_by(employment_status) |>
   summarise(n_clients = n_distinct(profile_id),
@@ -670,31 +678,48 @@ save_tab(data.frame(component = c("sigma_u (client intercept)", "sigma (unit-wei
 # 5.3 Base outflow per employment x month at the population-average city, and city offsets (with SEs)
 beta <- fixef(best); V <- as.matrix(vcov(best))
 has_city <- "city" %in% all.vars(f_mean)
-ca <- list(emp = contrasts(mm$emp), moy_f = contrasts(mm$moy_f))
-if (has_city) ca$city <- contrasts(mm$city)
-city_share <- table(as.character(mm$city[!duplicated(mm$pid)])) / nlevels(mm$pid)
-grid <- expand.grid(emp = EMP, moy = 1:12, city = levels(mm$city), stringsAsFactors = FALSE) |>
-  mutate(emp = factor(emp, levels = EMP), city = factor(city, levels = levels(mm$city)),
-         moy_f = factor(moy, levels = 1:12), student = as.numeric(emp == "student"),
-         bonus_inc_employed = 0, bonus_inc_self = 0, self_dec = as.numeric(emp == "self_employed" & moy == 12))
-X <- model.matrix(delete.response(terms(f_mean)), grid, contrasts.arg = ca)[, names(beta), drop = FALSE]
-key <- paste(grid$emp, grid$moy, sep = "|")
-Xbar <- rowsum(X * as.numeric(city_share[as.character(grid$city)]), key)
-base <- data.frame(key = rownames(Xbar), outflow_chf = as.vector(Xbar %*% beta),
-                   se = sqrt(rowSums((Xbar %*% V) * Xbar))) |>
-  separate(key, into = c("employment_status", "moy"), sep = "\\|", convert = TRUE) |>
-  arrange(emp_f(employment_status), moy)
+# From any fit of f_mean (the full fit here, the 2025-only fit in 6b):
+#   base[emp, month]  at the population-average city, non-bonus month (seasonal effects included)
+#   city offsets      vs the population-average city
+#   student x month   the student-specific month effects (December = reference 0): the tuition-like Feb/Sep peaks
+base_city <- function(fit, data) {
+  beta <- fixef(fit); V <- as.matrix(vcov(fit))
+  ca <- list(emp = contrasts(data$emp), moy_f = contrasts(data$moy_f))
+  if (has_city) ca$city <- contrasts(data$city)
+  city_share <- table(as.character(data$city[!duplicated(data$pid)])) / nlevels(data$pid)
+  grid <- expand.grid(emp = EMP, moy = 1:12, city = levels(data$city), stringsAsFactors = FALSE) |>
+    mutate(emp = factor(emp, levels = EMP), city = factor(city, levels = levels(data$city)),
+           moy_f = factor(moy, levels = 1:12), student = as.numeric(emp == "student"),
+           bonus_inc_employed = 0, bonus_inc_self = 0, self_dec = as.numeric(emp == "self_employed" & moy == 12))
+  X <- model.matrix(delete.response(terms(f_mean)), grid, contrasts.arg = ca)[, names(beta), drop = FALSE]
+  key <- paste(grid$emp, grid$moy, sep = "|")
+  Xbar <- rowsum(X * as.numeric(city_share[as.character(grid$city)]), key)
+  base <- data.frame(key = rownames(Xbar), outflow_chf = as.vector(Xbar %*% beta),
+                     se = sqrt(rowSums((Xbar %*% V) * Xbar))) |>
+    separate(key, into = c("employment_status", "moy"), sep = "\\|", convert = TRUE) |>
+    arrange(emp_f(employment_status), moy)
+  city_off <- NULL
+  if (has_city) {
+    ref_rows <- which(grid$emp == "employed" & grid$moy == 1)
+    D <- sweep(X[ref_rows, , drop = FALSE], 2, Xbar["employed|1", ])
+    city_off <- data.frame(city = as.character(grid$city[ref_rows]), offset_chf = as.vector(D %*% beta),
+                           se = sqrt(rowSums((D %*% V) * D)),
+                           client_share = as.numeric(city_share[as.character(grid$city[ref_rows])])) |>
+      arrange(offset_chf)
+  }
+  st_terms <- paste0("moy_f", 1:12, ":student")
+  student_month <- data.frame(moy = 1:12, effect_chf = ifelse(st_terms %in% names(beta), beta[st_terms], 0))
+  stopifnot(sum(student_month$effect_chf == 0) <= 1)  # exactly one month is the (collinear) reference
+  list(base = base, city_off = city_off, student_month = student_month)
+}
+bc <- base_city(best, mm)
+base <- bc$base
 cat("\nBase non-rent outflow, non-bonus month, population-average city (CHF):\n")
 show(base |> select(-se) |> pivot_wider(names_from = moy, values_from = outflow_chf, names_prefix = "m") |>
        arrange(emp_f(employment_status)) |> mutate(across(where(is.numeric), round)))
 save_tab(base, "05_base_outflow_by_month")
 if (has_city) {
-  ref_rows <- which(grid$emp == "employed" & grid$moy == 1)
-  D <- sweep(X[ref_rows, , drop = FALSE], 2, Xbar["employed|1", ])
-  city_off <- data.frame(city = as.character(grid$city[ref_rows]), offset_chf = as.vector(D %*% beta),
-                         se = sqrt(rowSums((D %*% V) * D)),
-                         client_share = as.numeric(city_share[as.character(grid$city[ref_rows])])) |>
-    arrange(offset_chf)
+  city_off <- bc$city_off
   cat("\nCity offsets vs population-average city (CHF/month):\n"); show(city_off)
   save_tab(city_off, "05_city_offsets")
 }
@@ -707,7 +732,7 @@ cat("\nDecember bonus given a bonus (share of income): LMM slope vs empirical me
 save_tab(bonus_slope, "05_bonus_given_bonus")
 
 # 5.4 Per-client effects (personalisation)
-re <- ranef(best)$pid
+re <- ranef(best, condVar = TRUE)$pid
 reg_months <- setdiff(1:12, IRREGULAR_MONTHS)
 base_reg <- base |> filter(moy %in% reg_months, !(employment_status == "student" & moy == 9)) |>  # Sep is a tuition-like month for students
   group_by(employment_status) |>
@@ -721,7 +746,10 @@ client_effects <- prof |>
   mutate(regular_outflow_hat_chf = base_regular + city_offset + u_outflow_chf,
          regular_net_hat_chf = income - rent - regular_outflow_hat_chf) |>
   select(-base_regular, -city_offset) |>
-  left_join(client_sigma, by = "profile_id")
+  left_join(client_sigma |> select(-sigma_reg_sim), by = "profile_id") |>
+  # posterior SD of u_i: how uncertain each client's offset is (the frontend draws it once per simulated future)
+  left_join(data.frame(profile_id = rownames(re), u_postsd_chf = sqrt(attr(re, "postVar")[1, 1, ])), by = "profile_id") |>
+  left_join(client_sigma |> select(profile_id, sigma_reg_sim_chf = sigma_reg_sim), by = "profile_id")
 write.csv(client_effects, file.path(OUT, "client_effects.csv"), row.names = FALSE)
 cat("\nclient_effects.csv written (BLUP u_i, personalised regular outflow, shrunk sigma_i). sd(BLUP) =",
     round(sd(client_effects$u_outflow_chf), 1), "CHF\n")
@@ -815,6 +843,8 @@ params <- bind_rows(
     unit = "CHF/month", source = paste0("LMM ", chosen, ": population-average city, non-bonus month")),
   if (has_city) P("mean", "city_offset", city_off$offset_chf, city_off$se, key = city_off$city,
                   source = "LMM: city fixed effect, centred on population-average city"),
+  P("mean", "student_month_effect", bc$student_month$effect_chf, NA, "student", bc$student_month$moy,
+    source = "LMM: student x calendar-month effect inside base (December = reference 0); Feb/Sep = tuition-like peaks"),
   P("bonus", "p_bonus", bonus$p_bonus, NA, as.character(bonus$employment_status), 12L, unit = "probability",
     source = "Dec excess > 3 SD and > 5% of income; independent across years (Fisher test 4d)"),
   P("bonus", "bonus_size_given_bonus_mean", bonus_slope$mean_bonus_share_lmm, bonus_slope$se, bonus_slope$employment_status, 12L,
@@ -845,6 +875,103 @@ write.csv(params |> mutate(across(c(value, se), ~ signif(.x, 6))), file.path(OUT
 cat("model_parameters.csv:", nrow(params), "rows (blocks:", paste(unique(params$block), collapse = ", "), ")\n")
 show(params |> filter(!block %in% c("mean")) |> select(-source))
 
+# ---- 6b. The same parameters re-estimated on 2025 ONLY (for the frontend's backtest on 2026) ----
+section("6b. PARAMETERS RE-ESTIMATED ON 2025 ONLY (frontend backtest)")
+# The frontend tests its simulator by predicting 2026 from 2025. model_parameters.csv uses both years,
+# so it would have seen the answer. Here everything that feeds a forecast is recomputed from 2025 months
+# alone: regular-month SD, bonus detection, the mean model, strata SDs, client effects and sigma_i shrinkage.
+# (The model STRUCTURE f_mean was chosen by BIC on both years; that choice is not re-made here.)
+p25 <- panel |> filter(year == 2025L)
+sd25 <- p25 |> group_by(profile_id) |> summarise(sd_reg_within = sd(excess[regular]), n_reg = sum(regular), .groups = "drop")
+stopifnot(nrow(sd25) == 1200, all(sd25$n_reg == 9), all(is.finite(log(sd25$sd_reg_within))))
+dec25 <- p25 |> filter(moy == 12) |> left_join(sd25, by = "profile_id") |>
+  mutate(bonus = excess > 3 * sd_reg_within & excess > 0.05 * income, bonus_share = excess / income)
+bonus25 <- dec25 |> group_by(employment_status) |>
+  summarise(p_bonus = mean(bonus), size_mean = if (any(bonus)) mean(bonus_share[bonus]) else NA_real_)
+bonus_deciles25 <- dec25 |> filter(bonus, employment_status %in% BONUS_GROUPS) |> group_by(employment_status) |>
+  reframe(quantile = seq(0.05, 0.95, by = 0.10), size_share_income = quantile(bonus_share, seq(0.05, 0.95, by = 0.10)))
+
+mm25 <- mm |> filter(year == 2025L) |> select(-bonus_flag) |>
+  left_join(dec25 |> select(profile_id, bonus_flag = bonus), by = "profile_id") |>
+  mutate(bonus_flag = bonus_flag & moy == 12 & emp %in% BONUS_GROUPS,
+         bonus_inc_employed = (bonus_flag & emp == "employed") * inc_k,
+         bonus_inc_self     = (bonus_flag & emp == "self_employed") * inc_k,
+         var_type = factor(ifelse(bonus_flag, "Dec_bonus", as.character(month_type)),
+                           levels = c("regular", "Feb", "Aug", "Dec", "Dec_bonus")),
+         stratum = interaction(emp, var_type, drop = TRUE, sep = "|"))
+fg25 <- fit_fgls(f_mean, mm25)
+bc25 <- base_city(fg25$fit, mm25)
+vc25 <- as.data.frame(VarCorr(fg25$fit))
+sigma_u25 <- vc25$sdcor[vc25$grp == "pid"]
+sig25 <- data.frame(stratum = names(fg25$sigma), sigma_eps_chf = unname(fg25$sigma)) |>
+  separate(stratum, into = c("employment_status", "var_type"), sep = "\\|")
+k25 <- sig25 |> group_by(employment_status) |>
+  mutate(k = sigma_eps_chf / sigma_eps_chf[var_type == "regular"]) |> ungroup() |>
+  filter(var_type %in% c("Feb", "Aug", "Dec"))
+
+# sigma_i from 2025: 9 regular months, minus 1 year mean -> df = 8
+cs25 <- prof |> transmute(profile_id, employment_status, city = as.character(city), income, rent) |>
+  left_join(sd25, by = "profile_id")
+vol25 <- lm(log(sd_reg_within) ~ employment_status + log(income), data = cs25)
+var_s25 <- 1 / (2 * 8)
+tau2_25 <- max(summary(vol25)$sigma^2 - var_s25, 0)
+w25 <- tau2_25 / (tau2_25 + var_s25)
+re25 <- ranef(fg25$fit, condVar = TRUE)$pid
+base_reg25 <- bc25$base |> filter(moy %in% reg_months, !(employment_status == "student" & moy == 9)) |>
+  group_by(employment_status) |> summarise(base_regular = mean(outflow_chf))
+client_effects25 <- cs25 |>
+  left_join(data.frame(profile_id = rownames(re25), u_outflow_chf = re25[, 1],
+                       u_postsd_chf = sqrt(attr(re25, "postVar")[1, 1, ])), by = "profile_id") |>
+  mutate(employment_status = as.character(employment_status)) |>
+  left_join(base_reg25, by = "employment_status") |>
+  left_join(bc25$city_off |> select(city, city_offset = offset_chf), by = "city") |>
+  mutate(regular_outflow_hat_chf = base_regular + city_offset + u_outflow_chf,
+         regular_net_hat_chf = income - rent - regular_outflow_hat_chf,
+         sigma_reg_empirical = sd_reg_within,
+         sigma_reg_pred = exp(fitted(vol25)),
+         sigma_reg_shrunk = exp(w25 * log(sd_reg_within) + (1 - w25) * fitted(vol25)),
+         # 9 regular months around one mean: sd() divides by df = 8, so only the log-scale bias is undone
+         sigma_reg_sim_chf = sigma_reg_shrunk * exp(-log_sd_bias(8))) |>
+  select(profile_id, employment_status, city, income, rent, u_outflow_chf, regular_outflow_hat_chf, regular_net_hat_chf,
+         sigma_reg_empirical, sigma_reg_pred, sigma_reg_shrunk, u_postsd_chf, sigma_reg_sim_chf)
+stopifnot(nrow(client_effects25) == 1200, !anyNA(client_effects25))
+write.csv(client_effects25, file.path(OUT, "client_effects_fit2025.csv"), row.names = FALSE)
+
+src25 <- " (fit on 2025 only)"
+vol_coef25 <- coef(vol25)
+params25 <- bind_rows(
+  P("mean", "base_nonrent_outflow", bc25$base$outflow_chf, bc25$base$se, bc25$base$employment_status, bc25$base$moy,
+    source = paste0("LMM ", chosen, ": population-average city, non-bonus month", src25)),
+  P("mean", "city_offset", bc25$city_off$offset_chf, bc25$city_off$se, key = bc25$city_off$city,
+    source = paste0("LMM: city fixed effect, centred on population-average city", src25)),
+  P("mean", "student_month_effect", bc25$student_month$effect_chf, NA, "student", bc25$student_month$moy,
+    source = paste0("LMM: student x calendar-month effect inside base (December = reference 0)", src25)),
+  P("bonus", "p_bonus", bonus25$p_bonus, NA, as.character(bonus25$employment_status), 12L, unit = "probability",
+    source = paste0("Dec excess > 3 SD (2025 regular months) and > 5% of income", src25)),
+  P("bonus", "bonus_size_given_bonus_mean", bonus25$size_mean[bonus25$employment_status %in% BONUS_GROUPS], NA,
+    as.character(bonus25$employment_status[bonus25$employment_status %in% BONUS_GROUPS]), 12L,
+    unit = "share of monthly income", source = paste0("empirical mean of detected bonus Decembers", src25)),
+  P("bonus", "bonus_size_quantile", bonus_deciles25$size_share_income, NA, as.character(bonus_deciles25$employment_status), 12L,
+    key = paste0("q", round(100 * bonus_deciles25$quantile)), unit = "share of monthly income",
+    source = paste0("empirical; sample uniformly from these to draw a bonus size", src25)),
+  P("random_effects", "sigma_u", sigma_u25, source = paste0("LMM client random intercept SD", src25)),
+  P("shocks", "sigma_eps", sig25$sigma_eps_chf, NA, sig25$employment_status, NA, key = sig25$var_type,
+    source = paste0("FGLS residual SD by employment x variance type", src25)),
+  P("shocks", "k_multiplier_vs_regular", k25$k, NA, k25$employment_status, NA, key = k25$var_type, unit = "ratio",
+    source = paste0("sigma_it = sigma_i * k[emp, month type]", src25)),
+  P("shocks", "log_sigma_i_coef", unname(vol_coef25), NA, key = names(vol_coef25), unit = "log-scale coefficient",
+    source = paste0("log(sigma_i) ~ emp + log(income)", src25)),
+  P("shocks", "sigma_i_shrinkage_weight", w25, unit = "weight", source = paste0("weight on own empirical log-sigma", src25))
+) |> filter(!is.na(value))
+write.csv(params25 |> mutate(across(c(value, se), ~ signif(.x, 6))), file.path(OUT, "model_parameters_fit2025.csv"), row.names = FALSE)
+cat("model_parameters_fit2025.csv:", nrow(params25), "rows | client_effects_fit2025.csv: 1200 clients\n")
+cat("2025-only vs both years: base employed Jan", round(bc25$base$outflow_chf[1]), "vs", round(base$outflow_chf[1]),
+    "| Zurich offset", round(bc25$city_off$offset_chf[bc25$city_off$city == "Zurich"]), "vs",
+    round(city_off$offset_chf[city_off$city == "Zurich"]),
+    "| P(bonus) employed", round(bonus25$p_bonus[bonus25$employment_status == "employed"], 3), "vs",
+    round(bonus$p_bonus[bonus$employment_status == "employed"], 3),
+    "| sigma_i shrinkage weight", round(w25, 2), "vs", round(w_shrink, 2), "\n")
+
 inventory_params <- data.frame(
   parameter = c("Initial cash, investments, debt, loan rate, goals", "Reference income Y_i and rent R_i",
                 "Base non-rent outflow by employment x month", "City cost-of-living offset",
@@ -867,8 +994,12 @@ show(inventory_params)
 # ---- 7. Cross-check vs existing calibration (frontend/src/model/params.json) -----
 section("7. CROSS-CHECK vs frontend/src/model/params.json (read-only)")
 pj <- file.path(ROOT, "frontend", "src", "model", "params.json")
-if (HAS_JSON && file.exists(pj)) {
-  J <- jsonlite::fromJSON(pj, simplifyVector = TRUE)
+J <- if (HAS_JSON && file.exists(pj)) jsonlite::fromJSON(pj, simplifyVector = TRUE) else NULL
+if (!is.null(J) && is.null(J$bonus)) {
+  # the frontend no longer has its own spending calibration: it reads THIS script's outputs
+  # (frontend/scripts/import-r-model.ts), so there is nothing left to cross-check.
+  cat("Skipped: the frontend now uses this model (R/output/*.csv -> frontend/src/model/spending.json).\n")
+} else if (!is.null(J)) {
   q_med <- function(qs) qs[ceiling(length(qs) / 2)]
   emp_season <- season |> filter(employment_status == "employed") |> arrange(moy)
   xc <- data.frame(

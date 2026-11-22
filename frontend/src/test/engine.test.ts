@@ -1,5 +1,4 @@
 // Validation tests mirroring pre_docs/evaluation/technical-validation.md. Run: pnpm test
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { breakEven, drivers, verifyNumbers } from '../lib/analysis'
 import { makeEvent, medianLoanRate, presets, resolve } from '../lib/resolve'
@@ -8,10 +7,10 @@ import { offlineParse } from '../lib/fallback'
 import { verdict } from '../lib/answer'
 import { suggestQuestions } from '../lib/suggest'
 import { BASE_MACRO, MACRO_PRESETS } from '../lib/macro'
-import type { Params, Profile, ScenarioSpec, TwinEvent } from '../lib/types'
+import type { Params, Profile, ScenarioSpec, Status, TwinEvent } from '../lib/types'
+import { loadModel } from './load'
 
-const params: Params = JSON.parse(readFileSync('src/model/params.json', 'utf8'))
-const profiles: Profile[] = JSON.parse(readFileSync('src/model/profiles.json', 'utf8'))
+const { params, profiles } = loadModel()
 const alexia = profiles.find((p) => p.id === 'P00001')!
 const rate = medianLoanRate(profiles)
 const plan = (p: Profile, spec: ScenarioSpec, o = {}, H = 120) => resolve(p, params, spec, o, H, rate)
@@ -29,10 +28,18 @@ describe('accounting identities', () => {
 })
 
 describe('model vs observed ledger (in-sample sanity)', () => {
-  it('Alexia status quo: real 24-month ledger lies mostly inside the 80% band', () => {
-    const r = simulate(plan(alexia, quo, {}, 24), params, alexia)
-    const inside = alexia.ledger_closing_cash.filter((v, t) => v >= r.cash[t].p10 && v <= r.cash[t].p90).length
-    expect(inside).toBeGreaterThanOrEqual(16)
+  // The R model finds no persistent personal spending habit (sigma_u ~ CHF 16: a person's 2025 deviation from people
+  // like them does not predict 2026), so a single person can sit outside their band (Alexia, P00001, spent ~CHF 280/month
+  // less than similar students: her real month-24 cash is above the 80% band). Calibration is judged on everyone.
+  it('all 1,200 people, status quo: the real month-24 cash lies inside the 80% band for about 80% of them', { timeout: 120_000 }, () => {
+    let inside = 0
+    for (const p of profiles) {
+      const r = simulate(plan(p, quo, {}, 24), params, p, 200)
+      if (p.ledger_closing_cash[23] >= r.cash[23].p10 && p.ledger_closing_cash[23] <= r.cash[23].p90) inside++
+    }
+    console.log(`in-sample: real month-24 cash inside the 80% band for ${inside} of ${profiles.length} people`)
+    expect(inside / profiles.length).toBeGreaterThanOrEqual(0.7)
+    expect(inside / profiles.length).toBeLessThanOrEqual(0.9)
   })
 })
 
@@ -475,8 +482,11 @@ describe('raises', () => {
   })
 })
 
-describe('the model learned by ml/train.py does real work', () => {
-  const flat: Params = { ...params, season: Object.fromEntries(Object.keys(params.season).map((k) => [k, Array(12).fill(0)])) as Params['season'], bonus: {}, shock_quantiles: params.shock_quantiles.map(() => 0) }
+describe('the spending model estimated in R does real work', () => {
+  const S = params.spending
+  const each = (f: (s: Status) => number[]) => Object.fromEntries((Object.keys(S.base) as Status[]).map((s) => [s, f(s)])) as Record<Status, number[]>
+  // no seasons (every month = the regular level), no December bonus, no surprises (k = 0)
+  const flat: Params = { ...params, spending: { ...S, base: each((s) => Array(12).fill(S.base_regular[s])), k: each(() => Array(12).fill(0)), bonus: {}, student_month_excess: Array(12).fill(0) } }
   const job = presets(alexia, params).find((p) => p.id === 'work')!.spec
   it('without the learned seasons, bonus and surprises the results change, and the uncertainty band almost vanishes', () => {
     const learned = simulate(plan(alexia, job), params, alexia)

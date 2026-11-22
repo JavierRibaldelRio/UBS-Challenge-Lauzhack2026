@@ -3,7 +3,7 @@
 //
 // Confidence combines three independent checks (see DEV_NOTES §5b):
 //   1. Luck      : in how many of the 500 paired futures does the leading path end higher? (same random months for both)
-//                  -> this part is validated by the backtest calibration curve (said 80% -> 78.5% happened).
+//                  -> this part is validated by the backtest calibration curve (backtest.json: said 80% -> ~78% happened).
 //   2. Data range: does the result still hold if the person is at the unlucky end of their peers in the data
 //                  (salary at the 10th percentile, rent at the 90th) and the other path at the lucky end?
 //   3. Unknowns  : does the result depend on a number nobody knows (e.g. a degree's salary premium)?
