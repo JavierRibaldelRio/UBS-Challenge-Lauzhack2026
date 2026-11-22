@@ -98,7 +98,7 @@ B. THE SCRIPT (3:00)
   of cash; then her goals; then money. It's a simulation, not advice."
 
 [1:05 – 1:50]  WHY: EVERY NUMBER HAS A SOURCE
-- DO: on tile B (Master's degree) click "🔢 Numbers".
+- DO: on tile B (Master's degree) click "📋 Assumptions".
 - SAY: "Why is the master's lower? Every number shows where it comes from.
   Tuition, 8,000 a year: from UBS's data for Alexia. Her salary afterwards:
   the median of 69 people her age in the data."
@@ -131,7 +131,7 @@ B. THE SCRIPT (3:00)
   Or type "I now earn 1,500 a month": every path recomputes from that.
 
 [2:30 – 3:00]  WHY YOU CAN TRUST IT
-- DO: scroll down, click "Can you trust this?".
+- DO: scroll down, click "How the model & simulations work".
 - SAY: "Three reasons to trust it. One: the accounting is checked live,
   5 out of 5. Two: we estimated our model only on 2025 and predicted 2026 for
   all 1,200 people. Our 8-in-10 range caught 78.2 percent of what really
@@ -475,7 +475,7 @@ frontend/src/model/params.json + profiles.json  (ml/train.py)
   priority), study assumptions, the REAL 24-month bank balance (black dots).
 frontend/src/model/backtest.json  (pnpm backtest)
   estimated on 2025 only, the app's own simulator predicted 2026 for all 1,200
-  people: "Can you trust this?" panel and the confidence rules (≥95% = high).
+  people: "How the model & simulations work" panel and the confidence rules (≥95% = high).
 
 What it does NOT do: it does not predict "what if I do a master's". Nobody in
 the data does a master's or moves, so that cannot be learned honestly.

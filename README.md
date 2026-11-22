@@ -312,7 +312,7 @@ mise.toml          pinned toolchain
 2. *(40 s)* Click **▶ Demo**: the scenario tree shows *Today* branching into *Start working* (**A**, green), *Master's* (**B**, blue) and *Move abroad*. Read the two tiles ("So far / Ahead", written for Alexia from the computed numbers, every number checked) and the A vs B comparison: *fits your goals better* (computed: cash first, then goals, then money), labelled **Not financial advice**.
 3. *(40 s)* Click the *Master's* card → **The numbers behind it**: tuition **from data** (her row in scenario-assumptions.csv), salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 23% higher". Set the premium to 30% → everything recomputes instantly.
 4. *(40 s)* Click the chat idea *"Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28"* → one new node with 3 events (a branch of *Start working*), compared as **B**, plus a direct answer in the chat with a **confidence level computed by the simulator**. Optional: **⑂ Branch off** a tile to add a later decision.
-5. *(40 s)* Open **Can you trust this?**: maths checks 5/5; estimated on 2025 and tested on 2026, the "8 in 10" range caught 78.2% of real results. "Don't predict the future, make it explorable."
+5. *(40 s)* Open **How the model & simulations work**: maths checks 5/5; estimated on 2025 and tested on 2026, the "8 in 10" range caught 78.2% of real results. "Don't predict the future, make it explorable."
 
 ### 2.7 Limitations (say them before the judges do)
 

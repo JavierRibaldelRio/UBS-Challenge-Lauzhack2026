@@ -371,6 +371,13 @@ const server = createServer(async (req, res) => {
         console.log(`[chat] reply says "already" without any action -> double-checking against PATHS`)
         data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: your previous answer said something is ALREADY there ("${data.reply.slice(0, 160)}"). Check the events in PATHS: ${JSON.stringify(tgt)}. If what the user asks for is NOT in those events, it is NOT there: apply it now (edits / new_paths). Only if it truly is in the events, keep saying so.`, opts)
       }
+      // a price the user DID give must not be dropped ("buy a flat for 400k at 28" -> amount_chf 400000)
+      const stated = [...ctx.text.matchAll(/(\d[\d'’,.]*)\s*(k|m|million)?\b/gi)].map((m) => Number(m[1].replace(/['’,]/g, '')) * (/^k$/i.test(m[2] ?? '') ? 1e3 : m[2] ? 1e6 : 1)).filter((v) => Number.isFinite(v) && v >= 10000)
+      const unpriced = [...data.new_paths.flatMap((p) => p.events), ...data.edits.flatMap((e) => [...(e.path?.events ?? []), ...e.add_events])].some((e) => (e.type === 'buy_home' || e.type === 'buy_asset') && !(e.amount_chf && e.amount_chf > 0))
+      if (unpriced && stated.length === 1) {
+        console.log(`[chat] a purchase lost the price the user gave (${stated[0]}) -> asking again`)
+        data = await callJson(TurnSchema, TURN_JSON_SCHEMA, 'turn', system, `${userMsg}\n\nIMPORTANT: the user DID give the price: ${stated[0]} CHF. Put it in amount_chf of that purchase, and do not ask for the price.`, opts)
+      }
       // branch mode is a promise: the original path stays as it is. If the AI edited it instead, turn that edit into a new branch.
       const fork = ctx.fork_from_path_id
       if (fork && data.new_paths.length === 0 && data.edits.some((e) => e.path_id === fork)) {
@@ -379,6 +386,7 @@ const server = createServer(async (req, res) => {
         const name = ed.path && ed.path.name !== parentName ? ed.path.name : `+ ${(ed.changes[0] ?? 'branch').replace(/^added:?\s*/i, '')}`.slice(0, 40)
         data.new_paths = [{ name, catalog_id: ed.path?.catalog_id ?? null, events: ed.path ? ed.path.events : ed.add_events, parent_id: fork }]
         data.edits = data.edits.filter((e) => e.path_id !== fork)
+        data.reply = `${data.reply} (Saved as a new branch of “${parentName}”; “${parentName}” itself is unchanged.)`
         console.log(`[chat] branch mode: turned an edit of ${fork} into a new branch`)
       }
       console.log(`[chat] ${Date.now() - t0}ms "${ctx.text.slice(0, 50)}" -> new ${data.new_paths.length}, edits ${data.edits.length}, remove ${data.remove_path_ids.length}, update ${data.profile_update ? 1 : 0}`)

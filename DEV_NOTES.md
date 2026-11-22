@@ -189,7 +189,7 @@ The "cash goes below zero" probabilities are calibrated too (said <5% → 0% hap
 
 Inflation ranges are a bit narrow, unemployment ranges a bit wide; for unemployment the model is not more accurate than repeating last year, it mainly adds the range.
 
-These numbers are in `backtest.json` / `macro.json` and shown in the app under *Can you trust this?*.
+These numbers are in `backtest.json` / `macro.json` and shown in the app under *How the model & simulations work*.
 
 ### Outputs
 - `frontend/src/model/spending.json` (150 KB) + `macro.json` (4 KB): the R models, written by `pnpm model:import` (never edit by hand).
@@ -252,7 +252,7 @@ A raise is permanent (no duration). `income_change` with `repeat_every_months: 1
 - Speed: 4 paths × 500 futures × 120 months takes milliseconds in the browser.
 
 ### Live accounting checks (`checks()`)
-These run on the selected path every time anything changes. You can see them under *Can you trust this?*:
+These run on the selected path every time anything changes. You can see them under *How the model & simulations work*:
 1. opening + inflows − outflows = closing, every month
 2. net worth only moves with income, spending, costs, interest and investment growth. Moving money into investments or repaying principal doesn't change it.
 3. debt is never negative
@@ -492,7 +492,7 @@ PC first (no phone layout on purpose). One screen, three parts: **chat on the le
 4. **A vs B** (only when both are selected): a personal comparison written by the AI, labelled **Not financial advice**. Next to it, the four measures UBS lists for every catalog scenario (*liquidity, net worth, goal feasibility, constraint breaches*): lowest cash, cash trouble %, net worth, each goal's %, with a ✓ on the better side. Above it: **"Fits your goals better, in this simulation: X"**. That verdict is **computed by the app** (`goalFit` in `lib/compare.ts`), never by the AI, with the weighting stated openly as UBS asks (`scenario-modelling.md` §13: preference weights must not be hidden): *1) not running out of cash, 2) your goals (high priority counts double), 3) net worth*. So more money does not automatically "win" (FAQ: *"Is the scenario with the most money always best? No"*). "How *fits better* is judged" unfolds the reasons and the confidence (§5b) that A or B ends with more net worth. The **break-even** line ("catches up only if income from 22 is 23% higher") sits below.
 5. **Sensitivity** (`components/Sensitivity.tsx`, UBS `example-outputs.md` §5): left, a tornado per path (each input ±10%, return ±1 pt: income, rent, other living costs, one-off costs & tuition, investment return); right, pick an input and see A's and B's end net worth from −30% to +30%, "as assumed" marked, and the point where their order flips. Deterministic runs (no luck), the same change for both paths.
 6. **Year by year** (`components/CompareChart.tsx`): two charts side by side, **Net worth** and **Cash in the bank**, one point per year, A green and B blue with A/B labels at the line ends, shaded = where 8 in 10 futures land, dotted = from the age an unknown number starts to matter. Cash chart: **black dots** = the real bank balance in the data, **🎯** = goals. Under it, each goal with A % and B %. The horizon (3–30 years) is chosen here. Colours validated for colour-blind readers (`--a`/`--b` in `index.css`), and every series also carries its letter.
-6. **Folded:** **The numbers behind** (tabs A / B: what it does, who made it, *see the prompt*, ⬇ scenario report (UBS template), every number with its source, click to change, *what matters most*), **The economy** (presets, shared by every path), **Can you trust this?**.
+6. **Folded:** **Assumptions** (tabs A / B: what it does, who made it, *see the prompt*, ⬇ scenario report (UBS template), every number with its source, click to change, *what matters most*), **The economy** (presets, shared by every path), **How the model & simulations work**.
 
 ### Facts about today the twin can hold (beyond the data)
 - **A home you already own** ("assume I had a house worth 200k at 20, gifted"): `profile_update.home_value_chf` → `Profile.home` → `Plan.startHome`, counted in net worth from day one (never cash; house-price drops apply). This is NOT a `buy_home` event: buying converts cash into a home and leaves net worth flat. "For the baseline / from the start" always means a fact about today, applied to every path.
@@ -608,4 +608,4 @@ Everything the twin could do before still works from here: what-ifs (new paths),
 | change the look | `frontend/src/index.css` |
 | change the number of simulated futures | `simulate(..., paths)` in `frontend/src/lib/sim.ts` |
 | see the exact JSON the AI must return | `curl localhost:8000/api/schema` or `backend/schema.ts` |
-| prove it works to a judge | open *Can you trust this?*, switch the chart to *Cash* (real data dots), run `pnpm test` |
+| prove it works to a judge | open *How the model & simulations work*, switch the chart to *Cash* (real data dots), run `pnpm test` |

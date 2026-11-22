@@ -314,7 +314,7 @@
     <tr><td>Inflation &amp; unemployment (macro.json)</td><td>World Bank data 1991–2025 (<code>R/macro.R</code>) + Swiss benefit rules</td><td>the “Forecast (Swiss data)” economy</td></tr>
     <tr><td>Medians + peer ranges (params.json)</td><td>salary by job × age, rent by city × household, tuition (<code>ml/train.py</code>)</td><td>every number you didn’t give; the peer-range confidence test</td></tr>
     <tr><td>People (profiles.json)</td><td>each person’s rows: state, goals, real 24-month balance</td><td>your starting point; the real balance = black dots</td></tr>
-    <tr><td>Backtest + calibration (backtest.json)</td><td>estimated on 2025, the app predicted 2026 for 1,200 people</td><td>“Can you trust this?” and the confidence thresholds</td></tr>
+    <tr><td>Backtest + calibration (backtest.json)</td><td>estimated on 2025, the app predicted 2026 for 1,200 people</td><td>“How the model & simulations work” and the confidence thresholds</td></tr>
   </table></div>
   <p class="small muted">It does <b>not</b> learn “what if I do a master’s”: nobody in the data does one. Decisions are applied by exact formulas; the data teaches how normal months behave. Estimated once in R, imported with <code>pnpm model:import</code>, fixed seeds: the same files every time.</p>
 </section>

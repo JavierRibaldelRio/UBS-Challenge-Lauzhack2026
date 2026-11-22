@@ -2,7 +2,7 @@
 // with the app's own engine (resolve + runPath, today's economy) from each person's real December-2025 cash, and
 // compared with the real 2026 ledger (src/test/backtest.ts).
 //
-//   pnpm backtest   -> recomputes and writes src/model/backtest.json (shown in "Can you trust this?")
+//   pnpm backtest   -> recomputes and writes src/model/backtest.json (shown in "How the model & simulations work")
 //   pnpm test       -> recomputes and checks it still matches the file (so the numbers shown are the code's numbers)
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
