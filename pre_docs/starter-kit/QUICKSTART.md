@@ -13,7 +13,7 @@ Keep all starter-kit files together in the `starter-kit/` folder.
 From the repository root:
 
 ```bash
-python starter-kit/run_example.py
+python pre_docs/starter-kit/run_example.py
 ```
 
 The command prints a comparison of three fictional scenarios and their liquidity constraints.
@@ -21,7 +21,7 @@ The command prints a comparison of three fictional scenarios and their liquidity
 ## 4. Run tests
 
 ```bash
-python -m unittest discover -s starter-kit -p "test_*.py"
+python -m unittest discover -s pre_docs/starter-kit -p "test_*.py"
 ```
 
 ## 5. Modify assumptions

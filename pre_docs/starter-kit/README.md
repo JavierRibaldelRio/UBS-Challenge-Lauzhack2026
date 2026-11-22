@@ -13,10 +13,10 @@ Quick start
 Requires Python 3.10+.
 
 From the repository root:
-python starter-kit/run_example.py
-python -m unittest discover -s starter-kit -p "test_*.py"
+python pre_docs/starter-kit/run_example.py
+python -m unittest discover -s pre_docs/starter-kit -p "test_*.py"
 Or enter the directory and run:
-cd starter-kit
+cd pre_docs/starter-kit
 python run_example.py
 python -m unittest discover -p "test_*.py"
 No pip install is required.
