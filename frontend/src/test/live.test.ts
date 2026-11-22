@@ -240,6 +240,18 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     console.log(`${l} (${r.ms}ms)\n   reply: ${r.data.reply}\n   new ${r.data.new_paths.length} · edits ${JSON.stringify(r.data.edits.map((e) => [e.path_id, e.changes]))} · remove ${JSON.stringify(r.data.remove_path_ids)} · update ${JSON.stringify(r.data.profile_update)}`)
   const mansion = { id: 'p1', name: '1M job, mansion, kid', events: [{ type: 'income_change', label: '1M a year', start_month: 0, duration_months: 240, monthly_net_income_chf: 83333 }, { type: 'buy_home', label: 'Mansion', start_month: 240, amount_chf: 10000000 }, { type: 'household_change', label: 'Kid', start_month: 0, household_type: 'family' }, { type: 'recurring_expense', label: 'Kid costs', start_month: 0, monthly_amount_chf: 100000 }], net_worth_at_end_median_chf: -19520000 }
 
+  it('chat: the NPV discount rate is set only when asked ("rate", not a rent discount, interest or inflation)', async () => {
+    const no = ['what if interest rates rise to 5%?', 'I get a 20% discount on my rent from next year', 'what if inflation is 5% a year?']
+    const yes: [string, number][] = [['use a 5% discount rate', 5], ["show the paths in today's money with a 2% discount rate", 2]]
+    const rs = await Promise.all([...no, ...yes.map((y) => y[0])].map((q) => chat(q)))
+    rs.forEach((r, i) => { expect(r.ok, r.error).toBe(true); console.log(`disc ${[...no, ...yes.map((y) => y[0])][i]} -> ${r.data.discount_rate_pct}`) })
+    no.forEach((_, i) => expect(rs[i].data.discount_rate_pct ?? null).toBeNull())
+    yes.forEach((y, i) => {
+      const d = rs[no.length + i].data
+      expect(d.discount_rate_pct).toBe(y[1])
+      expect(d.new_paths.length + d.edits.length).toBe(0) // valuing paths is not a decision
+    })
+  }, 60000)
   it('chat: "just say hi and nothing else" -> just hi, no actions', async () => {
     const r = await chat('just say hi and nothing else', { history: [{ role: 'user', text: 'hey' }, { role: 'twin', text: "Hi! Ask me a what-if, like 'What if I do a master's?'" }] })
     show('hi', r)
@@ -364,6 +376,32 @@ describe.runIf(process.env.LIVE === '1')('live LLM', () => {
     expect(r.data.second).toBeNull()
     expect(verifyNumbers(`${r.data.first.so_far} ${r.data.first.ahead} ${r.data.caveat}`, facts).unmatched).toEqual([])
   }, 40000)
+  it('compare: texts talk about what IS on a path, never "there is no home purchase" (several pairs)', async () => {
+    const ps = presets(alexia, params)
+    const side = (id: string): Side => {
+      const spec = id === 'today' ? { name: 'If nothing changes', catalog_id: null, events: [] } : ps.find((x) => x.id === id)!.spec
+      const plan = resolve(alexia, params, spec, {}, 120, rate)
+      return { id, name: spec.name, spec, plan, result: simulate(plan, params, alexia), parentName: null, madeBy: id === 'today' ? 'the data' : 'a ready-made button', unknownFromAge: null }
+    }
+    // "absence" sentences the user found useless: only what exists may be described
+    const ABSENT = /\bno (home|house|flat|property|apartment|purchase|loans?|debts?|mortgage|unknowns?)\b|\b(not|n't|never) (buy|bought|buying|purchas)\w*|without (buying|a (home|house|flat|purchase))|\bnothing (here |on this path )?depends on unknown|\b(does not|doesn't) depend on (any )?unknown/i
+    const pairs: [string, string | null][] = [['work', 'master'], ['work', 'abroad'], ['today', 'work'], ['master', 'abroad'], ['abroad', null]]
+    const bad: string[] = []
+    await Promise.all(pairs.map(async ([x, y]) => {
+      const a = side(x)
+      const b = y ? side(y) : null
+      const v = b ? verdict('Which path ends with more net worth?', { ...a, overrides: {} }, { ...b, overrides: {} }, alexia, params, 120, rate) : null
+      const facts = compareFacts({ profile: alexia, H: 120, first: a, second: b, verdict: v, fit: b ? goalFit(a, b, alexia) : null, breakEven: v?.flip && v.flip.pct > 0 ? { path: v.other.name, pct: v.flip.pct, fromAge: v.flip.fromAge } : null, economy: null, told: [] })
+      expect(JSON.stringify(facts)).not.toMatch(/"home_or_asset_purchases":\[\]|"depends_on_unknown_numbers":\[\]|"warnings":\[\]/) // empty lists are not sent
+      const r = await post<CompareResult>('/api/compare', { facts })
+      expect(r.ok, r.error).toBe(true)
+      const d = r.data
+      const texts = [d.first.so_far, d.first.ahead, d.second?.so_far ?? '', d.second?.ahead ?? '', d.comparison, d.caveat]
+      for (const s of texts.join(' ').split(/(?<=[.!?])\s+/)) if (ABSENT.test(s)) bad.push(`${x}/${y}: ${s}`)
+    }))
+    if (bad.length) console.log(bad.join('\n'))
+    expect(bad).toEqual([])
+  }, 90000)
   it('chat: fork_from_path_id -> a NEW branch that keeps the parent decisions', async () => {
     const work = { id: 'p1', name: 'Start working', parent_id: 'today', events: [{ type: 'start_job', label: 'Start working', start_month: 0 }], net_worth_at_end_median_chf: 745000 }
     const r = await chat('then buy a flat for 400k at 28', { fork_from_path_id: 'p1', paths: [work] })

@@ -225,7 +225,7 @@ A: A decision is a list of life events (job, study, move, home...). The app
    money out.
 
 Q: How did you verify the calculations?
-A: Four ways. 80 automated tests (plus 67 tests against the real AI), including UBS's own validation list (zero
+A: Four ways. 110 automated tests (plus 69 tests against the real AI), including UBS's own validation list (zero
    income, higher tuition, loan payoff, transfers). Live checks on screen
    (cash adds up, net worth = assets − debts, debt never negative, same seed =
    same result). A backtest on real 2026 data. And we checked UBS's ledger
@@ -313,7 +313,10 @@ A: Yes, as an extra view: "Worth in today's money" (rolling-horizon NPV).
    every horizon, and the comparison says who is ahead from which age. One
    discount rate for every path: 3% a year by default (a labelled assumption);
    change it under Assumptions or say "use a 5% discount rate". It only values
-   paths: the comparison and the confidence still use net worth.
+   paths: the comparison and the confidence still use net worth. UBS's own
+   framework discounts too (scenario-modelling.md §13: a discount factor β).
+   Why 3%? A round, labelled assumption, not learned from the data; that is
+   why it is editable and why no verdict depends on it.
 
 Q: Why does "start working" end so rich (710k)?
 A: That comes from UBS's synthetic data: employed people earn about 8,000
@@ -433,7 +436,7 @@ E. NUMBERS TO REMEMBER
   Down payment 60k: cash 521k → 467k, net worth stays ≈ 527k.
 - Confidence evidence: "≥95%" statements were right 99.9% of the time
   (19,980 pairs of real people). Calibration: said 50% → 50.1%, said 90% → 89.1%.
-- 500 futures per path · AI answers in ~1–3 s · 95 automated tests + 67 live AI tests.
+- 500 futures per path · AI answers in ~1–3 s · 110 automated tests + 69 live AI tests.
 
 
 ---------------------------------------------------------------------
@@ -557,7 +560,7 @@ UBS's suggested demo order (demo-and-submission.md), all in the script:
 Proposed rubric (judge-scorecard.md), where we score:
   Financial modelling & correctness (25)  exact formulas, live checks, tests
   Scenario & counterfactual (20)          tree, branches, A vs B, economy
-  Technical execution & validation (15)   80 tests + 67 live AI tests, backtest
+  Technical execution & validation (15)   110 tests + 69 live AI tests, backtest
   UX & communication (15)                 chat + tree + plain-English tiles
   Innovation (15)                         section J
   Responsible design (10)                 sources, unknowns, no advice, checks

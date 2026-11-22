@@ -4,6 +4,7 @@
 // Which path "fits your goals better" is COMPUTED here, with the weighting stated openly
 // (scenario-modelling.md §13: preference weights "should not be hidden from users"; FAQ: the scenario with the
 // most money is not always best). The AI only puts it in words, and the app checks every number it writes.
+import { nonEmpty } from './fmt'
 import type { Verdict } from './answer'
 import type { Plan } from './resolve'
 import type { SimResult } from './sim'
@@ -74,7 +75,8 @@ function describe(s: Side, profile: Profile, H: number) {
   const snapAt = [1, 3, 5, 10, 20, 30].filter((y) => y < years).concat(years)
   return {
     name: s.name,
-    branches_from: s.parentName,
+    // empty items are left out on purpose: the AI otherwise reports them ("there is no home purchase on this path")
+    ...(s.parentName ? { branches_from: s.parentName } : {}),
     made_by: s.madeBy,
     what_it_changes: describeSpec(s.spec, profile.age),
     decisions: [...s.spec.events].sort((x, y) => (x.start_month ?? 0) - (y.start_month ?? 0)).map((e) => ({ at_age: age(e.start_month ?? 0), what: e.label, type: e.type })),
@@ -91,10 +93,10 @@ function describe(s: Side, profile: Profile, H: number) {
     age_cash_goes_below_zero: r.firstNegMonth != null ? age(r.firstNegMonth) : null,
     ...(r.investCut.share > 0.05 ? { planned_investing_not_affordable: { futures_pct: pct(r.investCut.share), skipped_total_median_chf: r100(r.investCut.p50), why: 'you can only invest money you have (budget constraint)' } } : {}),
     goals: r.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by_year: g.date.slice(0, 4), chance_pct: pct(g.prob!) })),
-    home_or_asset_purchases: r.homeBuys.map((h) => ({ what: h.label, age: age(h.month), price_chf: r100(h.price), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_own_money_pct: pct(h.shortShare) })),
-    depends_on_unknown_numbers: s.plan.assumptions.filter((x) => x.source === 'missing').map((x) => x.label),
-    unknowns_matter_from_age: s.unknownFromAge,
-    warnings: s.plan.warnings,
+    ...nonEmpty('home_or_asset_purchases', r.homeBuys.map((h) => ({ what: h.label, age: age(h.month), price_chf: r100(h.price), down_payment_chf: r100(h.down), cash_just_before_median_chf: r100(h.cashBeforeP50), chance_not_enough_own_money_pct: pct(h.shortShare) }))),
+    ...nonEmpty('depends_on_unknown_numbers', s.plan.assumptions.filter((x) => x.source === 'missing').map((x) => x.label)),
+    ...(s.unknownFromAge != null ? { unknowns_matter_from_age: s.unknownFromAge } : {}),
+    ...nonEmpty('warnings', s.plan.warnings),
   }
 }
 
@@ -107,8 +109,9 @@ export function compareFacts(o: { profile: Profile; H: number; first: Side; seco
     today: {
       starting_point: `${p.as_of.slice(0, 7)}`,
       cash_chf: Math.round(p.cash),
-      investments_chf: Math.round(p.investments),
-      debts_chf: Math.round(p.loans.reduce((a, l) => a + l.principal, 0)),
+      // only what the person HAS (zero items get reported as "no investments, no debts")
+      ...(p.investments > 0 ? { investments_chf: Math.round(p.investments) } : {}),
+      ...(p.loans.length ? { debts_chf: Math.round(p.loans.reduce((a, l) => a + l.principal, 0)) } : {}),
       ...(p.home ? { home_already_owned_chf: Math.round(p.home), net_worth_today_chf: Math.round(p.cash + p.investments + p.home - p.loans.reduce((a, l) => a + l.principal, 0)) } : {}),
       ...(p.minCash ? { your_minimum_cash_floor_chf: Math.round(p.minCash) } : {}),
       net_income_chf_per_month: Math.round(p.income),

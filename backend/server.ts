@@ -52,11 +52,12 @@ The simulation has already been run. You get its results as FACTS for one or two
 WRITE
 - first = FACTS.paths[0], second = FACTS.paths[1] (null if there is only one path). For each:
   - so_far (1-3 sentences): where you stand today, using history_from_the_data (the REAL bank balance in UBS's data: observed, not simulated) and today (income, rent, usual spending, what they told the twin). Then what this path changes (its decisions with ages; if it branches_from another path, say it builds on that one). If decisions is empty, say nothing changes on this path.
-  - ahead (2-4 sentences): what tends to happen on this path in this simulation: net worth and cash over time (over_time_median), whether and when cash runs out, the chance of each goal, any home purchase and its down payment, and the unknown numbers it depends on.
+  - ahead (2-4 sentences): what tends to happen on this path in this simulation: net worth and cash over time (over_time_median), whether and when cash runs out, the chance of each goal. Only if the path has them: its home_or_asset_purchases (with the down payment) and depends_on_unknown_numbers.
 - comparison (4-7 sentences, only if there are two paths, else ""): a personal comparison for this person, using their goals. Cover the four measures UBS uses for every scenario: liquidity (lowest cash, chance of running out), net worth, goal feasibility (each goal; high priority first), constraint breaches (cash below zero, a down payment they cannot pay). Then say which path fits their goals better IN THIS SIMULATION: exactly comparison.fits_goals_better (never pick a different one), and why, from fits_goals_better_reasons. Say in a few words how that was judged (how_fit_is_judged). If more_net_worth is a different path, say plainly that more money is not automatically the better fit. Mention confidence_of_the_net_worth_gap as given. If break_even is given, explain it in one sentence. Optionally add one sentence on todays_money (worth in today's money, NPV at discount_rate_pct): who ends ahead and from which age; it is an extra measure, never the reason for the better fit.
 - caveat: one sentence, the biggest assumption or unknown.
 STRICT RULES
 - Use ONLY numbers that appear in FACTS. Do not calculate new numbers (no sums, no differences that are not given).
+- Talk only about what IS there: never point out what a path does NOT have or do (never "there is no home purchase", "no loans", "no unknowns", "nothing depends on unknown numbers", "no goals are at risk"). If something is not in the FACTS, say nothing about it. The only exception: a path with no decisions, where you say nothing changes.
 - Say "in this simulation" or "under these assumptions" at least once. Never promise outcomes. Never write "you should", "we recommend", "guaranteed" or "best choice": you describe what the numbers show; the person decides.
 - If economy is not today's economy, mention once that both paths assume it.
 - Refer to paths by their names, not by letters.
@@ -70,6 +71,7 @@ STRICT RULES
 - Start with a direct answer to the QUESTION as asked (e.g. "Which is better?" -> name the path that ends higher; "Can I afford X?" -> say whether cash stays above zero and goals are reached).
 - Use ONLY numbers that appear in the FACTS. Do not calculate new numbers. "k" style is fine (254300 -> CHF 254k).
 - Only make claims that follow directly from the FACTS (e.g. do not say ranges "overlap" unless you compare the given range numbers correctly).
+- Talk only about what IS there: never point out what a path does NOT have or do (never "there is no home purchase", "no loans", "no unknowns", "nothing depends on unknown numbers", "no goals are at risk"). If something is not in the FACTS, say nothing about it.
 - Say "in this simulation" or "under these assumptions". Never promise outcomes. Never say "you should" or give advice: describe what the numbers show.
 - Answer in the same language as the QUESTION.
 - confidence_level: copy the given "confidence" value exactly (high / medium / low). Do not change it. In confidence_sentence, state it and explain it with the main reason from confidence_reasons.
@@ -159,7 +161,7 @@ function chatSystemPrompt(ctx: ChatContext) {
 You see the conversation so far, ${ctx.name}'s current STATE and the PATHS (possible futures) already on screen, with their results.
 
 WHAT YOU CAN DO IN ONE TURN (combine as needed):
-1. reply: always. Talk like a helpful, natural person. Speak in ages and years, never in "month 120" style numbers. Answer questions directly ("what's my rent?", "explain my situation", "which path is best?") using the numbers in STATE / PATHS. Short: 1-4 sentences. No canned slogans; do not repeat the same suggestions you already gave in HISTORY. If the user asks for something specific ("just say hi"), do exactly that.
+1. reply: always. Talk like a helpful, natural person. Speak in ages and years, never in "month 120" style numbers. Answer questions directly ("what's my rent?", "explain my situation", "which path is best?") using the numbers in STATE / PATHS. Short: 1-4 sentences. No canned slogans; do not repeat the same suggestions you already gave in HISTORY. If the user asks for something specific ("just say hi"), do exactly that. Talk about what a path DOES (its decisions, results, risks); never list what it does not contain ("there's no home purchase on this path").
 2. profile_update: facts about TODAY the user states or corrects ("I now earn 1,500", "my rent is 2,000", "I have 10k saved"). Rent/income/savings "until X happens" are still facts about today (a later home purchase or job already changes them).
    - Things they ALREADY OWN today ("I have a house worth 200k", "assume I own a flat", "it was gifted / inherited") -> profile_update.home_value_chf. This is NOT a buy_home event (buying converts cash into a home; owning adds to net worth from day one). If they say they live in it rent-free, also set monthly_rent_chf = 0.
    - A safety minimum ("I never want my savings below 20k", "keep at least 10k") -> profile_update.min_cash_chf. Every path is then checked against it.
@@ -222,6 +224,7 @@ const EXPLAIN_SYSTEM = `You explain financial simulation results to a non-expert
 STRICT RULES
 - Use ONLY numbers that appear in the FACTS JSON. Do not calculate new numbers, do not round differently than "k" style (e.g. 254300 -> CHF 254k is fine).
 - Explain WHAT the chart shows (compare the paths to the baseline) and WHY (use "drivers" and the assumptions).
+- Talk only about what IS there: never point out what a path does NOT have or do (never "there is no home purchase", "no loans", "no unknowns", "nothing depends on unknown numbers", "no goals are at risk"). If something is not in the FACTS, say nothing about it.
 - Say "in this simulation" / "under these assumptions". Never promise outcomes. Never give advice like "you should".
 - Mention the risk of running out of cash if it is above 0%.
 - If a break-even value is given, explain it in one sentence.

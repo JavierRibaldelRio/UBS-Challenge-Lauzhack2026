@@ -189,8 +189,8 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 109 validation tests (R model parity, economy forecast, backtest, NPV valuation, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
-cd frontend && pnpm test:live                # 67 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
+cd frontend && pnpm test                     # 110 validation tests (R model parity, economy forecast, backtest, NPV valuation, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
+cd frontend && pnpm test:live                # 69 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts, texts only describe what IS on a path, NPV discount rate only when asked) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 Rscript R/eda.R && Rscript R/macro.R         # re-estimate the spending model and the economy forecast -> R/output/*.csv
 cd frontend && pnpm model:import             # R/output/*.csv -> src/model/spending.json, macro.json (then pnpm backtest)
@@ -300,7 +300,7 @@ mise.toml          pinned toolchain
 
 ### 2.5 Who works on what next
 
-- **Models (Sebastián, Joshua)** — `R/`: calibrate investment return/volatility from public index data (see `pre_docs/resources_2/data/financial-markets-data.md`) next to `macro.R`; widen the inflation ranges; try a better spending model and keep it only if `pnpm backtest` gets better; add a backtest plot.
+- **Models (Sebastián, Joshua)** — `R/`: calibrate investment return/volatility from public index data (see `pre_docs/resources/data/financial-markets-data.md`) next to `macro.R`; widen the inflation ranges; try a better spending model and keep it only if `pnpm backtest` gets better; add a backtest plot.
 - **Backend (Javier)** — `backend/`: test Together models for JSON reliability (`LLM_JSON_MODE`), tune prompts in `server.ts`, add a few-shot example per event type.
 - **Frontend (Cagan)** — polish the demo flow, add more presets from the 120-scenario catalog. (The UI is PC-first on purpose.)
 - **Everyone** — rehearse the 3-minute demo below with the real API key (answers get cached).
@@ -311,7 +311,7 @@ mise.toml          pinned toolchain
 
 1. *(20 s)* Open the page. The big sentence says it: *"If nothing changes, Alexia's cash runs out at age 20."* The black dots on the chart are her **real** bank balance from the data; the band is what someone in her situation would have. In year 2 her dots are above it: she spent less than students like her, and in the data such differences don't carry over from one year to the next (across all 1,200 people the real balance is inside the band 78% of the time).
 2. *(40 s)* Click **▶ Demo**: the scenario tree shows *Today* branching into *Start working* (**A**, green), *Master's* (**B**, blue) and *Move abroad*. Read the two tiles ("So far / Ahead", written for Alexia from the computed numbers, every number checked) and the A vs B comparison: *fits your goals better* (computed: cash first, then goals, then money), labelled **Not financial advice**.
-3. *(40 s)* Click the *Master's* card → **The numbers behind it**: tuition **from data** (her row in scenario-assumptions.csv), salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 23% higher". Set the premium to 30% → everything recomputes instantly.
+3. *(40 s)* Click the *Master's* card → **📋 Assumptions**: tuition **from data** (her row in scenario-assumptions.csv), salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 23% higher". Set the premium to 30% → everything recomputes instantly.
 4. *(40 s)* Click the chat idea *"Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28"* → one new node with 3 events (a branch of *Start working*), compared as **B**, plus a direct answer in the chat with a **confidence level computed by the simulator**. Optional: **⑂ Branch off** a tile to add a later decision.
 5. *(40 s)* Open **How the model & simulations work**: maths checks 5/5; estimated on 2025 and tested on 2026, the "8 in 10" range caught 78.2% of real results. "Don't predict the future, make it explorable."
 

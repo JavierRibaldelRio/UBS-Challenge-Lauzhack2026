@@ -565,3 +565,31 @@ describe('does it take effect? (engine-checked notices after every chat turn)', 
     expect(Math.min(...o2.cash)).toBeLessThan(0) // and it is the smallest such income (within 2%)
   })
 })
+
+import { buildFacts, templateExplanation } from '../lib/analysis'
+describe('AI facts describe only what IS there', () => {
+  const ps = presets(alexia, params)
+  const sideOf = (id: string) => {
+    const p = ps.find((x) => x.id === id)!
+    const plan = resolve(alexia, params, p.spec, {}, 120, rate)
+    return { id, name: p.spec.name, spec: p.spec, plan, result: simulate(plan, params, alexia), parentName: null, madeBy: 'x', unknownFromAge: null }
+  }
+  it('no empty purchase / unknown / warning lists are sent, and the offline texts never say "undefined"', () => {
+    const [work, master] = [sideOf('work'), sideOf('master')]
+    const cf = compareFacts({ profile: alexia, H: 120, first: work, second: master, verdict: null, fit: goalFit(work, master, alexia), breakEven: null, economy: null, told: [] })
+    const js = JSON.stringify(cf)
+    expect(js).not.toMatch(/"(home_or_asset_purchases|depends_on_unknown_numbers|warnings)":\[\]/)
+    expect(js).not.toMatch(/"(investments_chf|debts_chf)":0\b/) // Alexia has none: not "no investments, no debts"
+    expect(cf.paths[1].depends_on_unknown_numbers?.length).toBeGreaterThan(0) // what IS there is still sent
+    const t = templateCompare(cf)
+    expect(JSON.stringify(t)).not.toMatch(/undefined|NaN/)
+    // the explain facts (baseline = work, focus = master): work has no unknowns
+    const br = [work, master].map((s, i) => ({ id: s.id, name: s.name, plan: s.plan, result: s.result, isBaseline: i === 0 }))
+    const ef = buildFacts(alexia, params, br, drivers(master.plan, params), breakEven(master.plan, work.plan, params), 'master')
+    expect(JSON.stringify(ef)).not.toMatch(/"(home_purchases|unknown_inputs|warnings)":\[\]/)
+    const te = templateExplanation(ef)
+    expect(JSON.stringify(te)).not.toMatch(/undefined|NaN/)
+    const onlyWork = buildFacts(alexia, params, [br[0], { ...br[0], id: 'w2', isBaseline: false }], [], null, 'w2')
+    expect(templateExplanation(onlyWork).caveat).not.toMatch(/undefined|Unknown inputs/) // no unknowns -> no "unknown inputs: ." (flatMap over a missing list)
+  })
+})
