@@ -54,7 +54,7 @@ export type ProfileUpdate = {
   min_cash_chf?: number | null
   summary: string
 }
-export type ParseResult = { profile_update?: ProfileUpdate | null; scenarios: ScenarioSpec[]; horizon_years: number | null; unsupported: string[]; note: string | null }
+export type ParseResult = { profile_update?: ProfileUpdate | null; scenarios: ScenarioSpec[]; horizon_years: number | null; discount_rate_pct?: number | null; unsupported: string[]; note: string | null }
 export type TurnResult = {
   reply: string
   profile_update: ProfileUpdate | null
@@ -67,6 +67,8 @@ export type TurnResult = {
   remove_goals: string[]
   macro_update: import('./macro').MacroUpdate | null
   horizon_years: number | null
+  /** discount rate for today's-money values (NPV), shared by every path; null = keep the current one (default 3%) */
+  discount_rate_pct?: number | null
   unsupported: string[]
 }
 export type EditResult = { path: ScenarioSpec; changes: string[]; unsupported: string[]; note: string | null }

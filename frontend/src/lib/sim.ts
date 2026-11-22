@@ -10,6 +10,7 @@
 //   debt[t+1] = debt[t] + interest - loan_payment      (never below 0)
 //   home      = value of a bought home (bought with own money + a mortgage paid to the seller)
 //   net_worth = cash + invest + home - debt
+//   NPV_t     = startCash + Σ DF·(change of cash) + DF[t]·(net_worth − cash)   worth in today's money (valuation.ts; never feeds back)
 // All branches use the SAME random numbers (common random numbers), so differences between
 // branches come from the decision, not from luck.
 import { invNorm, mulberry32, normal, pickUniform, quantile } from './rng'
@@ -41,6 +42,10 @@ export type SimResult = {
   meanPath: { cash: number[]; nw: number[] }
   /** end net worth of every simulated future (same seed for every path -> futures can be compared one by one) */
   endNWPaths: Float64Array
+  /** worth in today's money (NPV at plan.discountRate) for every horizon month, and at the end (rolling-horizon valuation) */
+  npv: Band[]
+  endNPV: Band
+  endNPVPaths: Float64Array
   /** lowest cash of every simulated future (to test any liquidity floor, e.g. "never below 20k") */
   minCashPaths: Float64Array
   /** planned investing that could not happen because the money was not there: share of futures, typical amount */
@@ -224,6 +229,8 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
   const nwAll = Array.from({ length: H }, () => new Float64Array(paths))
   const samples: SimResult['samples'] = []
   const cashAll = Array.from({ length: H }, () => new Float64Array(paths))
+  const npvAll = Array.from({ length: H }, () => new Float64Array(paths))
+  const df = plan.df
   const endNW = new Float64Array(paths)
   const endCash = new Float64Array(paths)
   const minCash = new Float64Array(paths)
@@ -240,9 +247,14 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
     if (p < 6) samples.push({ nw: o.nw, cash: o.cash })
     let mn = Infinity
     let fn = -1
+    let disc = 0 // Σ DF·(change of cash): see valuation.ts
+    let prev = plan.startCash
     for (let t = 0; t < H; t++) {
       nwAll[t][p] = o.nw[t]
       cashAll[t][p] = o.cash[t]
+      disc += df[t] * (o.cash[t] - prev)
+      prev = o.cash[t]
+      npvAll[t][p] = plan.startCash + disc + df[t] * (o.nw[t] - o.cash[t])
       if (o.cash[t] < mn) mn = o.cash[t]
       if (fn < 0 && o.cash[t] < 0) fn = t
     }
@@ -286,6 +298,9 @@ export function simulate(plan: Plan, params: Params, profile: Profile, paths = 5
     nw: nwAll.map(band),
     cash: cashAll.map(band),
     endNW: band(endNW),
+    npv: npvAll.map(band),
+    endNPV: band(npvAll[H - 1]),
+    endNPVPaths: npvAll[H - 1],
     endCash: band(endCash),
     minCash: band(minCash),
     probNegCash: neg / paths,

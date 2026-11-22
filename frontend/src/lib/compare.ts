@@ -9,6 +9,7 @@ import type { Plan } from './resolve'
 import type { SimResult } from './sim'
 import { describeSpec } from './resolve'
 import type { Profile } from './types'
+import { catchUp } from './valuation'
 
 export type Side = { id: string; name: string; spec: import('./types').ScenarioSpec; plan: Plan; result: SimResult; parentName: string | null; madeBy: string; unknownFromAge: number | null }
 
@@ -81,6 +82,8 @@ function describe(s: Side, profile: Profile, H: number) {
     over_time_median: snapAt.map((y) => ({ age: profile.age + y, net_worth: kfmt(r.nw[y * 12 - 1].p50), cash: kfmt(r.cash[y * 12 - 1].p50) })),
     net_worth_at_end_median_chf: r100(r.endNW.p50),
     net_worth_at_end_range_8_in_10_chf: [r100(r.endNW.p10), r100(r.endNW.p90)],
+    worth_in_todays_money_at_end_median_chf: r100(r.endNPV.p50),
+    worth_in_todays_money_over_time_median: snapAt.map((y) => ({ age: profile.age + y, npv: kfmt(r.npv[y * 12 - 1].p50) })),
     cash_at_end_median_chf: r100(r.endCash.p50),
     lowest_cash_median_chf: r100(r.minCash.p50),
     chance_cash_goes_below_zero_pct: pct(r.probNegCash),
@@ -122,6 +125,17 @@ export function compareFacts(o: { profile: Profile; H: number; first: Side; seco
     horizon: { years: H / 12, age_at_end: p.age + H / 12 },
     units: 'CHF, constant 2025 francs, income after tax',
     economy: o.economy,
+    todays_money: {
+      discount_rate_pct: Math.round(first.plan.discountRate * 10000) / 100,
+      rate_source: first.plan.assumptions.find((a) => a.key === 'v.disc')?.source === 'you' ? 'set by the user' : 'default assumption, the same for every path',
+      meaning: "worth in today's money (NPV): every franc in or out discounted to today when it happens + what is owned minus debts at that age, discounted. Shown as an extra measure only; 'fits goals better' uses net worth",
+      ...(second
+        ? (() => {
+            const cu = catchUp(first.result.npv, second.result.npv, p.age)
+            return { ends_ahead: cu.ahead === 'tie' ? 'both about level' : cu.ahead === 'a' ? first.name : second.name, ahead_from_age: cu.ahead === 'tie' ? null : (cu.fromAge ?? 'ahead at every year') }
+          })()
+        : {}),
+    },
     paths: [describe(first, p, H), ...(second ? [describe(second, p, H)] : [])],
     comparison: second && v && fit
       ? {
@@ -146,6 +160,15 @@ export type CompareResult = { first: Story; second: Story | null; comparison: st
 
 const k = (x: number) => (Math.abs(x) >= 1e6 ? `CHF ${(x / 1e6).toFixed(2)}M` : `CHF ${Math.round(x / 1000)}k`)
 
+/** one sentence on the rolling-horizon valuation (today's money), from the facts only */
+function todaysMoney(f: CompareFacts): string {
+  const t = f.todays_money
+  if (!('ends_ahead' in t)) return ''
+  const rate = `NPV at ${t.discount_rate_pct}% a year`
+  if (t.ends_ahead === 'both about level') return ` In today's money (${rate}) both end about level.`
+  return t.ahead_from_age === 'ahead at every year' ? ` In today's money (${rate}) “${t.ends_ahead}” is ahead at every year.` : ` In today's money (${rate}) “${t.ends_ahead}” is ahead from age ${t.ahead_from_age}.`
+}
+
 /** Offline text (no AI): same facts, plain sentences. Also shown instantly while the AI writes. */
 export function templateCompare(f: CompareFacts): CompareResult {
   const story = (x: CompareFacts['paths'][number]): Story => {
@@ -157,7 +180,8 @@ export function templateCompare(f: CompareFacts): CompareResult {
     const end = { age: x.over_time_median.at(-1)!.age, net_worth_chf: x.net_worth_at_end_median_chf }
     const runs = x.age_cash_goes_below_zero != null ? ` Cash runs out at about ${x.age_cash_goes_below_zero} (in ${x.chance_cash_goes_below_zero_pct}% of futures).` : x.chance_cash_goes_below_zero_pct > 0 ? ` Cash goes below zero in ${x.chance_cash_goes_below_zero_pct}% of futures.` : ' Cash stays above zero.'
     const goals = x.goals.length ? ` Goals: ${x.goals.map((g) => `${g.goal} ${g.chance_pct}%`).join(', ')}.` : ''
-    return { so_far: start + change, ahead: `In this simulation you reach about ${k(end.net_worth_chf)} of net worth at ${end.age}, with ${k(x.cash_at_end_median_chf)} in cash.${runs}${goals}` }
+    const npv = ` In today's money (NPV at ${f.todays_money.discount_rate_pct}% a year) that is about ${k(x.worth_in_todays_money_at_end_median_chf)}.`
+    return { so_far: start + change, ahead: `In this simulation you reach about ${k(end.net_worth_chf)} of net worth at ${end.age}, with ${k(x.cash_at_end_median_chf)} in cash.${npv}${runs}${goals}` }
   }
   const [a, b] = f.paths
   const c = f.comparison
@@ -165,7 +189,7 @@ export function templateCompare(f: CompareFacts): CompareResult {
     first: story(a),
     second: b ? story(b) : null,
     comparison: b && c
-      ? `“${c.more_net_worth}” ends with about ${k(c.net_worth_gap_at_end_median_chf)} more net worth (${c.confidence_of_the_net_worth_gap} confidence). Judged on cash safety first, then your goals, then net worth, the better fit in this simulation is: ${c.fits_goals_better}. ${c.fits_goals_better_reasons[0] ?? ''}`
+      ? `“${c.more_net_worth}” ends with about ${k(c.net_worth_gap_at_end_median_chf)} more net worth (${c.confidence_of_the_net_worth_gap} confidence). Judged on cash safety first, then your goals, then net worth, the better fit in this simulation is: ${c.fits_goals_better}. ${c.fits_goals_better_reasons[0] ?? ''}${todaysMoney(f)}`
       : '',
     caveat: [a, b].flatMap((x) => x?.depends_on_unknown_numbers ?? []).length ? `Some numbers are unknown and set to “no change”: ${[...new Set([a, b].flatMap((x) => x?.depends_on_unknown_numbers ?? []))].slice(0, 3).join('; ')}.` : 'Fictional data; results depend on the assumptions shown and are not a forecast.',
   }

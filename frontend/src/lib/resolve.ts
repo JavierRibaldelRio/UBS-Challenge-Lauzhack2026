@@ -8,6 +8,7 @@
 //   macro      = the economy (shared by every path)
 import { chf } from './fmt'
 import { BASE_MACRO, type Macro } from './macro'
+import { DEFAULT_DISCOUNT_PCT, discountFactors } from './valuation'
 import type { Assumption, Household, MacroModel, Params, Profile, ScenarioSpec, Source, Status, TwinEvent } from './types'
 
 /** The "Forecast (Swiss data)" economy: inflation and unemployment drawn per simulated future (R/macro.R). */
@@ -51,6 +52,9 @@ export type Plan = {
   muSe: number // uncertainty (SD) of the personal spending offset u (parameter uncertainty)
   invReturn: number // expected real annual return
   invVol: number // annual volatility
+  /** real discount rate for today's-money values (NPV), the same for every path; df[t] = (1+d)^(−(t+1)/12) */
+  discountRate: number
+  df: Float64Array
   /** month from which the decision changes income (used for break-even) */
   changeMonth: number | null
   assumptions: Assumption[]
@@ -96,6 +100,7 @@ export function resolve(
   horizonMonths: number,
   loanRateMedian: number,
   macro: Macro = BASE_MACRO, // the economy (shared by all paths); everything else here is the person's own (idiosyncratic)
+  discountPct: number | null = null, // discount rate for NPV, shared by all paths; null = the default (DEFAULT_DISCOUNT_PCT)
 ): Plan {
   const shift = macro.rate_shift_pct / 100 // macro: added to default / existing loan and mortgage rates
   const H = horizonMonths
@@ -139,7 +144,22 @@ export function resolve(
   const otherBase = A('g.other', 'Usual spending, excl. rent', profile.calib.other_mu, 'CHF/mo', 'learned', `in a regular month (not Feb / Aug / Dec): typical for a ${profile.status.replace('_', '-')} person in ${profile.city} + your own offset (${chf0(profile.calib.u)}); R model on 1,200 people × ${profile.calib.months} months`)
   const sdBase = A('g.sd', 'Spending ups & downs (1 std-dev)', profile.calib.other_sd, 'CHF/mo', 'learned', `in a regular month: your own spread over ${profile.calib.months} months, pulled toward people like you (R model); larger in Feb / Aug / Dec`)
   const invReturn = A('m.ret', 'Economy: investment return (per year, 2025 francs)', macro.market_return_pct, '%', macro.id === 'base' ? 'assumption' : 'macro', macro.id === 'base' ? 'Not in the data (assets are a single snapshot). 4% = UBS’s illustrative rate (financial-concepts.md §6: 10,000 at 4% for 5 years ≈ 12,167). A modelling assumption, not a forecast; shared by every path. Edit it or pick an economy.' : `set by the economy “${macro.name}”; shared by every path`) / 100
-  const invVol = A('m.vol', 'Economy: market ups & downs (per year)', macro.market_vol_pct, '%', macro.market_vol_pct ? 'macro' : 'assumption', macro.market_vol_pct ? `set by the economy “${macro.name}”` : 'Not in the data. 0% = no market noise.') / 100
+  // valuation only (never changes the simulation): one rate for every path; set globally, so per-path overrides are ignored
+  const discPct = discountPct ?? DEFAULT_DISCOUNT_PCT
+  assumptions.push({
+    key: 'v.disc',
+    label: 'Discount rate for today’s-money values (NPV, per year)',
+    value: discPct,
+    unit: '%',
+    source: discountPct == null ? 'assumption' : 'you',
+    note:
+      discountPct == null
+        ? `Not in the data. Default ${DEFAULT_DISCOUNT_PCT}% a year (real, 2025 francs) for every path, person and economy. Used only to value paths in today’s money (NPV); it never changes the simulation. Edit it or say “use a 5% discount rate”.`
+        : 'you set it; shared by every path. Used only to value paths in today’s money (NPV).',
+    month: 0,
+  })
+  const discountRate = discPct / 100
+  const invVol = A('m.vol','Economy: market ups & downs (per year)', macro.market_vol_pct, '%', macro.market_vol_pct ? 'macro' : 'assumption', macro.market_vol_pct ? `set by the economy “${macro.name}”` : 'Not in the data. 0% = no market noise.') / 100
   profile.loans.forEach((l, i) => {
     const rateNow = l.annual_rate + shift
     const interest = (l.principal * rateNow) / 12
@@ -479,6 +499,7 @@ export function resolve(
     purchases,
     months: H, income, rent, otherMu, otherSd, extra, oneOff, contrib, homeDown, homeValue, status, household, city, shocks, loans,
     startCash, startInvest, startHome, muSe: profile.calib.u_sd, invReturn, invVol, changeMonth, assumptions, warnings,
+    discountRate, df: discountFactors(discountRate, H),
   }
 }
 

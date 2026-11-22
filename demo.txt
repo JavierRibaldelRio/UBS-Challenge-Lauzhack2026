@@ -306,6 +306,15 @@ Q: What if the AI is down?
 A: The app still works: keyword rules for questions, a template for the
    explanation, and cached answers. The buttons never need the AI.
 
+Q: Money in 10 years is not worth money today. Do you discount?
+A: Yes, as an extra view: "Worth in today's money" (rolling-horizon NPV).
+   Every franc in or out is discounted to today when it happens, plus what
+   you own minus debts at that age; the third year-by-year chart shows it for
+   every horizon, and the comparison says who is ahead from which age. One
+   discount rate for every path: 3% a year by default (a labelled assumption);
+   change it under Assumptions or say "use a 5% discount rate". It only values
+   paths: the comparison and the confidence still use net worth.
+
 Q: Why does "start working" end so rich (710k)?
 A: That comes from UBS's synthetic data: employed people earn about 8,000
    net a month at every age, and spending barely rises with income. We label

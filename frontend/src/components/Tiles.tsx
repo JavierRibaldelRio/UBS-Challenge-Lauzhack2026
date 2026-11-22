@@ -2,6 +2,7 @@ import type { Verdict } from '../lib/answer'
 import { belowFloor, breach, FIT_RULE, type Fit, type Story } from '../lib/compare'
 import { chfk } from '../lib/fmt'
 import type { SimResult } from '../lib/sim'
+import { catchUp } from '../lib/valuation'
 
 export type TileData = {
   key: 'a' | 'b'
@@ -16,7 +17,11 @@ export type TileData = {
   removable: boolean
   /** how many numbers of this path were filled in for the person (not said by them) */
   assumed: number
+  /** discount rate of the today's-money values (NPV), shared by every path; mine = set by the user (else the default) */
+  discount: { pct: number; mine: boolean }
 }
+
+const discLabel = (d: TileData['discount']) => `NPV at ${Math.round(d.pct * 100) / 100}% a year, ${d.mine ? 'your rate' : 'default assumption'}`
 
 type TextStatus = 'loading' | 'ai' | 'offline'
 
@@ -58,6 +63,9 @@ export function NodeTile(p: { t: TileData; age: number; endAge: number; floor?: 
           <span className="stat-label">cash in the bank at {p.endAge}</span>
         </div>
       </div>
+      <p className="muted small tile-npv" title={`Worth in today’s money: every franc in or out discounted to today when it happens, plus what you own minus debts at ${p.endAge}, discounted (${discLabel(t.discount)}). Only a way to value the path.`}>
+        ≈ {chfk(r.endNPV.p50)} in today’s money ({discLabel(t.discount)})
+      </p>
       <div className="outcome-flags">
         {runsOut ? (
           <span className="flag bad">⚠ cash runs out at {Math.floor(p.age + r.firstNegMonth! / 12)}</span>
@@ -157,6 +165,7 @@ export function Comparison(p: {
     { label: 'Cash trouble', hint: `constraint breach: share of futures with cash below zero${p.floor ? `, below your ${chfk(p.floor)} floor` : ''} or a down payment you can’t pay`, av: `${Math.round(breach(a.result, p.floor) * 100)}%`, bv: `${Math.round(breach(b.result, p.floor) * 100)}%`, better: better(breach(a.result, p.floor), breach(b.result, p.floor), false, 0.02) },
     { label: `Cash at ${p.age + a.result.nw.length / 12}`, hint: 'savings in the bank at the end (typical future)', av: chfk(a.result.endCash.p50), bv: chfk(b.result.endCash.p50), better: better(a.result.endCash.p50, b.result.endCash.p50, true, 1000) },
     { label: `Net worth at ${p.age + a.result.nw.length / 12}`, hint: 'everything owned − debts (typical future)', av: chfk(a.result.endNW.p50), bv: chfk(b.result.endNW.p50), better: better(a.result.endNW.p50, b.result.endNW.p50, true, 1000) },
+    { label: 'In today’s money', hint: `worth in today’s money at the end (${discLabel(a.discount)}): every franc in or out discounted to today when it happens + what is owned − debts at the end, discounted. Shown only; “fits better” uses net worth`, av: chfk(a.result.endNPV.p50), bv: chfk(b.result.endNPV.p50), better: better(a.result.endNPV.p50, b.result.endNPV.p50, true, 1000) },
     ...goalRows.map((g) => {
       const gb = b.result.goals.find((x) => x.name === g.name)
       return { label: `🎯 ${g.name}`, hint: `goal: ${chfk(g.target)} by ${g.date.slice(0, 4)}, share of futures that reach it`, av: `${Math.round(g.prob! * 100)}%`, bv: gb?.prob == null ? '—' : `${Math.round(gb.prob * 100)}%`, better: gb?.prob == null ? null : better(g.prob!, gb.prob, true, 0.02) }
@@ -251,6 +260,29 @@ export function Comparison(p: {
               </div>
             )}
           </details>
+          {(() => {
+            const cu = catchUp(a.result.npv, b.result.npv, p.age)
+            const [win, lose] = cu.ahead === 'a' ? [a.name, b.name] : [b.name, a.name]
+            return (
+              <div className="insight small" title="Rolling horizon: the two paths valued in today’s money at the end of every year (median NPV).">
+                <span className="insight-icon">⏳</span>
+                <div>
+                  In today’s money ({discLabel(a.discount)}):{' '}
+                  {cu.ahead === 'tie' ? (
+                    <>both end about level.</>
+                  ) : cu.fromAge == null ? (
+                    <>
+                      <b>{win}</b> is ahead at every year.
+                    </>
+                  ) : (
+                    <>
+                      <b>{win}</b> overtakes <b>{lose}</b> at {cu.fromAge} and stays ahead.
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
           {p.breakEven && (
             <div className="insight small">
               <span className="insight-icon">⚖</span>

@@ -60,10 +60,15 @@ export function offlineParse(text: string, profile: Profile, cities: string[]): 
       : null
   if (profile_update && scenarios.length === 1 && scenarios[0].events.every((e) => e.type === 'start_job')) scenarios.length = 0 // "I now earn…" is a fact, not a new job
 
+  // "use a 5% discount rate" / "discount at 2%": the rate for today's-money values (NPV), shared by every path
+  const disc = t.match(/discount(?:ing)?(?: rate)?(?: of| at| to| =|:)? (\d+(?:\.\d+)?) ?%|(\d+(?:\.\d+)?) ?% discount/)
+  const discount_rate_pct = disc ? Number(disc[1] ?? disc[2]) : null
+
   return {
     profile_update,
     scenarios: scenarios.slice(0, 3),
     horizon_years: null,
+    discount_rate_pct,
     unsupported: [],
     note: scenarios.length || profile_update ? 'Offline mode: understood with simple keyword rules.' : 'Offline mode could not understand this. Try the quick buttons or words like "master", "work", "move to Zurich", "abroad", "child", "lose my job".',
   }

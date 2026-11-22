@@ -113,6 +113,7 @@ export const TurnSchema = z.object({
   remove_goals: z.array(z.string()).describe('names of goals to delete (exact names from STATE.goals). Empty otherwise.'),
   macro_update: MacroUpdateSchema.nullable().describe('ECONOMY-WIDE conditions (inflation, interest rates, recession, market crash, house prices). Applies to EVERY path. null if not mentioned.'),
   horizon_years: int.describe('Only if the user asks for a specific horizon, or needs one to see their ages (e.g. "until 40")'),
+  discount_rate_pct: z.number().nullable().describe('Only if the user gives a discount rate for values in today\'s money / NPV ("use a 5% discount rate"). Applies to every path. null otherwise (the app keeps its default of 3%).'),
   unsupported: z.array(z.string()).describe('Things the user wants that this model cannot represent (not: values you filled in)'),
 })
 

@@ -1,6 +1,7 @@
 import { chf, pct } from '../lib/fmt'
 import type { Check } from '../lib/sim'
 import type { Params } from '../lib/types'
+import { DEFAULT_DISCOUNT_PCT } from '../lib/valuation'
 import { SOURCE, SourceChip } from './Details'
 
 export function TrustSummary({ checks, params, verify }: { checks: Check[]; params: Params; verify?: { total: number; unmatched: string[] } }) {
@@ -187,6 +188,9 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
           <li>The data has no education, abroad or age-salary information. Those numbers are marked <SourceChip s="missing" /> and we show a break-even instead of guessing.</li>
           <li>Values are in 2025 francs (constant purchasing power). Income is after tax. Investments grow 4% a year by default (UBS’s illustrative rate, not learned: the data has no returns); change it in “The economy”.</li>
           <li>The shaded range shows normal ups and downs, not doubts about the assumptions. That’s what “what matters most” is for.</li>
+          <li>
+            “Worth in today’s money” (NPV) discounts every franc in or out to today when it happens, plus what you own minus debts at that age. One discount rate for every path: {DEFAULT_DISCOUNT_PCT}% a year by default (an assumption, not learned), change it under “Assumptions” or say “use a 5% discount rate”. It only values paths; comparisons and confidence use net worth.
+          </li>
         </ul>
         <div className="legend">
           {(Object.keys(SOURCE) as (keyof typeof SOURCE)[]).map((s) => (

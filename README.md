@@ -189,7 +189,7 @@ Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && 
 ### 1.5 Other commands
 
 ```bash
-cd frontend && pnpm test                     # 95 validation tests (R model parity, economy forecast, backtest, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
+cd frontend && pnpm test                     # 109 validation tests (R model parity, economy forecast, backtest, NPV valuation, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
 cd frontend && pnpm test:live                # 67 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts) (backend must be running with a key)
 cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
 Rscript R/eda.R && Rscript R/macro.R         # re-estimate the spending model and the economy forecast -> R/output/*.csv
@@ -238,6 +238,7 @@ so a model trained to predict "what if" would only repeat averages. Instead:
 | Inflation and unemployment (economy "Forecast (Swiss data)") | **Estimated**: VAR(1) on Swiss data 1991–2025 (World Bank); job loss for employees via the national rate + Swiss benefit rules (labelled assumptions) | the UBS data has no macro variation | estimated in [`R/macro.R`](R/macro.R) |
 | Defaults (salary, rent by city, tuition) | **Data medians** (e.g. "median of 69 employed people aged 20-24") | nothing made up | resolver, [`resolve.ts`](frontend/src/lib/resolve.ts) |
 | Things not in the data (degree premium, abroad salary, investment return) | **UNKNOWN / ASSUMPTION**, editable | honest | shown as red/orange tags |
+| Worth in today's money (rolling-horizon NPV, every year up to the horizon) | **Formula** on each simulated future: cash flows discounted when they happen + net worth excl. cash at that age, discounted. **One default discount rate, 3%/yr real (ASSUMPTION)** for every path; the user can set another (Assumptions row or "use a 5% discount rate") | values paths in today's francs; comparisons stay on net worth | [`valuation.ts`](frontend/src/lib/valuation.ts), computed in [`sim.ts`](frontend/src/lib/sim.ts) |
 
 **Monte Carlo** = run the same choice 500 times with different random months (and, in the forecast economy, different economies) → the shaded band (80% of paths),
 "cash below zero in X% of paths", "goal reached in X% of paths". All choices use the **same** random numbers, so differences come from the

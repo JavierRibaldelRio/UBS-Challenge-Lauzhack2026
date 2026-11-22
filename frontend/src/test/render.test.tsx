@@ -9,5 +9,8 @@ it('the app renders, incl. the economy forecast and what the R model learned', (
   expect(html).toContain('Forecast (Swiss data)')
   expect(html).toContain('What the model learned')
   expect(html).toContain('The economy forecast')
+  expect(html).toContain('Worth in today’s money')
+  expect(html).toContain('NPV at 3% a year, default assumption') // the tile, with the single default rate
+  expect(html).toContain('Discount rate for today’s-money values (NPV, per year)') // the editable assumption row
   expect(html).not.toContain('NaN')
 })

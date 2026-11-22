@@ -22,9 +22,10 @@ export function SourceChip({ s }: { s: Source }) {
 
 /** The numbers behind one path. Every one is editable; edits recompute instantly. */
 export function AssumptionList({ items, overrides, onChange }: { items: Assumption[]; overrides: Record<string, number>; onChange: (key: string, v: number | null) => void }) {
-  const own = items.filter((a) => !a.key.startsWith('g.') && !a.key.startsWith('m.'))
+  const own = items.filter((a) => !a.key.startsWith('g.') && !a.key.startsWith('m.') && !a.key.startsWith('v.'))
   const prof = items.filter((a) => a.key.startsWith('g.'))
   const eco = items.filter((a) => a.key.startsWith('m.'))
+  const val = items.filter((a) => a.key.startsWith('v.')) // valuation (NPV discount rate): shared by every path
   const [showProfile, setShowProfile] = useState(false)
   return (
     <div className="alist">
@@ -42,6 +43,14 @@ export function AssumptionList({ items, overrides, onChange }: { items: Assumpti
           <div className="alist-sub">🌍 The economy (same for every path)</div>
           {eco.map((a) => (
             <Row key={a.key} a={a} overridden={false} onChange={(v) => onChange(a.key, v)} />
+          ))}
+        </>
+      )}
+      {val.length > 0 && (
+        <>
+          <div className="alist-sub">⏳ Today’s money (same for every path; values paths, never changes them)</div>
+          {val.map((a) => (
+            <Row key={a.key} a={a} overridden={a.source === 'you'} onChange={(v) => onChange(a.key, v)} />
           ))}
         </>
       )}

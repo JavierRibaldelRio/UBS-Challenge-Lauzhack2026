@@ -18,6 +18,7 @@ import { applyMacroUpdate, BASE_MACRO, describeMacro, MACRO_PRESETS, type Macro 
 import { downloadJson, scenarioReport } from './lib/report'
 import { cities, describeSpec, medianLoanRate, presets, resolve, type Overrides, type Plan, type Preset } from './lib/resolve'
 import { checks, simulate, type SimResult } from './lib/sim'
+import { DEFAULT_DISCOUNT_PCT } from './lib/valuation'
 import { branchIdeas, followUpIdeas, suggestQuestions } from './lib/suggest'
 import { addEvents, eventKey, inferParent, shiftBranch, withParentEvents } from './lib/tree'
 import type { Origin, Params, ParseResult, Profile, ProfileUpdate, PromptInfo, ScenarioSpec, TwinEvent } from './lib/types'
@@ -112,6 +113,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   }, [dataProfile, updates, goalEdits])
   const [years, setYears] = useState(10)
   const [macro, setMacro] = useState<Macro>(BASE_MACRO) // the economy: shared by every path
+  const [discountPct, setDiscountPct] = useState<number | null>(null) // NPV discount rate, shared by every path; null = DEFAULT_DISCOUNT_PCT
   const H = years * 12
 
   // ------------------------------------------------------------ the tree and the A/B selection
@@ -157,7 +159,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
   // The tree can grow without limit, so only nodes whose inputs changed are simulated again.
   const simCache = useRef<{ env: unknown[]; map: Map<string, { plan: Plan; result: SimResult }> }>({ env: [], map: new Map() })
   const computed: Computed[] = useMemo(() => {
-    const env = [profile, params, H, loanRate, macro]
+    const env = [profile, params, H, loanRate, macro, discountPct]
     const c = simCache.current
     // anything shared by every path changed (person, economy, horizon) -> start over; also cap the memory
     if (env.some((x, i) => x !== c.env[i]) || c.map.size > 400) {
@@ -168,13 +170,13 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       const key = JSON.stringify([p.spec, p.overrides])
       let hit = c.map.get(key)
       if (!hit) {
-        const plan = resolve(profile, params, p.spec, p.overrides, H, loanRate, macro)
+        const plan = resolve(profile, params, p.spec, p.overrides, H, loanRate, macro, discountPct)
         hit = { plan, result: simulate(plan, params, profile) }
         c.map.set(key, hit)
       }
       return { ...p, name: p.spec.name, ...hit }
     })
-  }, [paths, profile, params, H, loanRate, macro])
+  }, [paths, profile, params, H, loanRate, macro, discountPct])
   const byId = useMemo(() => new Map(computed.map((c) => [c.id, c])), [computed])
   const today = byId.get('today') ?? computed[0]
   const A = sel.a ? byId.get(sel.a) : undefined
@@ -357,11 +359,16 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     goals: profile.goals.map((g) => ({ goal: g.name, target_chf: Math.round(g.target), by: g.date.slice(0, 7), priority: g.priority })),
     told_the_twin: describeMemory(dataProfile, updates),
     economy: { current: macro.name, conditions: describeMacro(macro, profile.age), presets: MACRO_PRESETS.map((p) => `${p.id}: ${p.name}${p.catalog ? ` (${p.catalog})` : ''}`) },
+    todays_money: {
+      discount_rate_pct: discountPct ?? DEFAULT_DISCOUNT_PCT,
+      source: discountPct == null ? `default assumption (${DEFAULT_DISCOUNT_PCT}% for every path unless the user sets one)` : 'set by the user',
+      meaning: "worth in today's money (NPV): every franc in or out discounted to today when it happens + what you own minus debts at the horizon, discounted. Only a way to value paths; it never changes the simulation",
+    },
     if_nothing_changes_income_needed: needFor(today.plan),
     // every path INCLUDING the baseline, ranked by the engine (for "which is best?")
-    all_paths_ranked_by_net_worth_at_end: [...computed].sort((a, b) => b.result.endNW.p50 - a.result.endNW.p50).map((c, i) => ({ rank: i + 1, path: c.id === 'today' ? 'BASELINE (if nothing changes)' : c.name, net_worth_at_end_median_chf: r100(c.result.endNW.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100) })),
+    all_paths_ranked_by_net_worth_at_end: [...computed].sort((a, b) => b.result.endNW.p50 - a.result.endNW.p50).map((c, i) => ({ rank: i + 1, path: c.id === 'today' ? 'BASELINE (if nothing changes)' : c.name, net_worth_at_end_median_chf: r100(c.result.endNW.p50), worth_in_todays_money_at_end_median_chf: r100(c.result.endNPV.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100) })),
     if_nothing_changes: {
-      years_simulated: years, age_at_end: endAge, net_worth_at_end_median_chf: r100(today.result.endNW.p50),
+      years_simulated: years, age_at_end: endAge, net_worth_at_end_median_chf: r100(today.result.endNW.p50), worth_in_todays_money_at_end_median_chf: r100(today.result.endNPV.p50),
       chance_cash_below_zero_pct: Math.round(today.result.probNegCash * 100), cash_runs_out_at_age: ageOut(today.result.firstNegMonth),
       goals: today.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, chance_pct: Math.round(g.prob! * 100) })),
     },
@@ -375,7 +382,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       id: c.id, name: c.name, parent_id: c.parentId, events: compactEvents(c.spec),
       last_change: c.edits.at(-1) ? { asked: c.edits.at(-1)!.instruction, changes: c.edits.at(-1)!.changes } : null, can_undo: c.history.length > 0,
       undo_would_restore: c.history.length ? describeSpec(c.history.at(-1)!.spec, profile.age) : null,
-      net_worth_at_end_median_chf: r100(c.result.endNW.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100), cash_runs_out_at_age: ageOut(c.result.firstNegMonth),
+      net_worth_at_end_median_chf: r100(c.result.endNW.p50), worth_in_todays_money_at_end_median_chf: r100(c.result.endNPV.p50), chance_cash_below_zero_pct: Math.round(c.result.probNegCash * 100), cash_runs_out_at_age: ageOut(c.result.firstNegMonth),
       goals: c.result.goals.filter((g) => g.prob != null).map((g) => ({ goal: g.name, chance_pct: Math.round(g.prob! * 100) })),
       unknown_inputs: c.plan.assumptions.filter((a) => a.source === 'missing').map((a) => a.label),
       home_down_payment_missing_pct: c.result.homeBuys.map((h) => Math.round(h.shortShare * 100)),
@@ -422,6 +429,11 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
       }
       const ids = addPaths(res.scenarios, { kind: 'offline', question: text, reason: r.error, answer: res }, fork?.id ?? null).map((a) => a.id)
       res.scenarios.forEach((sc, i) => lines.push({ text: `＋ ${sc.name}: ${describeSpec(sc, profile.age)}`, pathId: ids[i] }))
+      if (res.discount_rate_pct != null) {
+        const disc = Math.max(0, Math.min(20, res.discount_rate_pct))
+        setDiscountPct(disc)
+        lines.push({ text: `⏳ Today’s-money values (NPV) now use a ${disc}% discount rate a year, for every path. The simulation itself does not change.` })
+      }
       // "offline" only when the AI really can't be reached; otherwise its answer failed (say so, and how to get around it)
       const unreachable = /not reachable|timed out|No LLM_API_KEY/i.test(r.error)
       const why = unreachable ? `AI offline (${r.error}): understood with simple keyword rules` : `The AI's answer couldn't be used (${r.error}). I fell back to simple keyword rules${ids.length ? '' : '; try asking for fewer things at once'}`
@@ -523,6 +535,12 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     const talksAboutTime = /\b(years?|until|horizon|retire\w*|old|aged?|long[- ]term)\b|\b(at|by|until|till) \d{2}\b/i.test(text)
     const wantYears = talksAboutTime && d.horizon_years ? d.horizon_years : needMonths >= H ? Math.ceil(needMonths / 12) + 2 : null
     if (wantYears) setYears(Math.max(1, Math.min(40, wantYears)))
+    // the discount rate for today's-money values (NPV): one for every path; only changes how paths are valued
+    if (d.discount_rate_pct != null && Number.isFinite(d.discount_rate_pct)) {
+      const disc = Math.max(0, Math.min(20, d.discount_rate_pct))
+      setDiscountPct(disc)
+      lines.push({ text: `⏳ Today’s-money values (NPV) now use a ${disc}% discount rate a year, for every path (was ${discountPct ?? DEFAULT_DISCOUNT_PCT}%). The simulation itself does not change.` })
+    }
 
     // ---- does it actually take effect? Re-simulate what this turn touched, in the NEW state, and say it formally.
     // (The AI wrote its reply before any simulation; these notices come from the engine.)
@@ -654,7 +672,8 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
     key, id: c.id, name: c.id === 'today' ? 'If nothing changes' : c.name, parentName: c.parentId && c.parentId !== 'today' ? (byId.get(c.parentId)?.name ?? null) : null,
     timeline: sortedEvents(c.spec).map((e) => ({ icon: iconOf(e), age: ageAt(e.start_month ?? 0), text: e.label })),
     result: c.result, warnings: c.plan.warnings, unknownFromAge: unk ? ageAt(unk.from) : null, canUndo: c.history.length > 0, removable: c.id !== 'today',
-    assumed: c.plan.assumptions.filter((a) => !a.key.startsWith('g.') && !a.key.startsWith('m.') && a.source !== 'you' && !a.key.endsWith('.info') && a.key !== 'learned.delta').length,
+    assumed: c.plan.assumptions.filter((a) => !a.key.startsWith('g.') && !a.key.startsWith('m.') && !a.key.startsWith('v.') && a.source !== 'you' && !a.key.endsWith('.info') && a.key !== 'learned.delta').length,
+    discount: { pct: c.plan.discountRate * 100, mine: discountPct != null },
   })
   const tA = A ? tileOf(A, 'a', unkA) : null
   const tB = B && B.id !== A?.id ? tileOf(B, 'b', unkB) : null
@@ -923,6 +942,15 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                   </h3>
                   <CompareChart sides={chartSides} metric="cash" profile={profile} years={years} observed={!updates.length} />
                 </div>
+                <div>
+                  <h3 className="chart-title" title="Rolling horizon: each point values the path in today’s money if you stopped counting at that age. Every franc in or out is discounted to today when it happens; what you own minus debts at that age is discounted too. Only a way to value paths: the simulation does not change.">
+                    Worth in today’s money{' '}
+                    <span className="muted small">
+                      NPV at {discountPct ?? DEFAULT_DISCOUNT_PCT}% a year ({discountPct == null ? 'default assumption' : 'your rate'}; change it in “The numbers behind” or in the chat)
+                    </span>
+                  </h3>
+                  <CompareChart sides={chartSides} metric="npv" profile={profile} years={years} observed={false} />
+                </div>
               </div>
               {profile.goals.length > 0 && (
                 <div className="goals">
@@ -998,7 +1026,9 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               items={numFor.plan.assumptions}
               overrides={numFor.overrides}
               onChange={(key, v) =>
-                key.startsWith('m.')
+                key.startsWith('v.')
+                  ? setDiscountPct(v == null ? null : Math.max(0, Math.min(20, v)))
+                  : key.startsWith('m.')
                   ? v != null && setMacro(editMacro(macro, key, v))
                   : update(numFor.id, (p) => {
                       const o = { ...p.overrides }

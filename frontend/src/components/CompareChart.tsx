@@ -8,14 +8,16 @@ export type ChartSide = { key: 'a' | 'b'; name: string; plan: Plan; result: SimR
 
 const COLOR = { a: 'var(--a)', b: 'var(--b)' }
 
-/** The value at the very start (before month 1): what the person has today. */
-function startValue(plan: Plan, metric: 'nw' | 'cash') {
+export type ChartMetric = 'nw' | 'cash' | 'npv'
+
+/** The value at the very start (before month 1): what the person has today (worth in today's money = net worth). */
+function startValue(plan: Plan, metric: ChartMetric) {
   if (metric === 'cash') return plan.startCash
   return plan.startCash + plan.startInvest + plan.startHome - plan.loans.filter((l) => !l.isNew).reduce((a, l) => a + l.principal, 0)
 }
 
 /** A vs B, one point per year (age on the x axis). Median line + the range where 8 in 10 simulated futures land. */
-export function CompareChart({ sides, metric, profile, years, observed }: { sides: ChartSide[]; metric: 'nw' | 'cash'; profile: Profile; years: number; observed: boolean }) {
+export function CompareChart({ sides, metric, profile, years, observed }: { sides: ChartSide[]; metric: ChartMetric; profile: Profile; years: number; observed: boolean }) {
   const floor = metric === 'cash' && profile.minCash ? profile.minCash : null
   const rows = Array.from({ length: years + 1 }, (_, y) => {
     const t = y * 12 - 1
