@@ -7,6 +7,7 @@ export function TrustSummary({ checks, params, verify }: { checks: Check[]; para
   const passed = checks.filter((c) => c.ok).length
   return (
     <span className="trust-summary">
+      <span className="model-badge">R model → 500 futures per path</span>
       <span className={passed === checks.length ? 'ok' : 'neg'}>✓ accounting {passed}/{checks.length}</span>
       <span className="ok">✓ tested on real data: {pct(params.backtest.coverage_80_year_end, 1)} inside the 80% range</span>
       {verify && <span className={verify.unmatched.length ? 'neg' : 'ok'}>✓ AI numbers checked {verify.total - verify.unmatched.length}/{verify.total}</span>}
@@ -16,6 +17,41 @@ export function TrustSummary({ checks, params, verify }: { checks: Check[]; para
 
 const r1 = (x: number) => (Math.round(x * 10) / 10).toFixed(1)
 const signed = (x: number) => `${x < 0 ? '−' : '+'}${chf(Math.abs(x))}`
+
+function ModelPipeline({ params }: { params: Params }) {
+  const S = params.spending
+  return (
+    <section className="model-pipeline" aria-label="How the R model and Monte Carlo simulation work">
+      <div className="pipeline-intro">
+        <span className="eyebrow">How your result is made</span>
+        <p>The model does not guess a life decision from examples. R learns how ordinary months vary; the app applies your decisions with exact accounting and simulates possible futures.</p>
+      </div>
+      <div className="pipeline-steps">
+        <article className="pipeline-step learned">
+          <span className="pipeline-num">1</span>
+          <h4>R learns from past months</h4>
+          <p>A mixed spending model fitted to {params.source.profile_months.toLocaleString()} person-months learns spending by status, city and calendar month, plus bonuses and normal month-to-month variation.</p>
+          <span className="pipeline-tag">R/eda.R · learned</span>
+        </article>
+        <article className="pipeline-step exact">
+          <span className="pipeline-num">2</span>
+          <h4>The plan is calculated exactly</h4>
+          <p>Your income, rent, tuition, loans, investments and purchases follow accounting rules month by month. A decision changes these inputs; it is not an AI prediction.</p>
+          <span className="pipeline-tag">TypeScript engine · exact</span>
+        </article>
+        <article className="pipeline-step simulated">
+          <span className="pipeline-num">3</span>
+          <h4>Monte Carlo tests 500 futures</h4>
+          <p>Each run draws different spending surprises and bonuses from the R model. The median is the typical result; the shaded band contains the middle 80% of runs.</p>
+          <span className="pipeline-tag">500 runs per path · uncertainty</span>
+        </article>
+      </div>
+      <div className="monte-carlo-note">
+        <b>What varies between runs:</b> normal spending shocks, December bonuses, and uncertainty in the personal spending offset{S.sigma_u > 0 ? ` (about ±${chf(S.sigma_u)}/month)` : ''}. With <b>Forecast (Swiss data)</b>, R’s separate VAR model also draws annual inflation and unemployment. When paths are compared, they use the same random draw in each run, so the difference comes from the decision instead of luck.
+      </div>
+    </section>
+  )
+}
 
 export function TrustDetails({ params, checks, focusName }: { params: Params; checks: Check[]; focusName: string }) {
   const bt = params.backtest
@@ -29,8 +65,9 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
   const fc = (y: number, v: string) => M.forecast.find((f) => f.year === y && f.variable === v)
   return (
     <div className="trust">
+      <div className="trust-wide"><ModelPipeline params={params} /></div>
       <div>
-        <h4>1. The maths adds up</h4>
+        <h4>4. The maths adds up</h4>
         <p className="muted small">Checked live, every time you change something ({focusName}):</p>
         {checks.map((c) => (
           <div key={c.name} className="check">
@@ -39,7 +76,7 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         ))}
       </div>
       <div>
-        <h4>2. The ranges are honest</h4>
+        <h4>5. The ranges are honest</h4>
         <p className="muted small">We estimated the model on 2025 only, let this app’s own simulator predict 2026 for all {bt.profiles.toLocaleString()} people, then compared with what really happened in the data.</p>
         <div className="check">
           <span className="ok">✓</span> The "8 in 10 runs" range caught <b>{pct(bt.coverage_80_year_end, 1)}</b> of real results (perfect = 80%).
@@ -81,7 +118,7 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         </div>
       </div>
       <div>
-        <h4>3. What the model learned from {params.source.profile_months.toLocaleString()} months of data</h4>
+        <h4>6. What the model learned from {params.source.profile_months.toLocaleString()} months of data</h4>
         <p className="muted small">A mixed model estimated in R (R/eda.R; its structure chosen among four by BIC). Spending here means everything except rent.</p>
         <ul className="small">
           <li>
@@ -107,7 +144,7 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         </ul>
       </div>
       <div>
-        <h4>4. The economy forecast (only in “Forecast (Swiss data)”)</h4>
+        <h4>7. The economy forecast (only in “Forecast (Swiss data)”)</h4>
         <p className="muted small">
           Inflation and unemployment follow a small model of Swiss data 1991–{M.start.year} (World Bank; R/macro.R). {M.start.year} is observed (inflation {r1(M.start.inflation_pct)}%, unemployment {r1(M.start.unemployment_pct)}%); every simulated future draws its own years after that.
         </p>
@@ -144,7 +181,7 @@ export function TrustDetails({ params, checks, focusName }: { params: Params; ch
         </p>
       </div>
       <div>
-        <h4>5. What it does not know</h4>
+        <h4>8. What it does not know</h4>
         <ul className="small">
           <li>All people are fictional. Not Swiss statistics, not a personal forecast, not advice. The 24 months of data are calm, so how the economy affects people comes from public Swiss data and labelled assumptions, not from the data.</li>
           <li>The data has no education, abroad or age-salary information. Those numbers are marked <SourceChip s="missing" /> and we show a break-even instead of guessing.</li>

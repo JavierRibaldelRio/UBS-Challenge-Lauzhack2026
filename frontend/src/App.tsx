@@ -1023,7 +1023,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
 
           <details className="card fold">
             <summary>
-              <h2>Can you trust this?</h2>
+              <h2>How the model & simulations work</h2>
               <TrustSummary checks={liveChecks} params={params} verify={shown?.status === 'ai' ? shown.verify : undefined} />
             </summary>
             <TrustDetails params={params} checks={liveChecks} focusName={numFor.name} />
