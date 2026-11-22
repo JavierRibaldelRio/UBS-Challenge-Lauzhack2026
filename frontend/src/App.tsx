@@ -32,6 +32,9 @@ import spendingJson from './model/spending.json'
 import macroJson from './model/macro.json'
 import backtestJson from './model/backtest.json'
 
+/** What CHF 1 received `years` from now is worth today at an annual discount rate in % (e.g. 3% → 10 years ≈ CHF 0.74). */
+const todayValueOf1 = (ratePct: number, years: number) => `CHF ${Math.pow(1 + ratePct / 100, -years).toFixed(2)}`
+
 type Version = { spec: ScenarioSpec; overrides: Overrides }
 type PathEdit = { instruction: string; changes: string[]; model?: string; ms?: number; prompt?: PromptInfo }
 type NewMsg = ChatMsg extends infer T ? (T extends ChatMsg ? Omit<T, 'id'> : never) : never
@@ -943,10 +946,13 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                   <CompareChart sides={chartSides} metric="cash" profile={profile} years={years} observed={!updates.length} />
                 </div>
                 <div>
-                  <h3 className="chart-title" title="Rolling horizon: each point values the path in today’s money if you stopped counting at that age. Every franc in or out is discounted to today when it happens; what you own minus debts at that age is discounted too. Only a way to value paths: the simulation does not change.">
-                    Worth in today’s money{' '}
+                  <h3
+                    className="chart-title"
+                    title={`Each point = what the path is worth today if you stopped counting at that age. It is net worth, except that money arriving or leaving later counts a bit less: at ${discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 1 year ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 1)} today and CHF 1 in 10 years ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)}. So costs paid early weigh more than gains that come late. At 0% this chart equals the net worth chart. It only changes how paths are valued, not the simulation. (Finance name: net present value, NPV.)`}
+                  >
+                    What each path is worth today{' '}
                     <span className="muted small">
-                      NPV at {discountPct ?? DEFAULT_DISCOUNT_PCT}% a year ({discountPct == null ? 'default assumption' : 'your rate'}; change it in “The numbers behind” or in the chat)
+                      later money counts less: CHF 1 in 10 years ≈ {todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)} today ({discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, {discountPct == null ? 'default assumption' : 'your rate'}; change it under “Assumptions” or in the chat)
                     </span>
                   </h3>
                   <CompareChart sides={chartSides} metric="npv" profile={profile} years={years} observed={false} />
@@ -975,7 +981,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               )}
               <details className="mini-fold caption">
                 <summary>How to read these charts</summary>
-                Lines = the typical (median) outcome of 500 simulated futures, one point per year; both paths use the same random months, so differences come from the decisions. Shaded = where 8 in 10 futures land. Black dots = the real bank balance in UBS’s data (observed, not simulated). 🎯 = a goal (amount and date); a path reaches it if cash + investments are above it at that date, and the % is the share of futures that do. Buying a home drops cash by the down payment but not net worth: the money becomes part of the home. In constant 2025 francs, income after tax.
+                Lines = the typical (median) outcome of 500 simulated futures, one point per year; both paths use the same random months, so differences come from the decisions. Shaded = where 8 in 10 futures land. Black dots = the real bank balance in UBS’s data (observed, not simulated). 🎯 = a goal (amount and date); a path reaches it if cash + investments are above it at that date, and the % is the share of futures that do. Buying a home drops cash by the down payment but not net worth: the money becomes part of the home. “What each path is worth today” is the net worth chart with later money counting a bit less (at {discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 10 years ≈ {todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)} today), so a path that pays early and earns late looks worse there than in plain net worth. In constant 2025 francs, income after tax.
               </details>
             </section>
           )}
