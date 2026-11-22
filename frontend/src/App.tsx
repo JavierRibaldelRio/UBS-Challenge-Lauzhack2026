@@ -948,11 +948,11 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
                 <div>
                   <h3
                     className="chart-title"
-                    title={`Each point = what the path is worth today if you stopped counting at that age. It is net worth, except that money arriving or leaving later counts a bit less: at ${discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 1 year ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 1)} today and CHF 1 in 10 years ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)}. So costs paid early weigh more than gains that come late. At 0% this chart equals the net worth chart. It only changes how paths are valued, not the simulation. (Finance name: net present value, NPV.)`}
+                    title={`Net present value (NPV) over a rolling horizon. Each point = what the path is worth today if you stopped counting at that age. It is net worth, except that money arriving or leaving later counts a bit less: at ${discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 1 year ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 1)} today and CHF 1 in 10 years ≈ ${todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)}. So costs paid early weigh more than gains that come late. At 0% this chart equals the net worth chart. It only changes how paths are valued, not the simulation.`}
                   >
-                    What each path is worth today{' '}
+                    Net present value (NPV){' '}
                     <span className="muted small">
-                      later money counts less: CHF 1 in 10 years ≈ {todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)} today ({discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, {discountPct == null ? 'default assumption' : 'your rate'}; change it under “Assumptions” or in the chat)
+                      what each path is worth today · later money counts less: CHF 1 in 10 years ≈ {todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)} today ({discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, {discountPct == null ? 'default assumption' : 'your rate'}; change it under “Assumptions” or in the chat)
                     </span>
                   </h3>
                   <CompareChart sides={chartSides} metric="npv" profile={profile} years={years} observed={false} />
@@ -981,7 +981,7 @@ function Twin({ params, profiles }: { params: Params; profiles: Profile[] }) {
               )}
               <details className="mini-fold caption">
                 <summary>How to read these charts</summary>
-                Lines = the typical (median) outcome of 500 simulated futures, one point per year; both paths use the same random months, so differences come from the decisions. Shaded = where 8 in 10 futures land. Black dots = the real bank balance in UBS’s data (observed, not simulated). 🎯 = a goal (amount and date); a path reaches it if cash + investments are above it at that date, and the % is the share of futures that do. Buying a home drops cash by the down payment but not net worth: the money becomes part of the home. “What each path is worth today” is the net worth chart with later money counting a bit less (at {discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 10 years ≈ {todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)} today), so a path that pays early and earns late looks worse there than in plain net worth. In constant 2025 francs, income after tax.
+                Lines = the typical (median) outcome of 500 simulated futures, one point per year; both paths use the same random months, so differences come from the decisions. Shaded = where 8 in 10 futures land. Black dots = the real bank balance in UBS’s data (observed, not simulated). 🎯 = a goal (amount and date); a path reaches it if cash + investments are above it at that date, and the % is the share of futures that do. Buying a home drops cash by the down payment but not net worth: the money becomes part of the home. “Net present value (NPV)” is the net worth chart with later money counting a bit less (at {discountPct ?? DEFAULT_DISCOUNT_PCT}% a year, CHF 1 in 10 years ≈ {todayValueOf1(discountPct ?? DEFAULT_DISCOUNT_PCT, 10)} today), so a path that pays early and earns late looks worse there than in plain net worth. In constant 2025 francs, income after tax.
               </details>
             </section>
           )}
