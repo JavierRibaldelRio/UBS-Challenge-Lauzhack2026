@@ -1,263 +1,158 @@
-# AI Financial Twin — UBS challenge, LauzHack 2026
+# Financial Twin
 
-> *"One choice, many possible futures. Don't predict the future, make it explorable."*
+Financial Twin is an interactive scenario-modeling application for exploring how life decisions may affect a fictional individual's financial position. Rather than presenting a single forecast, it lets users compare alternative paths—such as entering employment, pursuing further education, or relocating—under transparent assumptions and uncertainty.
 
-Built in 24 hours at [LauzHack 2026](https://lauzhack.com) (EPFL, Lausanne) for the **UBS "AI Financial Twin"** challenge.
+The project was developed for the UBS AI Financial Twin challenge at LauzHack 2026.
 
-## Team members
+> **Important:** This prototype uses synthetic data and simulated outcomes. It is an educational decision-exploration tool, not financial advice or a guarantee of future results.
 
-- [Cagan Efe Calidag](https://www.linkedin.com/in/cagancalidag), Paris-Saclay (ME)
-    - Cybersecurity interest, web development (react), ai agent/harness/tool and mcp develooment, local ai
-- [Sebastián Luna Valoroso](https://www.linkedin.com/in/sebastián-luna-valoroso-a73777372/) - Barcelona, Spain (discord: salv2.0 / Sardina)
-    - "I’m Sebastián, 3rd year Data Engineering student at the Universitat Politècnica de Catalunya (UPC), Spain. I'm particularly interested in building ML and information retrieval systems, processing multimedia information, and solve real-world problems efficiently."
-- [Joshua Hurlimann](www.linkedin.com/in/joshua-hürlimann) (discord: joshua_77639 / Joshua)
-    - third year of Microengineering Bachelor at EPFL
-    - "I'm familiar with coding in python, C++ (and Assembly, though I don’t think it will be of much help here) but I'm motivated to learn and put in the work necessary to build something great this weekend. "
-- [Javier Ribal del Rio](https://www.linkedin.com/in/javier-ribal-del-rio) - Valencia, Spain (discord: ribal21 / Ribal21)
-    - "I'm a 3rd-year student pursuing a double degree in Computer Engineering and Business Administration at UPV.
-    I'm also a Project Manager at Hyperloop UPV, a student engineering team developing a high-speed transportation prototype.
-    My strongest area is backend development, with experience in JavaScript, Rust and Go. I'm also familiar with React and R for data analysis."
+## LauzHack and the UBS challenge
 
+[LauzHack](https://lauzhack.com) is a student-run hackathon held at the École polytechnique fédérale de Lausanne (EPFL) in Lausanne, Switzerland. This project was created in response to the UBS **AI Financial Twin** challenge:
 
-Planning notes: [Google Doc](https://docs.google.com/document/d/1Nwf3SoaL9csPrZBiiXJPQGaQfBoytl8wBbCtf3ApGYI/edit?usp=sharing)
+> **One choice. Many possible futures.**
+> **Do not predict the future. Make it explorable.**
 
-## The challenge (UBS)
+The challenge asks teams to build an interactive computational representation of a fictional person's finances. A successful solution should let a user change a meaningful decision or life event, recompute its conditional consequences, compare it with a baseline, and explain the resulting trade-offs with clear assumptions and limitations. It explicitly focuses on making alternative futures explorable rather than claiming to predict a single future.
 
-Build a fictional person's financial state, let a user change a life decision, recompute, compare against a
-baseline, and explain the trade-offs with transparent assumptions. The challenge example is Alexia: 20, a student
-in Lausanne with CHF 8,000 in savings, choosing between starting work, a master's and moving abroad.
+Financial Twin addresses this brief through a conversational scenario interface, transparent input provenance, accounting-based monthly simulation, and uncertainty-aware comparison of alternative paths. The complete challenge framework and reference material are available in [`pre_docs/README.md`](pre_docs/README.md).
 
-> **The UBS challenge material is not in this repo.** The brief, docs and synthetic data come from UBS's private
-> challenge repository. We kept a local copy in `pre_docs/`, which is git-ignored. The app runs without it, because the
-> model files it needs are committed in `frontend/src/model/`. You need the data only to **re-train** the
-> models: see [§1.6](#16-reproducing-the-models-needs-the-ubs-data). References in our docs such as
-> `scenario-modelling.md §13` point to that material.
+## Overview
 
-### Idea:
+A user can begin with a fictional financial profile and describe a decision in natural language or select a predefined scenario. The application transforms that choice into a structured scenario, completes missing inputs from documented data-based defaults, and simulates the financial consequences month by month. It then compares the selected paths using projected cash, investments, debt, net worth, financial-goal attainment, and cash-shortfall risk.
 
-A twin you can **talk to**, whose every number is **traceable**:
+Every output is intended to be inspectable. Values are identified according to their origin:
 
-1. You **chat** with the twin: ask *"What if I do a master's, or start working?"*, tell it what changed (*"I now earn 1,500"*), or change a path (*"have the kid at 35 instead"*). It sees the conversation, your current numbers and every path on screen, so it understands follow-ups.
-2. An LLM turns the words into **scenario JSON** — it describes the decision, it never invents money.
-3. Every blank is filled **from the data** and tagged with where it came from (`DATA` / `LEARNED` / `YOU` / `ASSUMPTION` / `UNKNOWN`).
-4. A **Monte Carlo engine** (exact accounting formulas + randomness from **models estimated in R**: monthly spending from the 28,800-month ledger, and optionally Swiss inflation and unemployment from public data) simulates 500 futures per path.
-5. You see bands, risk of running out of cash, goal chances, **what matters most**, and a **break-even** ("the master pays off only if salary is +23%").
-6. An LLM writes a plain-English paragraph from the computed facts only — and the app **checks every number** in it against the engine.
-7. A question gets a **direct answer** ("No — 0% chance of reaching your goal"), with a **confidence level computed by the simulator** (paired futures + real peer ranges + unknowns), backed by a test on ~20,000 pairs of real people.
+| Source | Meaning |
+| --- | --- |
+| Data | Derived from the supplied synthetic dataset |
+| Learned | Estimated from patterns in the synthetic financial records |
+| User | Provided or edited by the user |
+| Assumption | A transparent, editable modeling assumption |
+| Unknown | A value that cannot be supported by the available data |
 
-**How it maps to UBS's brief** (all 4 MUSTs and both BONUSes): see [DEV_NOTES.md → "What the model actually does"](DEV_NOTES.md), and [diagram.html](diagram.html) for the visual version. The model separates **idiosyncratic** variables (the person: decisions + personal luck) from **macroeconomic** ones (the economy: inflation, unemployment, rates, recession, markets, house prices, shared by every path).
+## How the application works
 
----
+1. **Define a baseline.** The app loads a fictional person's financial state, including income, recurring expenditure, savings, investments, debt, and goals.
+2. **Create alternatives.** A user describes a change—such as studying, changing employment, or moving city—or chooses a scenario preset.
+3. **Structure and resolve the scenario.** An LLM can translate natural-language input into schema-validated scenario data. A resolver fills only supported defaults and preserves the provenance of each value.
+4. **Simulate financial paths.** The browser runs monthly accounting for each path, covering income, expenditure, transfers, loan payments, cash, assets, liabilities, and net worth.
+5. **Explore uncertainty.** A Monte Carlo simulation runs 500 paired futures per alternative. Paths share the same random conditions so their differences reflect the decision rather than different luck.
+6. **Compare and explain results.** The interface presents outcome ranges, cash-shortfall probability, goal-achievement probability, sensitivity drivers, and break-even estimates. Generated explanations are constrained to facts produced by the simulation and checked against its output.
 
-# Financial Twin — project documentation
+## Financial and modeling approach
 
-## 1. Run the demo
+The core model is an accounting simulation, not a black-box prediction model. At every monthly step, it updates cash flows and balance-sheet quantities using relationships such as:
 
-### 1.1 Install the tools (once per laptop)
-
-Everything is pinned: Node `26.13.1`, pnpm `11.28.13`, uv `0.13.9` (in [`mise.toml`](mise.toml)), Python `3.13` + numpy/pandas
-(in [`ml/uv.lock`](ml/uv.lock)), all JS packages at exact versions (in each `pnpm-lock.yaml`).
-
-**Easiest: use [mise](https://mise.jdx.dev)** (it installs the exact Node/pnpm/uv versions for this folder):
-
-```bash
-# Linux / macOS
-curl https://mise.run | sh            # then restart the terminal (or follow the printed "activate" line)
-# Windows (PowerShell)
-winget install jdx.mise                # then restart the terminal
-
-git clone <this repo> && cd UBS-Challenge-Lauzhack2026
-mise trust && mise install             # installs node 26.13.1, pnpm 11.28.13, uv 0.13.9
+```text
+cash(t + 1) = cash(t) + income - spending - event costs - transfers - debt payments
+net worth = cash + investments + property - outstanding debt
 ```
 
-**Without mise:** install [Node 26.13.1](https://nodejs.org), then `npm i -g pnpm@11.28.13`, and
-[uv 0.13.9](https://docs.astral.sh/uv/getting-started/installation/) (only needed to retrain the model).
+The model combines deterministic financial identities with uncertainty estimated from the supplied synthetic ledger. The training process learns empirical monthly spending variation, seasonality, employment-related patterns, and spending responses to characteristics such as income, rent, household context, and age. Personal historical records calibrate the baseline where available.
 
-### 1.2 Install the project
+Monte Carlo simulation represents variation in future monthly conditions rather than a certain forecast. The application uses the simulated distribution to report, for example:
+
+- an 80% outcome range for projected financial quantities;
+- the probability of cash falling below zero;
+- the probability of meeting a savings or investment goal by its target date;
+- assumptions and variables with the largest effect on a comparison; and
+- the approximate condition under which one alternative becomes financially preferable to another.
+
+The supplied synthetic dataset contains 1,200 fictional profiles and 28,800 monthly cash-balance observations across 2025–2026, together with synthetic assets, liabilities, goals, and scenario data. The data are used to calibrate the model; no real personal financial records are required.
+
+For validation, the training workflow fits on 2025 observations and tests simulated 2026 outcomes against the held-out synthetic ledger. The user interface also checks accounting identities, non-negative debt balances, and reproducibility of the simulation seed.
+
+## Technology stack
+
+| Area | Technologies | Role |
+| --- | --- | --- |
+| Front end | React, TypeScript, Vite, Recharts | Interactive scenario editor, charts, and comparison interface |
+| Back end | Node.js, TypeScript, Zod, OpenAI-compatible API | Scenario parsing, structured-output validation, and generated explanations |
+| Modeling | Python, NumPy, pandas | Data preparation and deterministic calibration of simulation parameters |
+| Simulation | TypeScript in the browser | Monthly cash-flow accounting and Monte Carlo scenario analysis |
+| Tooling | pnpm, uv, mise | Reproducible JavaScript and Python environments |
+
+The application is designed to remain usable without an LLM connection: predefined scenarios, the simulation engine, and fallback parsing and explanation behavior continue to work locally.
+
+## Repository structure
+
+```text
+frontend/       React application and browser-based simulation engine
+backend/        API service, schemas, and LLM integration
+ml/             Model-calibration workflow
+pre_docs/       Challenge documentation and synthetic source data
+DEV_NOTES.md    Detailed architecture, data, and validation notes
+demo.mjs        Development and production demo launcher
+```
+
+## Getting started
+
+### Prerequisites
+
+The project pins its toolchain in [`mise.toml`](mise.toml): Node.js 26.13.1, pnpm 11.28.13, uv 0.13.9, and Python 3.13 for model retraining. Using [mise](https://mise.jdx.dev) is recommended:
+
+```bash
+git clone <repository-url>
+cd ai-financial-twin-lauzhack-2026
+mise trust
+mise install
+```
+
+### Install dependencies
 
 ```bash
 cd frontend && pnpm install --frozen-lockfile && cd ..
-cd backend  && pnpm install --frozen-lockfile && cd ..
-cp backend/.env.example backend/.env   # Windows: copy backend\.env.example backend\.env
+cd backend && pnpm install --frozen-lockfile && cd ..
+cp backend/.env.example backend/.env
 ```
 
-Edit `backend/.env` and paste the Together AI key into `LLM_API_KEY=`. Nothing else is required.
-The trained model is already committed (`frontend/src/model/*.json`), so Python is **not** needed to run the demo.
+To enable LLM-assisted natural-language interaction, set `LLM_API_KEY` in `backend/.env`. The model artifacts used by the demo are already included in `frontend/src/model`, so Python is not necessary to run the application.
 
-### 1.3 Start
+### Run the application
 
 ```bash
-node demo.mjs          # development (auto-reload), http://localhost:5173/?demo
-node demo.mjs --prod   # for the real demo: built + served statically (~120 MB RAM), http://localhost:4173/?demo
+node demo.mjs
 ```
 
-Open **http://localhost:5173/?demo** — this loads the challenge example (Alexia: *start working* as baseline vs *master's* vs *move abroad*).
-Other people on the same Wi-Fi can open `http://<your-ip>:5173`.
-
-Separate terminals, if you prefer: `cd backend && pnpm dev` and `cd frontend && pnpm dev`.
-
-### 1.4 It never breaks (by design)
-
-| If… | then… |
-|---|---|
-| no API key / no internet / LLM down | the chat uses offline keyword rules, the A/B texts use a template. Badge says *AI offline*. Presets always work. |
-| LLM returns bad JSON | backend validates with zod, asks the LLM to fix it once, then falls back. |
-| the model rejects `json_schema` | set `LLM_JSON_MODE=json_object` (or `none`) in `backend/.env`. |
-| network dies mid-demo | every successful LLM answer is cached in the browser and replayed for the same question. **Rehearse your demo questions once.** |
-| Python breaks | not needed at demo time — model files are bundled into the frontend. |
-
-### 1.5 Other commands
+Open `http://localhost:5173/?demo` to use the bundled demonstration profile. For a production-style local run:
 
 ```bash
-cd frontend && pnpm test                     # 110 validation tests (R model parity, economy forecast, backtest, NPV valuation, accounting identities, edge cases, home purchase, number checker, scenario tree, A/B comparison…)
-cd frontend && pnpm test:live                # 69 tests with the REAL LLM (incl. 10 very complex sentences + answers, multi-turn conversation, branching, A/B texts, texts only describe what IS on a path, NPV discount rate only when asked) (backend must be running with a key)
-cd frontend && pnpm build && pnpm preview    # production build on http://localhost:4173 (/api still proxied)
-Rscript R/eda.R && Rscript R/macro.R         # re-estimate the spending model (needs the UBS data, §1.6) and the economy forecast -> R/output/*.csv
-cd frontend && pnpm model:import             # R/output/*.csv -> src/model/spending.json, macro.json (then pnpm backtest)
-cd ml && uv sync --frozen && uv run train.py # data checks, defaults and people from pre_docs/Data -> params.json, profiles.json (deterministic; needs the UBS data, §1.6)
-curl localhost:8000/api/schema               # the exact JSON Schema the LLM must follow
+node demo.mjs --prod
 ```
 
-LLM settings (`backend/.env`): `LLM_BASE_URL` (default Together `https://api.together.ai/v1`), `LLM_MODEL`
-(default `deepseek-ai/DeepSeek-V4.1-Flash-1017`), `LLM_REASONING` (`off` = no thinking, fast), `LLM_JSON_MODE`, `LLM_TIMEOUT_MS`.
-Full explanation of every part: **[DEV_NOTES.md](DEV_NOTES.md)**. Any OpenAI-compatible server works
-(OpenAI, Together, Groq, Ollama `http://localhost:11434/v1`, LM Studio, vLLM).
+This serves the application at `http://localhost:4173/?demo`.
 
-### 1.6 Reproducing the models (needs the UBS data)
+Alternatively, start each service independently:
 
-The synthetic data is **not committed**, because it is private UBS challenge material. To re-run `ml/train.py`, `R/eda.R` or
-`R/engine/test_engine.R`, copy UBS's `Data/` folder to **`pre_docs/Data/`** (the folder is git-ignored):
-
-```
-pre_docs/Data/
-  synthetic-profiles.csv        synthetic-cash-balances.csv   synthetic-assets.csv
-  synthetic-liabilities.csv     synthetic-goals.csv           synthetic-accounts.csv
-  scenario-assumptions.csv      scenario-catalog.csv
-  (also in UBS's folder, not used by us: README.md, data-dictionary.md, life-events.csv, synthetic-transactions.zip)
+```bash
+cd backend && pnpm dev
+cd frontend && pnpm dev
 ```
 
-Without it, these scripts stop with a message saying so. The rest does **not** need it: `R/macro.R` (World Bank data in `R/data/`),
-`pnpm model:import`, `pnpm backtest`, the tests and the app itself.
+## Quality checks and retraining
 
----
-
-## 2. How it works (simple English)
-
-```
- "What if I do a master's      ┌───────────┐  scenario JSON   ┌──────────────┐  month-by-month plan
-  or start working?"  ───────► │ LLM #1    │ ───────────────► │  RESOLVER    │  + every number tagged
-  (or a preset button)         │ (words →  │  (no money       │ fills blanks │    DATA/LEARNED/YOU/
-                               │  JSON)    │   invented)      │ from data    │    ASSUMPTION/UNKNOWN
-                               └───────────┘                  └──────┬───────┘
-                                                                     ▼
- ┌──────────────┐  facts only   ┌───────────────────────────────────────────────────────┐
- │ LLM #2       │ ◄──────────── │ ENGINE  = exact formulas (cash, investments, debt)    │
- │ (numbers →   │               │         + randomness from the R models (spending, eco)│
- │  paragraph)  │               │ 500 paths per choice, same random numbers for all     │
- └──────┬───────┘               │ → bands, risk, goals, drivers, break-even, checks     │
-        ▼                       └───────────────────────────────────────────────────────┘
- number checker: every number in the paragraph must exist in the engine output ✓
+```bash
+cd frontend && pnpm test
+cd frontend && pnpm build
+cd backend && pnpm typecheck
+cd ml && uv sync --frozen && uv run train.py
 ```
 
-### 2.1 Formulas vs. trained model — who does what?
+The test suite covers accounting identities, financial edge cases, scenario handling, and validation of generated numerical explanations. Retraining reads the synthetic data in `pre_docs/Data` and regenerates the frontend model artifacts deterministically.
 
-We **do not** let a model replace the accounting. The data has **no examples of decisions** (nobody in it does a master's or moves),
-so a model trained to predict "what if" would only repeat averages. Instead:
+## Team
 
-| Part | Method | Why | Where it runs |
-|---|---|---|---|
-| Cash, investments, debt, net worth | **Formulas** (`cash[t+1] = cash[t] + income − spending − costs − transfers − loan payments`) | must be exact; judges test it | browser, [`sim.ts`](frontend/src/lib/sim.ts) |
-| Your usual spending (excl. rent), month by month | **Estimated**: mixed model base[status, month] + city offset + small personal offset (σ<sub>u</sub> ≈ CHF 16: no persistent personal level in the data) | what the data *can* teach; structure chosen by BIC | estimated in [`R/eda.R`](R/eda.R), imported by [`import-r-model.ts`](frontend/scripts/import-r-model.ts), used in the browser |
-| Feb/Aug spending spikes, city costs | **Estimated** in CHF per status and month (employed +373 in Feb), city offsets (Fribourg −121 … Zurich +176); students' tuition-like Feb/Sep peaks left out inside a study event | real patterns | same |
-| Month-to-month spending surprises | **Estimated**: normal around each person's own spread (shrunk toward similar people), wider in Feb/Aug/Dec | real pattern in the ledger | same |
-| December bonus | **Estimated**: 55% of employed people get one (typical 60% of a month's pay), 27% of self-employed | real pattern in the ledger | same |
-| Inflation and unemployment (economy "Forecast (Swiss data)") | **Estimated**: VAR(1) on Swiss data 1991–2025 (World Bank); job loss for employees via the national rate + Swiss benefit rules (labelled assumptions) | the UBS data has no macro variation | estimated in [`R/macro.R`](R/macro.R) |
-| Defaults (salary, rent by city, tuition) | **Data medians** (e.g. "median of 69 employed people aged 20-24") | nothing made up | resolver, [`resolve.ts`](frontend/src/lib/resolve.ts) |
-| Things not in the data (degree premium, abroad salary, investment return) | **UNKNOWN / ASSUMPTION**, editable | honest | shown as red/orange tags |
-| Worth in today's money (rolling-horizon NPV, every year up to the horizon) | **Formula** on each simulated future: cash flows discounted when they happen + net worth excl. cash at that age, discounted. **One default discount rate, 3%/yr real (ASSUMPTION)** for every path; the user can set another (Assumptions row or "use a 5% discount rate") | values paths in today's francs; comparisons stay on net worth | [`valuation.ts`](frontend/src/lib/valuation.ts), computed in [`sim.ts`](frontend/src/lib/sim.ts) |
+| Member | University |
+| --- | --- |
+| Cagan Efe Calidag | Université Paris-Saclay |
+| Sebastián Luna Valoroso | Universitat Politècnica de Catalunya |
+| Joshua Hurlimann | École polytechnique fédérale de Lausanne |
+| Javier Ribal del Rio | Universitat Politècnica de València |
 
-**Monte Carlo** = run the same choice 500 times with different random months (and, in the forecast economy, different economies) → the shaded band (80% of paths),
-"cash below zero in X% of paths", "goal reached in X% of paths". All choices use the **same** random numbers, so differences come from the
-decision, not luck. Fixed seed → same result every time.
+## Further documentation
 
-### 2.2 Is it right? (verifiable)
-
-- **Backtest** (`pnpm backtest`): the R model estimated on 2025 only, the app's own engine simulates 2026 for all 1,200 profiles, compared with the real 2026 ledger:
-  the 80% band contained **78.2%** of real outcomes (target 80), the 50% band **50.1%** (target 50). Typical error CHF 1,831 vs 2,445 for a naive average
-  (the previous model: 2,281); cash-crunch prediction (Brier) 0.0006 vs 0.0025 (previous: 0.0012).
-- **Economy backtest** (`R/macro.R`, 2005–2024): 1 year ahead the 80% range held 70% of the time for inflation and 95% for unemployment.
-- **Live checks** in the UI for the selected path: cash identity, net worth = assets − debts (transfers don't change it), debt never negative, reproducible seed.
-- **Tests** (`pnpm test`): the boundary cases from UBS's `evaluation/technical-validation.md` (zero income, higher tuition, loan payoff, transfers…).
-- **Data checks**: the source ledger itself has 0 identity / 0 continuity violations.
-
-### 2.3 The LLM contract
-
-**LLM #1 — `POST /api/parse`** must return (strict JSON Schema generated from [`backend/schema.ts`](backend/schema.ts)):
-
-```jsonc
-{
-  "scenarios": [                       // 1-3 paths the user wants to compare
-    { "name": "Master in Zurich", "catalog_id": "S001",   // closest of the 120 catalog ideas, or null
-      "events": [
-        { "type": "study",             // start_job | study | relocate | income_change | household_change |
-                                       // recurring_expense | one_off | invest | market_shock | take_loan | buy_home
-          "label": "Master", "start_month": 0, "duration_months": 24,
-          "monthly_net_income_chf": null, "income_change_pct": null, "monthly_amount_chf": null,
-          "amount_chf": null, "annual_tuition_chf": null, "city": null, "household_type": null,
-          "annual_rate_pct": null, "drop_pct": null, "down_payment_pct": null }
-      ] }
-  ],
-  "horizon_years": null,
-  "unsupported": ["taxes"],            // what we cannot model -> shown to the user
-  "note": null
-}
-```
-Rule: **any number the user did not say is `null`** → the resolver fills it from data and labels it. Months are counted from the start date (age 20 for Alexia: "at 25" → 60).
-
-**LLM #2 — `POST /api/explain`** gets only the computed `facts` (medians, ranges, risks, goals, drivers, break-even) and returns
-`{ headline, explanation, caveat }`. The frontend then checks every number in the text against the facts (`✓ all N numbers traced to the engine`).
-
-### 2.4 Repo layout
-
-```
-pre_docs/          not committed (git-ignored): UBS challenge material + synthetic data, needed only to re-train (§1.6)
-R/                 eda.R (spending model, LMM) + macro.R (inflation & unemployment VAR) -> R/output/*.csv; data/ = World Bank series
-ml/                train.py (pandas, uv-pinned) -> data checks, defaults, people
-backend/           server.ts: OpenAI-compatible LLM gateway (parse / explain), schema.ts = JSON contract
-frontend/          React + Vite app (PC-first: chat | resizable divider | scenario tree, A/B tiles, comparison, charts)
-  scripts/         import-r-model.ts (R/output/*.csv -> src/model/spending.json, macro.json)
-  src/model/       model artifacts, committed: params.json + profiles.json (ml/train.py), spending.json + macro.json (R), backtest.json (pnpm backtest)
-  src/lib/         resolve.ts (data → plan), sim.ts (engine + checks), analysis.ts (drivers, break-even, facts, number check),
-                   compare.ts (A/B facts + "fits better" rule), tree.ts (tree layout), fallback.ts (offline parser), api.ts (calls + cache)
-  src/components/  Tree (scenario tree), Tiles (A/B + comparison), CompareChart (year by year), Chat, Details, Trust, HowMade
-demo.mjs           starts backend + frontend
-mise.toml          pinned toolchain
-```
-
-### 2.5 Who did what
-
-- **Models (Sebastián, Joshua)**: `R/`: the data analysis, the spending model, the economy forecast and the R reference engine.
-- **Backend (Javier)**: `backend/`: the LLM gateway and prompts, and worth in today's money (NPV).
-- **Frontend (Cagan)**: `frontend/`: the app, the engine in the browser, the chat and the tests.
-
-### 2.6 A 3-minute tour
-
-1. Open `http://localhost:5173/?demo`. The big sentence says *"If nothing changes, Alexia's cash runs out at age 20."* The black dots are her **real** bank balance from the data; the band is what someone in her situation would have.
-2. Click **▶ Demo**: the scenario tree shows *Today* branching into *Start working* (**A**), *Master's* (**B**) and *Move abroad*. The two tiles ("So far / Ahead") are written from the computed numbers, and every number in them is checked. The A vs B comparison says which path *fits your goals better* (cash first, then goals, then money). Not financial advice.
-3. Click the *Master's* card → **📋 Assumptions**: tuition **from data**, salary **from data** (median of 69 peers), salary premium **unknown**. Break-even: "catches up only if income is 23% higher". Set the premium to 30% and everything recomputes.
-4. In the chat, type *"Work now, lose my job for 6 months at 25, then buy a flat for 300k at 28"* → one new path with 3 events, compared as **B**, plus a direct answer with a **confidence level computed by the simulator**.
-5. Open **How the model & simulations work**: maths checks 5/5; estimated on 2025 and tested on 2026, the "8 in 10" range caught 78.2% of real results.
-
-### 2.7 Limitations (say them before the judges do)
-
-- Synthetic data: incomes don't depend on age (≈ CHF 8k net at every age), spending barely depends on income — so "start working at 20" looks very rich. The salary pill is editable.
-- No education/abroad data → degree premium and abroad numbers are UNKNOWN (we show break-even instead of guessing).
-- Constant 2025 CHF (no inflation); net income (taxes already inside); investment return 4% a year (UBS's illustrative rate from financial-concepts.md; editable, shared by every path).
-- The band shows month-to-month variability, not uncertainty about the assumptions (that's the drivers panel). Not a forecast, not advice.
-
-### 2.8 What we built vs. reused
-
-- **Reused:** challenge data, docs and the starter-kit modelling convention (UBS's challenge repository by Stefania Stan / UBS, not included here); open-source libraries
-  (React, Vite, Recharts, zod, openai SDK, numpy, pandas, vitest); the "move abroad" preset numbers come from the starter kit's `scenario_config.json`.
-- **Built during the event:** everything in `ml/`, `backend/`, `frontend/`, `demo.mjs`.
-
+- [Architecture, methodology, and validation notes](DEV_NOTES.md)
+- [Challenge brief](pre_docs/README.md)
+- [Synthetic data documentation](pre_docs/Data/README.md)
+- [Technical validation cases](pre_docs/evaluation/technical-validation.md)
