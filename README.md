@@ -6,6 +6,15 @@ The project was developed for the UBS AI Financial Twin challenge at LauzHack 20
 
 > **Important:** This prototype uses synthetic data and simulated outcomes. It is an educational decision-exploration tool, not financial advice or a guarantee of future results.
 
+## Team
+
+| Member | University |
+| --- | --- |
+| [Cagan Efe Calidag](https://www.linkedin.com/in/cagancalidag) | Université Paris-Saclay |
+| [Sebastián Luna Valoroso](https://www.linkedin.com/in/sebastián-luna-valoroso-a73777372/) | Universitat Politècnica de Catalunya |
+| [Joshua Hurlimann](https://www.linkedin.com/in/joshua-hürlimann) | École polytechnique fédérale de Lausanne |
+| [Javier Ribal del Rio](https://www.linkedin.com/in/javier-ribal-del-rio) | Universitat Politècnica de València |
+
 ## LauzHack and the UBS challenge
 
 [LauzHack](https://lauzhack.com) is a student-run hackathon held at the École polytechnique fédérale de Lausanne (EPFL) in Lausanne, Switzerland. This project was created in response to the UBS **AI Financial Twin** challenge:
@@ -140,15 +149,6 @@ cd ml && uv sync --frozen && uv run train.py
 ```
 
 The test suite covers accounting identities, financial edge cases, scenario handling, and validation of generated numerical explanations. Retraining reads the synthetic data in `pre_docs/Data` and regenerates the frontend model artifacts deterministically.
-
-## Team
-
-| Member | University |
-| --- | --- |
-| Cagan Efe Calidag | Université Paris-Saclay |
-| Sebastián Luna Valoroso | Universitat Politècnica de Catalunya |
-| Joshua Hurlimann | École polytechnique fédérale de Lausanne |
-| Javier Ribal del Rio | Universitat Politècnica de València |
 
 ## Further documentation
 
